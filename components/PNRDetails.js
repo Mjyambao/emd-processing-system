@@ -123,7 +123,7 @@ export default function PNRDetails({ selected, onApprove }) {
   return (
     <div className="card mt-4 p-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold">
+        <h3 className="font-semibold text-lg">
           <i className="fa-solid fa-ticket text-brand-red"></i> PNR Details • <span className="text-brand-red">{selected.pnr}</span>
         </h3>
         <div className="text-sm text-black/60 flex items-center gap-2">
@@ -133,7 +133,7 @@ export default function PNRDetails({ selected, onApprove }) {
       </div>
 
       {details ? (
-        <div className="mt-3 space-y-8 text-sm">
+        <div className="mt-8 space-y-8 text-sm">
           {/* PNR & Booking */}
           <section>
             <h4 className="section-title"><i className="fa-solid fa-clipboard-list text-brand-red"></i> PNR & Booking</h4>
@@ -174,7 +174,7 @@ export default function PNRDetails({ selected, onApprove }) {
               <Field k="EMD Desc" v={<><i className="fa-solid fa-suitcase-rolling text-black/60"></i> {details.emdDesc || '—'}</>} />
 
               {/* RFIC with inline actions */}
-              <div className="bg-black/5 border border-black/10 rounded p-3">
+              <div className={`bg-black/5 border  ${isHuman ? 'border-2 border-red-400' : 'border-black/10'} rounded p-3`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="text-xs uppercase text-black/50">RFIC</div>
@@ -203,14 +203,14 @@ export default function PNRDetails({ selected, onApprove }) {
               </div>
 
               {/* RFISC with inline actions */}
-              <div className="bg-black/5 border border-black/10 rounded p-3">
+              <div className={`bg-black/5 border  ${isHuman ? 'border-2 border-red-400' : 'border-black/10'} rounded p-3`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="text-xs uppercase text-black/50">RFISC</div>
                     {isHuman && edit ? (
                       <input className="input mt-1 w-full" value={codes.rfisc} onChange={e=>setCodes({...codes, rfisc: e.target.value})} />
                     ) : (
-                      <div className="mt-1 font-medium">{details.rfisc || '—'}</div>
+                      <div className="mt-1 font-medium">{codes.rfisc || '—'}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-5 shrink-0">
@@ -248,7 +248,7 @@ export default function PNRDetails({ selected, onApprove }) {
 
 function Field({ k, v }){
   return (
-    <div className="bg-black/5 border border-black/10 rounded p-3">
+    <div className="bg-black/5 border border-black/10 rounded p-4">
       <div className="text-xs uppercase text-black/50">{k}</div>
       <div className="mt-1 font-medium">{v}</div>
     </div>

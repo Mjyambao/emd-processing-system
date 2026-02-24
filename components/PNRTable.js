@@ -11,7 +11,7 @@ export default function PNRTable({ rows, search, setSearch, onRefresh, onSelect,
   return (
     <div className="card">
       <div className="p-3 border-b border-black/10 flex items-center justify-between gap-2">
-        <div className="relative w-full">
+        <div className="relative w-full m-1">
           <input
             className="input w-full pl-9"
             placeholder="Search by PNR or Passenger Name"
