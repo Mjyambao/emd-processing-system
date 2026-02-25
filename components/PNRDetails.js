@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import StatusBadge from './StatusBadge'
+import Field from '../components/Field'
+import Tooltip from '../components/Tooltip'
 
 export default function PNRDetails({ selected, onApprove }) {
   const [details, setDetails] = useState(null)
-  const [edit, setEdit] = useState(false)
+  const [edit, setEdit] = useState({
+    rfic: false,
+    rfisc: false
+  })
   const [codes, setCodes] = useState({ rfic: '', rfisc: '' })
   const [orig, setOrig] = useState({ rfic: '', rfisc: '' })
 
@@ -133,7 +138,7 @@ export default function PNRDetails({ selected, onApprove }) {
       </div>
 
       {details ? (
-        <div className="mt-8 space-y-8 text-sm">
+        <div className="mt-8 space-y-8 text-sm mb-4">
           {/* PNR & Booking */}
           <section>
             <h4 className="section-title"><i className="fa-solid fa-clipboard-list text-brand-red"></i> PNR & Booking</h4>
@@ -172,29 +177,45 @@ export default function PNRDetails({ selected, onApprove }) {
               <Field k="EMD Status" v={<><i className="fa-regular fa-circle-dot text-black/60"></i> {details.emdStatus || '—'}</>} />
               <Field k="EMD Total" v={<><i className="fa-solid fa-dollar-sign text-black/60"></i> {details.emdTotal || '—'}</>} />
               <Field k="EMD Desc" v={<><i className="fa-solid fa-suitcase-rolling text-black/60"></i> {details.emdDesc || '—'}</>} />
+              <Field k="SSR" v={<><i className="fa-solid fa-puzzle-piece text-black/60"></i> {details.ssrCode || '—'}</>} />
 
               {/* RFIC with inline actions */}
-              <div className={`bg-black/5 border  ${isHuman ? 'border-2 border-red-400' : 'border-black/10'} rounded p-3`}>
+              <div className={`bg-black/5 border  ${isHuman ? 'border-2 border-red-500' : 'border-black/10'} rounded p-3`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <div className="text-xs uppercase text-black/50">RFIC</div>
-                    {isHuman && edit ? (
-                      <input className="input mt-1 w-full" value={codes.rfic} onChange={e=>setCodes({...codes, rfic: e.target.value})} />
+                    <div className="text-md text-black/50">RFIC
+                      {isHuman ? (
+                        <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
+                          <button
+                            type="button"
+                            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
+                            aria-label={`More info about RFIC`}
+                          >
+                            <i className="fa-solid fa-circle-info text-[14px]"></i>
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        ''
+                      )}
+                    </div>
+                    
+                    {isHuman && edit.rfic ? (
+                      <input className="input mt-1 font-medium w-full" value={codes.rfic} onChange={e=>setCodes({...codes, rfic: e.target.value})} />
                     ) : (
-                      <div className="mt-1 font-medium">{details.rfic || '—'}</div>
+                      <div className="mt-2 font-medium">{codes.rfic || '—'}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-5 shrink-0">
                     {!isHuman ? null : (
-                      edit ? (
+                      edit.rfic ? (
                         <>
-                          <button className="btn btn-primary" title="Save changes" onClick={saveEdits}><i className="fa-solid fa-floppy-disk"></i></button>
-                          <button className="btn btn-secondary" title="Cancel" onClick={()=>{ setEdit(false); setCodes({ rfic: details.rfic || '', rfisc: details.rfisc || '' }) }}><i className="fa-solid fa-xmark"></i></button>
+                          <button className="btn btn-primary mt-1.5" title="Save changes" onClick={saveEdits}><i className="fa-solid fa-floppy-disk"></i></button>
+                          <button className="btn btn-secondary mt-1.5" title="Cancel" onClick={()=>{ setEdit(prev => ({...prev, rfic: false})); setCodes({...codes, rfic: details.rfic}) }}><i className="fa-solid fa-xmark"></i></button>
                         </>
                       ) : (
                         <>
-                          <button className="btn btn-success disabled:opacity-40" disabled={dirty} title="Approve (no changes)" onClick={approveIfClean}><i className="fa-solid fa-check"></i></button>
-                          <button className="btn btn-outline" title="Edit RFIC" onClick={()=>setEdit(true)}><i className="fa-solid fa-pen"></i></button>
+                          {/* <button className="btn btn-success disabled:opacity-40" disabled={dirty} title="Approve (no changes)" onClick={approveIfClean}><i className="fa-solid fa-check"></i></button> */}
+                          <button className="btn btn-outline" title="Edit RFIC" onClick={()=>setEdit(prev => ({...prev, rfic: true}))}><i className="fa-solid fa-pen"></i></button>
                         </>
                       )
                     )}
@@ -203,40 +224,56 @@ export default function PNRDetails({ selected, onApprove }) {
               </div>
 
               {/* RFISC with inline actions */}
-              <div className={`bg-black/5 border  ${isHuman ? 'border-2 border-red-400' : 'border-black/10'} rounded p-3`}>
+              <div className={`bg-black/5 border ${isHuman ? 'border-2 border-red-500' : 'border-black/10'} rounded p-3`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
-                    <div className="text-xs uppercase text-black/50">RFISC</div>
-                    {isHuman && edit ? (
-                      <input className="input mt-1 w-full" value={codes.rfisc} onChange={e=>setCodes({...codes, rfisc: e.target.value})} />
+                    <div className="text-md text-black/50">RFISC
+                      {isHuman ? (
+                        <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
+                          <button
+                            type="button"
+                            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
+                            aria-label={`More info about RFISC`}
+                          >
+                            <i className="fa-solid fa-circle-info text-[14px]"></i>
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        ''
+                      )}
+                    </div>
+                    {isHuman && edit.rfisc ? (
+                      <input className="input mt-1 font-medium w-full p-0" value={codes.rfisc} onChange={e=>setCodes({...codes, rfisc: e.target.value})} />
                     ) : (
-                      <div className="mt-1 font-medium">{codes.rfisc || '—'}</div>
+                      <div className="mt-2 font-medium">{codes.rfisc || '—'}</div>
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-5 shrink-0">
                     {!isHuman ? null : (
-                      edit ? (
+                      edit.rfisc ? (
                         <>
-                          <button className="btn btn-primary" title="Save changes" onClick={saveEdits}><i className="fa-solid fa-floppy-disk"></i></button>
-                          <button className="btn btn-secondary" title="Cancel" onClick={()=>{ setEdit(false); setCodes({ rfic: details.rfic || '', rfisc: details.rfisc || '' }) }}><i className="fa-solid fa-xmark"></i></button>
+                          <button className="btn btn-primary mt-1.5" title="Save changes" onClick={saveEdits}><i className="fa-solid fa-floppy-disk"></i></button>
+                          <button className="btn btn-secondary mt-1.5" title="Cancel" onClick={()=>{ setEdit(prev => ({...prev, rfisc: false})); setCodes({...codes, rfisc: details.rfisc}) }}><i className="fa-solid fa-xmark"></i></button>
                         </>
                       ) : (
                         <>
-                          <button className="btn btn-success disabled:opacity-40" disabled={dirty} title="Approve (no changes)" onClick={approveIfClean}><i className="fa-solid fa-check"></i></button>
-                          <button className="btn btn-outline" title="Edit RFISC" onClick={()=>setEdit(true)}><i className="fa-solid fa-pen"></i></button>
+                          {/* <button className="btn btn-success disabled:opacity-40" disabled={dirty} title="Approve (no changes)" onClick={approveIfClean}><i className="fa-solid fa-check"></i></button> */}
+                          <button className="btn btn-outline" title="Edit RFISC" onClick={()=>setEdit(prev => ({...prev, rfisc: true}))}><i className="fa-solid fa-pen"></i></button>
                         </>
                       )
                     )}
                   </div>
                 </div>
               </div>
-
-              <Field k="SSR" v={<><i className="fa-solid fa-puzzle-piece text-black/60"></i> {details.ssrCode || '—'}</>} />
             </div>
-
-            {isHuman && !edit && dirty && (
-              <p className="mt-2 text-xs text-black/60"><i className="fa-solid fa-circle-info text-brand-red"></i> Fields changed — click <strong>Edit</strong> to review and <strong>Save</strong> to approve with updates.</p>
+            {isHuman ? (
+              <div className='flex w-full justify-center'>
+                <button className="btn btn-success mt-8 w-full md:w-1/2 lg:w-1/3 justify-center" title="Refresh all EMDs & statuses"><i className="fa-regular fa-paper-plane"></i> Build AE</button>
+              </div>
+            ) : (
+              ''
             )}
+            
           </section>
         </div>
       ) : (
@@ -246,11 +283,3 @@ export default function PNRDetails({ selected, onApprove }) {
   )
 }
 
-function Field({ k, v }){
-  return (
-    <div className="bg-black/5 border border-black/10 rounded p-4">
-      <div className="text-xs uppercase text-black/50">{k}</div>
-      <div className="mt-1 font-medium">{v}</div>
-    </div>
-  )
-}
