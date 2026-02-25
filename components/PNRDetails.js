@@ -185,7 +185,13 @@ export default function PNRDetails({ selected, onApprove }) {
                   <div className="flex-1">
                     <div className="text-md text-black/50">RFIC
                       {isHuman ? (
-                        <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
+                        <Tooltip content={
+                          <>
+                            <span className="block text-md">{'Other info "unassisted minor international" maps to Qantas airline emd-s code.'}</span>
+                            <span className="block text-md">{'Retrieved from article from Sabre Central : '}<a className="underline text-blue-400 hover:text-blue-800" href='https://www.qantas.com/content/dam/qac/policies-and-guidelines/emd-quick-reference-guide.pdf' target="_blank">{'Airline EMD Codes'}</a></span>
+                          </>
+                          
+                        } closeMode="manual" position="top">
                           <button
                             type="button"
                             className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
@@ -229,11 +235,17 @@ export default function PNRDetails({ selected, onApprove }) {
                   <div className="flex-1">
                     <div className="text-md text-black/50">RFISC
                       {isHuman ? (
-                        <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
+                        <Tooltip content={
+                          <>
+                            <span className="block text-md">{'Other info "unassisted minor international" maps to Qantas airline emd-s code.'}</span>
+                            <span className="block text-md">{'Retrieved from article from Sabre Central : '}<a className="underline text-blue-400 hover:text-blue-800" href='https://www.qantas.com/content/dam/qac/policies-and-guidelines/emd-quick-reference-guide.pdf' target="_blank">{'Airline EMD Codes'}</a></span>
+                          </>
+                          
+                        } closeMode="manual" position="top">
                           <button
                             type="button"
                             className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
-                            aria-label={`More info about RFISC`}
+                            aria-label={`More info about RFIC`}
                           >
                             <i className="fa-solid fa-circle-info text-[14px]"></i>
                           </button>

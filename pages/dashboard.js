@@ -27,6 +27,10 @@ export default function Dashboard(){
     router.replace('/')
   }
 
+  function handleKill(originalIndex) {
+    setPnrs(prev => prev.filter((_, i) => i !== originalIndex))
+  }
+
   return (
     <div className="min-h-screen">
       <TopNav onLogout={handleLogout} />
@@ -46,6 +50,7 @@ export default function Dashboard(){
           onRefresh={handleRefresh}
           onSelect={setSelected}
           selected={selected}
+          onKill={handleKill}
         />
 
         <PNRDetails selected={selected} onApprove={({pnr}) => {
