@@ -184,15 +184,19 @@ export default function PNRDetails({ selected, onApprove }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="text-md text-black/50">RFIC
-                      <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
-                        <button
-                          type="button"
-                          className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
-                          aria-label={`More info about RFIC`}
-                        >
-                          <i className="fa-solid fa-circle-info text-[14px]"></i>
-                        </button>
-                    </Tooltip>
+                      {isHuman ? (
+                        <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
+                          <button
+                            type="button"
+                            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
+                            aria-label={`More info about RFIC`}
+                          >
+                            <i className="fa-solid fa-circle-info text-[14px]"></i>
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        ''
+                      )}
                     </div>
                     
                     {isHuman && edit.rfic ? (
@@ -224,15 +228,19 @@ export default function PNRDetails({ selected, onApprove }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="text-md text-black/50">RFISC
-                      <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
-                        <button
-                          type="button"
-                          className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
-                          aria-label={`More info about RFISC`}
-                        >
-                          <i className="fa-solid fa-circle-info text-[14px]"></i>
-                        </button>
-                      </Tooltip>
+                      {isHuman ? (
+                        <Tooltip content={'AI Agent suggested with 90% accuracy'} position="top">
+                          <button
+                            type="button"
+                            className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
+                            aria-label={`More info about RFISC`}
+                          >
+                            <i className="fa-solid fa-circle-info text-[14px]"></i>
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        ''
+                      )}
                     </div>
                     {isHuman && edit.rfisc ? (
                       <input className="input mt-1 font-medium w-full p-0" value={codes.rfisc} onChange={e=>setCodes({...codes, rfisc: e.target.value})} />
