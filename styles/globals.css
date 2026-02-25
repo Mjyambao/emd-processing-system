@@ -7,7 +7,7 @@ body { @apply bg-white text-black; }
 
 .btn { @apply inline-flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors; }
 .btn-primary { @apply bg-brand-red text-white hover:bg-red-700; }
-.btn-success { @apply bg-green-600 text-white hover:bg-green-700; }
+.btn-success { @apply bg-brand-green text-white hover:bg-green-700; }
 .btn-secondary { @apply bg-black/5 border border-black/10 hover:bg-black/10; }
 .btn-outline { @apply border border-black/20 text-black hover:bg-black/5; }
 .btn-ghost { @apply bg-transparent hover:bg-black/5; }
