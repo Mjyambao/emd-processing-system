@@ -17,7 +17,7 @@ export default function PNRTable({
     return rows.reduce((acc, row, idx) => {
       if (!q ||
           row.pnr.toLowerCase().includes(q) ||
-          row.passenger?.toLowerCase().includes(q)) {
+          row.stage?.toLowerCase().includes(q)) {
         acc.push(idx)
       }
       return acc
@@ -53,7 +53,7 @@ export default function PNRTable({
         <div className="relative w-full m-1">
           <input
             className="input w-full pl-9"
-            placeholder="Search by PNR or Passenger Name"
+            placeholder="Search by PNR or Stage"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
