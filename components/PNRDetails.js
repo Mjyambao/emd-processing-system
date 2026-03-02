@@ -126,9 +126,9 @@ export default function PNRDetails({ selected, onApprove }) {
   }
 
   return (
-    <div className="card mt-4 p-4">
+    <div className="card mt-4 p-4 mb-10">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold text-lg">
+        <h3 className="font-semibold text-xl">
           <i className="fa-solid fa-ticket text-brand-red"></i> PNR Details • <span className="text-brand-red">{selected.pnr}</span>
         </h3>
         <div className="text-sm text-black/60 flex items-center gap-2">
@@ -141,43 +141,43 @@ export default function PNRDetails({ selected, onApprove }) {
         <div className="mt-8 space-y-8 text-sm mb-4">
           {/* PNR & Booking */}
           <section>
-            <h4 className="section-title"><i className="fa-solid fa-clipboard-list text-brand-red"></i> PNR & Booking</h4>
+            <h4 className="section-title text-md"><i className="fa-solid fa-clipboard-list text-brand-red"></i> PNR & Booking</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Field k="PNR" v={<><i className="fa-solid fa-paperclip text-black/60"></i> {details.pnr}</>} />
-              <Field k="Booking ID" v={<><i className="fa-solid fa-file-invoice text-black/60"></i> {details.bookingId || '—'}</>} />
-              <Field k="Ticketed" v={<><i className="fa-solid fa-ticket text-black/60"></i> {details.isTicketed ? 'Yes' : 'No'}</>} />
-              <Field k="Created" v={<><i className="fa-regular fa-clock text-black/60"></i> {formatDate(details.created) || '—'}</>} />
-              <Field k="Agency IATA" v={<><i className="fa-solid fa-building text-black/60"></i> {details.agencyIata || '—'}</>} />
-              <Field k="PCC" v={<><i className="fa-solid fa-key text-black/60"></i> {details.pcc || '—'}</>} />
-              <Field k="Email" v={<><i className="fa-regular fa-envelope text-black/60"></i> {details.contactEmail || '—'}</>} />
-              <Field k="Phone" v={<><i className="fa-solid fa-phone text-black/60"></i> {details.contactPhone || '—'}</>} />
+              <Field k={<><i className="fa-solid fa-paperclip text-black/60"></i> PNR</>} v={details.pnr || '-'} />
+              <Field k={<><i className="fa-solid fa-file-invoice text-black/60"></i> Booking ID</>} v={details.bookingId || '—'} />
+              <Field k={<><i className="fa-solid fa-ticket text-black/60"></i> Ticketed</>} v={details.isTicketed ? 'Yes' : 'No'} />
+              <Field k={<><i className="fa-regular fa-clock text-black/60"></i> Date Created</>} v={formatDate(details.created) || '—'} />
+              <Field k={<><i className="fa-solid fa-building text-black/60"></i> Agency IATA</>} v={details.agencyIata || '—'} />
+              <Field k={<><i className="fa-solid fa-key text-black/60"></i> PCC</>} v={details.pcc || '—'} />
+              <Field k={<><i className="fa-regular fa-envelope text-black/60"></i> Email</>} v={details.contactEmail || '—'} />
+              <Field k={<><i className="fa-solid fa-phone text-black/60"></i> Phone</>} v={details.contactPhone || '—'} />
             </div>
           </section>
 
           {/* Traveler & Flight */}
           <section>
-            <h4 className="section-title"><i className="fa-solid fa-person-walking-luggage text-brand-red"></i> Traveler & Flight</h4>
+            <h4 className="section-title text-md"><i className="fa-solid fa-person-walking-luggage text-brand-red"></i> Traveler & Flight</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Field k="Passenger" v={<><i className="fa-regular fa-user text-black/60"></i> {details.travelerName || '—'}</>} />
-              <Field k="Flight" v={<><i className="fa-solid fa-plane-departure text-black/60"></i> {details.flightNo || '—'}</>} />
-              <Field k="Operating" v={<><i className="fa-solid fa-tag text-black/60"></i> {details.operating || '—'}</>} />
-              <Field k="Route" v={<><i className="fa-solid fa-location-dot text-black/60"></i> {details.route || '—'}</>} />
-              <Field k="Departure" v={<><i className="fa-regular fa-hourglass-half text-black/60"></i> {formatDate(details.dep) || '—'}</>} />
-              <Field k="Arrival" v={<><i className="fa-solid fa-plane-arrival text-black/60"></i> {formatDate(details.arr) || '—'}</>} />
-              <Field k="Seat" v={<><i className="fa-solid fa-chair text-black/60"></i> {details.seat || '—'}</>} />
-              <Field k="Ticket No." v={<><i className="fa-solid fa-hashtag text-black/60"></i> {details.ticketNo || '—'}</>} />
+              <Field k={<><i className="fa-regular fa-user text-black/60"></i> Passenger</>} v={details.travelerName || '—'} />
+              <Field k={<><i className="fa-solid fa-plane text-black/60"></i> Flight No.</>} v={details.flightNo || '—'} />
+              <Field k={<><i className="fa-solid fa-tag text-black/60"></i> Operating</>} v={details.operating || '—'} />
+              <Field k={<><i className="fa-solid fa-location-dot text-black/60"></i> Route</>} v={details.route || '—'} />
+              <Field k={<><i className="fa-solid fa-plane-departure text-black/60"></i> Departure</>} v={formatDate(details.dep) || '—'} />
+              <Field k={<><i className="fa-solid fa-plane-arrival text-black/60"></i> Arrival</>} v={formatDate(details.arr) || '—'} />
+              <Field k={<><i className="fa-solid fa-chair text-black/60"></i> Seat</>} v={details.seat || '—'} />
+              <Field k={<><i className="fa-solid fa-hashtag text-black/60"></i> Ticket No.</>} v={details.ticketNo || '—'} />
             </div>
           </section>
 
           {/* EMD & SSR */}
           <section>
-            <h4 className="section-title"><i className="fa-solid fa-passport text-brand-red"></i> EMD & SSR</h4>
+            <h4 className="section-title text-md"><i className="fa-solid fa-passport text-brand-red"></i> EMD & SSR</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Field k="EMD No." v={<><i className="fa-solid fa-ticket text-black/60"></i> {details.emdNo || '—'}</>} />
-              <Field k="EMD Status" v={<><i className="fa-regular fa-circle-dot text-black/60"></i> {details.emdStatus || '—'}</>} />
-              <Field k="EMD Total" v={<><i className="fa-solid fa-dollar-sign text-black/60"></i> {details.emdTotal || '—'}</>} />
-              <Field k="EMD Desc" v={<><i className="fa-solid fa-suitcase-rolling text-black/60"></i> {details.emdDesc || '—'}</>} />
-              <Field k="SSR" v={<><i className="fa-solid fa-puzzle-piece text-black/60"></i> {details.ssrCode || '—'}</>} />
+              <Field k={<><i className="fa-solid fa-ticket text-black/60"></i> EMD No.</>} v={details.emdNo || '—'} />
+              <Field k={<><i className="fa-regular fa-circle-dot text-black/60"></i> EMD Status</>} v={details.emdStatus || '—'} />
+              <Field k={<><i className="fa-solid fa-dollar-sign text-black/60"></i> EMD Total</>} v={details.emdTotal || '—'} />
+              <Field k={<><i className="fa-solid fa-suitcase-rolling text-black/60"></i> EMD Desc</>} v={details.emdDesc || '—'} />
+              <Field k={<><i className="fa-solid fa-puzzle-piece text-black/60"></i> SSR</>} v={details.ssrCode || '—'} />
 
               {/* RFIC with inline actions */}
               <div className={`bg-black/5 border  ${isHuman ? 'border-2 border-red-500' : 'border-black/10'} rounded p-3`}>
@@ -280,7 +280,7 @@ export default function PNRDetails({ selected, onApprove }) {
             </div>
             {isHuman ? (
               <div className='flex w-full justify-center'>
-                <button className="btn btn-success mt-8 w-full md:w-1/2 lg:w-1/3 justify-center" title="Refresh all EMDs & statuses"><i className="fa-regular fa-paper-plane"></i> Build AE</button>
+                <button className="btn btn-success mt-8 h-[45px] w-full md:w-1/2 lg:w-1/3 justify-center" title="Refresh all EMDs & statuses"><i className="fa-regular fa-paper-plane"></i> Build AE</button>
               </div>
             ) : (
               ''

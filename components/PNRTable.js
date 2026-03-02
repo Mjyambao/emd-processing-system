@@ -48,8 +48,8 @@ export default function PNRTable({
   }
 
   return (
-    <div className="card">
-      <div className="p-3 border-b border-black/10 flex items-center justify-between gap-2">
+    <div className="card ">
+      <div className="p-3 border-b border-black/10 flex items-center justify-between gap-2 bg-white">
         <div className="relative w-full m-1">
           <input
             className="input w-full pl-9"
@@ -63,7 +63,7 @@ export default function PNRTable({
         </button>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto bg-white">
         <table className="table overflow-hidden">
           <thead>
             <tr>
