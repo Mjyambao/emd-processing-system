@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import StatusBadge from './StatusBadge'
-import Field from '../components/Field'
-import Tooltip from '../components/Tooltip'
+import Field from './Field'
+import Tooltip from './Tooltip'
+import Spinner from './Spinner'
+import formatDate from '../utils/helper'
 
 export default function PNRDetails({ selected, onApprove }) {
   const [details, setDetails] = useState(null)
@@ -11,6 +13,7 @@ export default function PNRDetails({ selected, onApprove }) {
   })
   const [codes, setCodes] = useState({ rfic: '', rfisc: '' })
   const [orig, setOrig] = useState({ rfic: '', rfisc: '' })
+  const [approving, setApproving] = useState(false)   // NEW
 
   // Load details (Sabre JSON for GLEBNY, mock for others)
   useEffect(() => {
@@ -96,7 +99,7 @@ export default function PNRDetails({ selected, onApprove }) {
   }, [selected])
 
   //Check isHuman before any early return
-  const dirty = useMemo(
+const dirty = useMemo(
     () => codes.rfic !== orig.rfic || codes.rfisc !== orig.rfisc,
     [codes, orig]
   )
@@ -104,25 +107,27 @@ export default function PNRDetails({ selected, onApprove }) {
 
   if (!selected) return null
 
-  function approveIfClean(){
-    if (dirty) return // only approve when no edits were made
-    onApprove?.({ pnr: selected.pnr, rfic: codes.rfic, rfisc: codes.rfisc })
+  async function approveIfClean(){
+    if (dirty) return
+    setApproving(true)
+    try {
+      // simulate async approve
+      await new Promise(r => setTimeout(r, 600))
+      onApprove?.({ pnr: selected.pnr, rfic: codes.rfic, rfisc: codes.rfisc })
+    } finally {
+      setApproving(false)
+    }
   }
-  function saveEdits(){
-    onApprove?.({ pnr: selected.pnr, rfic: codes.rfic, rfisc: codes.rfisc })
-    setOrig({ ...codes })
-    setEdit(false)
-  }
-
-  function formatDate(date){
-    return new Date(date).toLocaleString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    })
+  async function saveEdits(){
+    setApproving(true)
+    try {
+      await new Promise(r => setTimeout(r, 600))
+      onApprove?.({ pnr: selected.pnr, rfic: codes.rfic, rfisc: codes.rfisc })
+      setOrig({ ...codes })
+      setEdit(false)
+    } finally {
+      setApproving(false)
+    }
   }
 
   return (

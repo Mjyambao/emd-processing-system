@@ -8,6 +8,6 @@ const map = {
 export default function StatusBadge({ status }) {
   const { label, color, icon } = map[status] || map['processing'];
   return (
-    <span className={`inline-flex items-center gap-1 border rounded-md px-4 py-2 text-xs ${color}`}><i className={icon}></i> {label}</span>
+    <span className={`inline-flex items-center gap-1 border rounded-md px-3 py-2 text-xs w-[180px] justify-center ${color}`}><i className={icon}></i> {label}</span>
   )
 }
