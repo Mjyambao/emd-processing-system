@@ -32,6 +32,7 @@ export default function Dashboard() {
       action: "Review SSR vs seat",
       stage: "EMD Mask Checking",
       error: "",
+      assigned: "Boden Woolstencroft",
     },
     {
       pnr: "MY777C",
@@ -40,6 +41,7 @@ export default function Dashboard() {
       action: "Retry deal match",
       stage: "Deal Matching",
       error: "No applicable deal table found",
+      assigned: "Boden Woolstencroft",
     },
   ]);
   const [mySearch, setMySearch] = useState("");
@@ -274,7 +276,6 @@ export default function Dashboard() {
           killingSet={killing}
           retryingSet={retrying}
           assignees={[
-            { id: "111", name: "All Ticketers" },
             { id: "t-01", name: "Susan Wan Chen" },
             { id: "t-02", name: "Boden Woolstencroft" },
             { id: "t-03", name: "Matt Quinn" },

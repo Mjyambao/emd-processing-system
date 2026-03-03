@@ -2,12 +2,16 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import StatusBadge from "./StatusBadge";
 import Tooltip from "../components/Tooltip";
 import Spinner from "../components/Spinner";
+import AssignModal from "../components/AssignModal";
 import formatDate from "../utils/helper";
 
 /**
  * PNRTable
  * Props:
  *  - rows: array of PNR rows (must include unique `pnr`)
+ *      Suggested optional fields for filtering/sorting:
+ *        - lastUpdated: string | number (Date-compatible)
+ *        - queueArrival: string | number (Date-compatible)
  *  - search: string
  *  - setSearch: fn
  *  - onRefresh: fn (optional; not wired to a button here)
@@ -52,27 +56,216 @@ export default function PNRTable({
   const assigneeOptions = assignees.length
     ? assignees
     : [
-        { id: "u1", name: "Agent – Maria R." },
-        { id: "u2", name: "Agent – David S." },
-        { id: "u3", name: "Agent – Kenji T." },
+        { id: "u1", name: "Suzan Wan Chen" },
+        { id: "u2", name: "Boden Woolstencroft" },
+        { id: "u3", name: "Matt Quinn" },
       ];
 
+  // Unique status options from data (fallback)
+  const statusOptions = useMemo(() => {
+    const set = new Set(rows.map((r) => r.status).filter(Boolean));
+    const dataOptions = Array.from(set);
+    if (dataOptions.length) return dataOptions;
+    return ["processed", "processing", "error", "human"];
+  }, [rows]);
+
+  // Status sort ranking (tweak to your preference)
+  const statusRank = {
+    error: 1,
+    human: 2,
+    processing: 3,
+    processed: 4,
+  };
+
   // ─────────────────────────────────────────────────────────────
-  // 1) Filtering (index map to preserve original row indices)
+  // Toasts (lightweight)
+  // ─────────────────────────────────────────────────────────────
+  const [toasts, setToasts] = useState([]); // {id, type, message}
+  const toastIdRef = useRef(0);
+  const showToast = (message, { type = "success", duration = 4000 } = {}) => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, type, message }]);
+    if (duration > 0) {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, duration);
+    }
+  };
+  const dismissToast = (id) =>
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  // ─────────────────────────────────────────────────────────────
+  // 1) Column filters + sorting state
+  // ─────────────────────────────────────────────────────────────
+  const [colFilters, setColFilters] = useState({
+    pnr: "",
+    status: "", // empty means no filter; you also have global statusFilter above
+    stage: "",
+    lastUpdatedFrom: "", // yyyy-mm-dd
+    lastUpdatedTo: "",
+    queueFrom: "",
+    queueTo: "",
+    error: "",
+    action: "",
+  });
+
+  const updateFilter = (key, value) =>
+    setColFilters((prev) => ({ ...prev, [key]: value }));
+
+  // Sort state: key & dir
+  const [sort, setSort] = useState({ key: null, dir: "asc" }); // dir: 'asc' | 'desc'
+  const toggleSort = (key) => {
+    setSort((prev) => {
+      if (prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return { key: null, dir: "asc" }; // clear sorting
+    });
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 2) Filtering (+ search + global status filter) & sorting
   // ─────────────────────────────────────────────────────────────
   const filteredIndices = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const matchStatus = (row) =>
+    const f = colFilters;
+    const hasDate = (v) => v && !Number.isNaN(new Date(v).getTime());
+    const fromLU = hasDate(f.lastUpdatedFrom)
+      ? new Date(f.lastUpdatedFrom).getTime()
+      : null;
+    const toLU = hasDate(f.lastUpdatedTo)
+      ? new Date(f.lastUpdatedTo).getTime() + 24 * 3600 * 1000 - 1
+      : null; // inclusive
+    const fromQA = hasDate(f.queueFrom)
+      ? new Date(f.queueFrom).getTime()
+      : null;
+    const toQA = hasDate(f.queueTo)
+      ? new Date(f.queueTo).getTime() + 24 * 3600 * 1000 - 1
+      : null;
+
+    const matchStatusGlobal = (row) =>
       statusFilter === "all" || row.status === statusFilter;
-    return rows.reduce((acc, row, idx) => {
-      const matchText =
+
+    const matchColFilters = (row) => {
+      // PNR (text)
+      if (
+        f.pnr &&
+        !String(row.pnr || "")
+          .toLowerCase()
+          .includes(f.pnr.toLowerCase())
+      ) {
+        return false;
+      }
+      // Status (select)
+      if (f.status && row.status !== f.status) return false;
+      // Stage (text)
+      if (
+        f.stage &&
+        !String(row.stage || "")
+          .toLowerCase()
+          .includes(f.stage.toLowerCase())
+      ) {
+        return false;
+      }
+      // Last Updated (date range)
+      if (fromLU != null || toLU != null) {
+        const t =
+          row.lastUpdated != null ? new Date(row.lastUpdated).getTime() : null;
+        if (t == null) return false; // no value -> doesn't pass a date filter
+        if (fromLU != null && t < fromLU) return false;
+        if (toLU != null && t > toLU) return false;
+      }
+      // Queue Arrival (date range)
+      if (fromQA != null || toQA != null) {
+        const t =
+          row.queueArrival != null
+            ? new Date(row.queueArrival).getTime()
+            : null;
+        if (t == null) return false;
+        if (fromQA != null && t < fromQA) return false;
+        if (toQA != null && t > toQA) return false;
+      }
+      // Error (text)
+      if (
+        f.error &&
+        !String(row.error || "")
+          .toLowerCase()
+          .includes(f.error.toLowerCase())
+      ) {
+        return false;
+      }
+      // Action (text)
+      if (
+        f.action &&
+        !String(row.action || "")
+          .toLowerCase()
+          .includes(f.action.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    };
+
+    const indices = rows.reduce((acc, row, idx) => {
+      // Global search: PNR or Stage only (your previous behavior)
+      const matchSearch =
         !q ||
-        row.pnr.toLowerCase().includes(q) ||
-        (row.stage && row.stage.toLowerCase().includes(q));
-      if (matchText && matchStatus(row)) acc.push(idx);
+        String(row.pnr || "")
+          .toLowerCase()
+          .includes(q) ||
+        (row.stage && String(row.stage).toLowerCase().includes(q));
+
+      if (matchSearch && matchStatusGlobal(row) && matchColFilters(row)) {
+        acc.push(idx);
+      }
       return acc;
     }, []);
-  }, [rows, search, statusFilter]);
+
+    // Sorting
+    if (!sort.key) return indices;
+
+    const getVal = (row, key) => {
+      switch (key) {
+        case "pnr":
+          return String(row.pnr || "").toLowerCase();
+        case "status":
+          return statusRank[row.status] ?? Number.MAX_SAFE_INTEGER;
+        case "stage":
+          return String(row.stage || "").toLowerCase();
+        case "lastUpdated": {
+          const t =
+            row.lastUpdated != null
+              ? new Date(row.lastUpdated).getTime()
+              : -Infinity;
+          return Number.isNaN(t) ? -Infinity : t;
+        }
+        case "queueArrival": {
+          const t =
+            row.queueArrival != null
+              ? new Date(row.queueArrival).getTime()
+              : -Infinity;
+          return Number.isNaN(t) ? -Infinity : t;
+        }
+        case "error":
+          return String(row.error || "").toLowerCase();
+        case "action":
+          return String(row.action || "").toLowerCase();
+        default:
+          return "";
+      }
+    };
+
+    const dir = sort.dir === "asc" ? 1 : -1;
+    indices.sort((a, b) => {
+      const va = getVal(rows[a], sort.key);
+      const vb = getVal(rows[b], sort.key);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      // stable fallback by original index to avoid jitter
+      return a - b;
+    });
+
+    return indices;
+  }, [rows, search, statusFilter, colFilters, sort]);
 
   const filtered = useMemo(
     () => filteredIndices.map((i) => rows[i]),
@@ -86,20 +279,21 @@ export default function PNRTable({
   );
 
   // ─────────────────────────────────────────────────────────────
-  // 2) Pagination
+  // 3) Pagination
   // ─────────────────────────────────────────────────────────────
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, rows, pageSize]);
+  }, [search, statusFilter, rows, pageSize, colFilters, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const clampedPage = Math.min(page, pageCount);
 
   const start = (clampedPage - 1) * pageSize;
   const end = start + pageSize;
+  theadHeightAdjustHack(); // ensure stickies recalc (no-op; see fn below)
   const pageRows = filtered.slice(start, end);
 
   // Show "X–Y of Z"
@@ -120,7 +314,7 @@ export default function PNRTable({
   }, [clampedPage, pageCount]);
 
   // ─────────────────────────────────────────────────────────────
-  // 3) Selection (ONLY for selectable rows)
+  // 4) Selection (ONLY for selectable rows)
   // ─────────────────────────────────────────────────────────────
   const [selectedPNRs, setSelectedPNRs] = useState(() => new Set());
 
@@ -185,31 +379,37 @@ export default function PNRTable({
   const clearSelection = () => setSelectedPNRs(new Set());
 
   // ─────────────────────────────────────────────────────────────
-  // 4) Assignment modal
+  // 5) Assignment modal + loading state
   // ─────────────────────────────────────────────────────────────
   const [assignOpen, setAssignOpen] = useState(false);
-  const [assigneeId, setAssigneeId] = useState(assigneeOptions[0]?.id ?? "");
-  const assigneeObj = assigneeOptions.find((a) => a.id === assigneeId) || null;
+  const [assigning, setAssigning] = useState(false); // spinner/disable during confirm
 
   const openAssign = () => setAssignOpen(true);
-  const closeAssign = () => setAssignOpen(false);
-
-  const confirmAssign = () => {
-    if (!assigneeObj || selectedPNRs.size === 0) return;
-    const items = Array.from(selectedPNRs)
-      .map((pnr) => {
-        const originalIndex = pnrToOriginalIndex.get(pnr);
-        if (originalIndex == null) return null;
-        return { pnr, originalIndex };
-      })
-      .filter(Boolean);
-    onAssign?.({ assignee: assigneeObj, items });
-    closeAssign();
-    clearSelection();
+  const closeAssign = () => {
+    if (!assigning) setAssignOpen(false);
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 5) Row actions
+  // 6) Horizontal scroll fades (left/right) visibility
+  // ─────────────────────────────────────────────────────────────
+  const scrollRef = useRef(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const updateFades = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setShowLeftFade(scrollLeft > 0);
+    setShowRightFade(scrollLeft + clientWidth < scrollWidth - 1);
+  };
+
+  useEffect(() => {
+    updateFades();
+  }, [filtered, page, pageSize, colFilters, sort]);
+
+  // ─────────────────────────────────────────────────────────────
+  // 7) Row actions
   // ─────────────────────────────────────────────────────────────
   function handleKill(viewIndexOnPage, e) {
     e.stopPropagation();
@@ -224,23 +424,24 @@ export default function PNRTable({
     // TODO: wire a real onRetry callback if needed
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // 8) Render
+  // ─────────────────────────────────────────────────────────────
   return (
-    <div className="card mb-8">
+    <div className="card mb-8 relative">
+      {/* Toasts */}
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+
       {/* Header: search + assign/selection summary */}
       <div className="p-3 border-b border-black/10 flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div className="relative w-full md:w-2/3">
-          <input
+          {/* <input
             className="input w-full pl-9"
             placeholder="Search by PNR or Stage"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search PNR or Stage"
-          />
-          {/* Helper hint (always visible) */}
-          {/* <div className="mt-2 text-xs text-black/60 flex items-center gap-2">
-            <i className="fa-solid fa-circle-info"></i>
-            <span>Hint: only rows with status <span className="font-medium">Error</span> or <span className="font-medium">Human</span> can be selected and assigned.</span>
-          </div> */}
+          /> */}
         </div>
 
         {/* Always show Assign PNR; disabled when no selection */}
@@ -255,10 +456,12 @@ export default function PNRTable({
                 : "Select eligible rows to enable"
             }
             onClick={openAssign}
-            disabled={selectedCount === 0}
+            disabled={selectedCount === 0 || assigning}
           >
-            <i className="fa-regular fa-paper-plane"></i>
-            <span className="ml-2">Assign PNR</span>
+            <i className="fa-regular fa-paper-plane" />
+            <span className="ml-2">
+              {assigning ? "Assigning..." : "Assign PNR"}
+            </span>
           </button>
         </div>
       </div>
@@ -271,36 +474,180 @@ export default function PNRTable({
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="table">
+      {/* Table (horizontally scrollable with sticky header & columns) */}
+      <div
+        ref={scrollRef}
+        onScroll={updateFades}
+        className="relative overflow-x-auto scroll-smooth"
+        tabIndex={0}
+        role="region"
+        aria-label="PNR results table"
+      >
+        {/* left & right edge fades to indicate overflow (beneath sticky cells) */}
+        {showLeftFade && (
+          <div
+            className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white to-transparent z-40"
+            aria-hidden="true"
+          />
+        )}
+        {showRightFade && (
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white to-transparent z-40"
+            aria-hidden="true"
+          />
+        )}
+
+        <table className="table min-w-[1280px] bg-white">
           <thead>
             <tr>
-              {/* Header checkbox selects only rows with status error/human on current page */}
-              <th className="w-10">
+              {/* Sticky header cells. First two columns also sticky-left */}
+              <ThStickyCheckboxHeader
+                headerCbRef={headerCbRef}
+                pageAllSelected={pageAllSelected}
+                pageSelectableCount={pageSelectableCount}
+                toggleSelectAllPage={toggleSelectAllPage}
+              />
+              <ThWithFilter
+                label="PNR"
+                stickyLeft
+                leftPx={8}
+                widthClass="w-[140px]"
+                sortKey="pnr"
+                sort={sort}
+                onSort={toggleSort}
+              >
                 <input
-                  ref={headerCbRef}
-                  type="checkbox"
-                  checked={pageAllSelected && pageSelectableCount > 0}
-                  onChange={toggleSelectAllPage}
-                  aria-label="Select all eligible rows on this page"
-                  disabled={pageSelectableCount === 0}
-                  title={
-                    pageSelectableCount === 0
-                      ? "No eligible rows on this page"
-                      : "Select all eligible rows on this page"
-                  }
+                  className="input h-8 text-xs"
+                  placeholder="Filter PNR…"
+                  value={colFilters.pnr}
+                  onChange={(e) => updateFilter("pnr", e.target.value)}
                 />
-              </th>
-              <th>PNR</th>
-              <th>Status</th>
-              <th>Stage</th>
-              <th>Last Updated</th>
-              <th>Queue Arrival</th>
-              <th>Error Details</th>
-              <th>Action Required</th>
+              </ThWithFilter>
+
+              <ThWithFilter
+                label="Status"
+                widthClass="w-[130px]"
+                sortKey="status"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <select
+                  className="input h-8 text-xs"
+                  value={colFilters.status}
+                  onChange={(e) => updateFilter("status", e.target.value)}
+                >
+                  <option value="">All</option>
+                  {statusOptions.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </ThWithFilter>
+
+              <ThWithFilter
+                label="Stage"
+                widthClass="w-[180px]"
+                sortKey="stage"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <input
+                  className="input h-8 text-xs"
+                  placeholder="Filter stage…"
+                  value={colFilters.stage}
+                  onChange={(e) => updateFilter("stage", e.target.value)}
+                />
+              </ThWithFilter>
+
+              <ThWithFilter
+                label="Last Updated"
+                widthClass="w-[190px]"
+                nowrap
+                sortKey="lastUpdated"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <div className="flex gap-1">
+                  <input
+                    type="date"
+                    className="input h-8 text-xs"
+                    value={colFilters.lastUpdatedFrom}
+                    onChange={(e) =>
+                      updateFilter("lastUpdatedFrom", e.target.value)
+                    }
+                    aria-label="Last updated from"
+                  />
+                  <input
+                    type="date"
+                    className="input h-8 text-xs"
+                    value={colFilters.lastUpdatedTo}
+                    onChange={(e) =>
+                      updateFilter("lastUpdatedTo", e.target.value)
+                    }
+                    aria-label="Last updated to"
+                  />
+                </div>
+              </ThWithFilter>
+
+              <ThWithFilter
+                label="Queue Arrival"
+                widthClass="w-[190px]"
+                nowrap
+                sortKey="queueArrival"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <div className="flex gap-1">
+                  <input
+                    type="date"
+                    className="input h-8 text-xs"
+                    value={colFilters.queueFrom}
+                    onChange={(e) => updateFilter("queueFrom", e.target.value)}
+                    aria-label="Queue arrival from"
+                  />
+                  <input
+                    type="date"
+                    className="input h-8 text-xs"
+                    value={colFilters.queueTo}
+                    onChange={(e) => updateFilter("queueTo", e.target.value)}
+                    aria-label="Queue arrival to"
+                  />
+                </div>
+              </ThWithFilter>
+
+              <ThWithFilter
+                label="Error Details"
+                widthClass="w-[420px]"
+                sortKey="error"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <input
+                  className="input h-8 text-xs"
+                  placeholder="Filter error…"
+                  value={colFilters.error}
+                  onChange={(e) => updateFilter("error", e.target.value)}
+                />
+              </ThWithFilter>
+
+              <ThWithFilter
+                label="Action Required"
+                widthClass="w-[220px]"
+                sortKey="action"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <input
+                  className="input h-8 text-xs"
+                  placeholder="Filter action…"
+                  value={colFilters.action}
+                  onChange={(e) => updateFilter("action", e.target.value)}
+                />
+              </ThWithFilter>
             </tr>
           </thead>
+
           <tbody>
             {pageRows.map((row, viewIdx) => {
               const isKilling = killingSet.has(row.pnr);
@@ -314,14 +661,14 @@ export default function PNRTable({
                   onClick={() => onSelect(row)}
                   className={`cursor-pointer hover:bg-black/5 ${
                     selected?.pnr === row.pnr
-                      ? "ring-1 ring-brand-red/60 bg-red-50"
+                      ? "ring-1 ring-brand-red/60 bg-white"
                       : ""
                   }`}
                 >
-                  {/* Row checkbox: only render if selectable */}
+                  {/* Row checkbox: only render if selectable (sticky left col 1) */}
                   <td
                     onClick={(e) => e.stopPropagation()}
-                    className="align-middle"
+                    className="align-middle w-12 sticky left-0 bg-white z-[70] border-r border-black/10"
                   >
                     {selectable ? (
                       <input
@@ -335,25 +682,33 @@ export default function PNRTable({
                     )}
                   </td>
 
-                  <td className="font-mono font-semibold text-brand-red">
+                  {/* Sticky left col 2: PNR */}
+                  <td className="w-[140px] font-mono font-semibold text-brand-red whitespace-nowrap sticky left-8 bg-white z-[65] border-r border-black/10">
                     {row.pnr}
                   </td>
 
-                  <td>
+                  <td className="w-[130px]">
                     <StatusBadge status={row.status} />
                   </td>
 
-                  <td className="text-black/80">{row.stage}</td>
-
-                  <td className="text-black/80">
-                    {formatDate("03/02/2026 13:50:20")}
+                  <td className="w-[180px] text-black/80 truncate">
+                    {row.stage}
                   </td>
 
-                  <td className="text-black/80">
-                    {formatDate("03/02/2026 12:43:19")}
+                  <td className="w-[190px] text-black/80 whitespace-nowrap">
+                    {/* Display fallback for now if your data lacks date fields */}
+                    {row.lastUpdated
+                      ? formatDate(row.lastUpdated)
+                      : formatDate("03/02/2026 13:50:20")}
                   </td>
 
-                  <td className="text-black/80 w-1/4">
+                  <td className="w-[190px] text-black/80 whitespace-nowrap">
+                    {row.queueArrival
+                      ? formatDate(row.queueArrival)
+                      : formatDate("03/02/2026 12:43:19")}
+                  </td>
+
+                  <td className="w-[420px] text-black/80">
                     <p>
                       {row.status === "error" ? (
                         <Tooltip
@@ -378,7 +733,7 @@ export default function PNRTable({
                             aria-label="More info about this error"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <i className="fa-solid fa-circle-info text-[14px]"></i>
+                            <i className="fa-solid fa-circle-info text-[14px]" />
                           </button>
                         </Tooltip>
                       ) : null}
@@ -386,7 +741,7 @@ export default function PNRTable({
                     </p>
                   </td>
 
-                  <td className="text-black/80">
+                  <td className="w-[220px] text-black/80">
                     {row.status === "error" ? (
                       <>
                         <button
@@ -406,7 +761,7 @@ export default function PNRTable({
                           {isKilling ? (
                             <Spinner />
                           ) : (
-                            <i className="fa-solid fa-xmark"></i>
+                            <i className="fa-solid fa-xmark" />
                           )}
                         </button>
                       </>
@@ -495,102 +850,200 @@ export default function PNRTable({
       <AssignModal
         open={assignOpen}
         onClose={closeAssign}
-        assignees={assigneeOptions}
-        assigneeId={assigneeId}
-        setAssigneeId={setAssigneeId}
-        selectedCount={selectedCount}
-        onConfirm={confirmAssign}
+        assignees={assignees}
+        selectedCount={selectedPNRs.size}
+        confirmLoading={assigning} // spinner in Confirm button
+        onConfirm={async ({ mode, selectedAssigneeIds, distribution }) => {
+          try {
+            if (assigning) return; // guard double-clicks
+            const selectedPNRsArr = Array.from(selectedPNRs);
+            if (!selectedPNRsArr.length) {
+              showToast("No rows selected", { type: "info" });
+              return;
+            }
+            if (!selectedAssigneeIds?.length) {
+              showToast("Choose at least one assignee", { type: "info" });
+              return;
+            }
+
+            setAssigning(true);
+
+            // Fallback distribution if missing (shouldn't happen)
+            let dist = distribution;
+            if (!dist?.order?.length) {
+              const fallbackOrder = selectedPNRsArr.map(
+                (_, i) => selectedAssigneeIds[i % selectedAssigneeIds.length],
+              );
+              dist = { perAssignee: {}, order: fallbackOrder };
+            }
+
+            // Group items by assignee according to dist.order
+            const byAssignee = selectedPNRsArr.reduce((acc, pnr, idx) => {
+              const assigneeId = dist.order[idx];
+              const originalIndex = pnrToOriginalIndex.get(pnr);
+              if (originalIndex == null) return acc;
+              if (!acc[assigneeId]) acc[assigneeId] = [];
+              acc[assigneeId].push({ pnr, originalIndex });
+              return acc;
+            }, {});
+
+            // Call existing onAssign once per assignee (await if it returns a promise)
+            for (const [assigneeId, items] of Object.entries(byAssignee)) {
+              if (!items.length) continue;
+              const assignee = assigneeOptions.find(
+                (a) => String(a.id) === String(assigneeId),
+              ) || { id: assigneeId, name: String(assigneeId) };
+
+              await Promise.resolve(onAssign?.({ assignee, items }));
+            }
+
+            const totalAssigned = selectedPNRsArr.length;
+            const who =
+              mode === "all"
+                ? `evenly to all ${assignees.length} ticketers`
+                : `to ${selectedAssigneeIds.length} selected ticketer(s)`;
+            showToast(`${totalAssigned} PNR(s) assigned ${who}`, {
+              type: "success",
+            });
+
+            clearSelection();
+            setAssignOpen(false);
+          } catch (err) {
+            console.error("Assignment error:", err);
+            showToast("Failed to assign PNRs. Please try again.", {
+              type: "error",
+            });
+          } finally {
+            setAssigning(false);
+          }
+        }}
       />
     </div>
   );
 }
 
-/**
- * Simple Tailwind modal (no portal). Closes on overlay click or Esc.
- */
-function AssignModal({
-  open,
-  onClose,
-  assignees,
-  assigneeId,
-  setAssigneeId,
-  selectedCount,
-  onConfirm,
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+/* ─────────────────────────────────────────────────────────────
+   Sticky Header Helpers / Components
+   ───────────────────────────────────────────────────────────── */
 
-  if (!open) return null;
+// A tiny no-op to make React run this area each render (keeps sticky layout consistent).
+function theadHeightAdjustHack() {}
+
+function SortIcon({ active, dir }) {
+  if (!active) return <i className="fa-solid fa-sort text-black/40" />;
+  return dir === "asc" ? (
+    <i className="fa-solid fa-sort-up text-brand-red" />
+  ) : (
+    <i className="fa-solid fa-sort-down text-brand-red" />
+  );
+}
+
+function ThWithFilter({
+  label,
+  children,
+  widthClass = "",
+  nowrap = false,
+  sortKey,
+  sort,
+  onSort,
+  stickyLeft = false,
+  leftPx = 0, // for sticky left offset
+}) {
+  // z-index ladder for headers: left-most > next > others
+  const baseSticky = stickyLeft
+    ? `sticky left-${leftPx} top-0 z-[85] bg-white border-r border-black/10`
+    : `sticky top-0 z-[80] bg-white`;
 
   return (
-    <div
-      className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4"
-      onClick={onClose}
-      aria-modal="true"
-      role="dialog"
-      aria-labelledby="assign-modal-title"
+    <th
+      className={`${widthClass} ${nowrap ? "whitespace-nowrap" : ""} ${baseSticky}`}
+      scope="col"
     >
-      <div
-        className="w-full max-w-md rounded-lg bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 py-4 border-b border-black/10 flex items-center justify-between">
-          <h2 id="assign-modal-title" className="text-base font-semibold">
-            Assign {selectedCount} {selectedCount === 1 ? "PNR" : "PNRs"}
-          </h2>
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={() => onSort?.(sortKey)}
+          className="flex items-center justify-between w-full text-left"
+          title={`Sort by ${label}`}
+        >
+          <span className="font-medium">{label}</span>
+          <span className="ml-2">
+            <SortIcon active={sort.key === sortKey} dir={sort.dir} />
+          </span>
+        </button>
+
+        {/* Filter control */}
+        {children}
+      </div>
+    </th>
+  );
+}
+
+function ThStickyCheckboxHeader({
+  headerCbRef,
+  pageAllSelected,
+  pageSelectableCount,
+  toggleSelectAllPage,
+}) {
+  return (
+    <th
+      className="w-12 sticky left-0 top-0 z-[90] bg-white border-r border-black/10"
+      scope="col"
+    >
+      <input
+        ref={headerCbRef}
+        type="checkbox"
+        checked={pageAllSelected && pageSelectableCount > 0}
+        onChange={toggleSelectAllPage}
+        aria-label="Select all eligible rows on this page"
+        disabled={pageSelectableCount === 0}
+        title={
+          pageSelectableCount === 0
+            ? "No eligible rows on this page"
+            : "Select all eligible rows on this page"
+        }
+      />
+    </th>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Tiny Toast UI (no external deps)
+   ───────────────────────────────────────────────────────────── */
+function ToastViewport({ toasts, onDismiss }) {
+  return (
+    <div
+      className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+      role="region"
+      aria-live="polite"
+      aria-label="Notifications"
+    >
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`min-w-[260px] max-w-[360px] rounded-lg shadow-lg border px-3 py-2 text-sm flex items-start gap-2
+            ${
+              t.type === "error"
+                ? "bg-red-50 border-red-200 text-red-800"
+                : t.type === "info"
+                  ? "bg-blue-50 border-blue-200 text-blue-800"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-800"
+            }`}
+        >
+          <span className="mt-[2px]">
+            {t.type === "error" ? "⛔" : t.type === "info" ? "ℹ️" : "✅"}
+          </span>
+          <div className="flex-1">{t.message}</div>
           <button
-            className="btn h-8 px-2"
-            onClick={onClose}
-            aria-label="Close"
-            title="Close"
+            className="text-black/50 hover:text-black"
+            onClick={() => onDismiss(t.id)}
+            aria-label="Dismiss"
+            title="Dismiss"
           >
             ✕
           </button>
         </div>
-
-        <div className="px-5 py-4">
-          <label htmlFor="assignee" className="block text-sm mb-1">
-            Assign to
-          </label>
-          <select
-            id="assignee"
-            className="input w-full"
-            value={assigneeId}
-            onChange={(e) => setAssigneeId(e.target.value)}
-          >
-            {assignees.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-
-          <p className="text-xs text-black/60 mt-2">
-            The selected PNR{selectedCount === 1 ? "" : "s"} will be assigned to
-            the chosen user.
-          </p>
-        </div>
-
-        <div className="px-5 py-3 border-t border-black/10 flex items-center justify-end gap-2">
-          <button className="btn h-9" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary h-9"
-            onClick={onConfirm}
-            disabled={!assigneeId || selectedCount === 0}
-            title="Confirm assignment"
-          >
-            Confirm
-          </button>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
