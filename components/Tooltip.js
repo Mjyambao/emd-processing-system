@@ -1,20 +1,9 @@
-import { useId, useState } from 'react'
+import { useId, useState, useEffect, useRef } from 'react'
 
-/**
- * Simple, accessible tooltip.
- * - Shows on hover and on keyboard focus (for the trigger).
- * - Positions: top | right | bottom | left (default: top).
- * - Optional delay to reduce flicker on brief hovers.
- *
- * Props:
- *  - content: ReactNode (tooltip text or JSX)
- *  - position: 'top' | 'right' | 'bottom' | 'left'
- *  - delay: number (ms) - show delay on hover/focus
- *  - className: extra classes for the tooltip bubble
- */
 export default function Tooltip({
   children,
   content,
+  closeMode = 'hover',
   position = 'top',
   delay = 120,
   className = ''
@@ -22,15 +11,33 @@ export default function Tooltip({
   const [open, setOpen] = useState(false)
   const [timer, setTimer] = useState(null)
   const id = useId()
+  const rootRef = useRef(null)
 
   function show() {
     clearTimeout(timer)
     setTimer(setTimeout(() => setOpen(true), delay))
   }
   function hide() {
+    if (closeMode === 'manual') return // do not hide on mouseout
     clearTimeout(timer)
-    setOpen(false)
+    setTimer(setTimeout(() => setOpen(false), 100))
   }
+
+  // Close on outside click or Escape (manual mode)
+  useEffect(() => {
+    if (!open) return
+    function onKey(e) { if (e.key === 'Escape') setOpen(false) }
+    function onClick(e) {
+      if (!rootRef.current) return
+      if (!rootRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   // Positioning styles
   const pos = {
@@ -50,8 +57,8 @@ export default function Tooltip({
 
   return (
     <span
+      ref={rootRef}
       className="relative inline-flex items-center"
-      onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
@@ -65,7 +72,7 @@ export default function Tooltip({
         id={id}
         aria-hidden={!open}
         className={[
-          'pointer-events-none absolute z-50',
+          'pointer-events-auto absolute z-50',
           'whitespace-nowrap rounded-md border border-black/10 bg-white px-2 py-1 text-xs text-black shadow',
           'transition-opacity duration-100',
           open ? 'opacity-100' : 'opacity-0',
