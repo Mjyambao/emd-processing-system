@@ -33,6 +33,8 @@ export default function Dashboard() {
       stage: "EMD Mask Checking",
       error: "",
       assigned: "Boden Woolstencroft",
+      lastUpdated: "03/02/2026 09:05:19",
+      queueArrival: "03/02/2026 08:43:19",
     },
     {
       pnr: "MY777C",
@@ -42,6 +44,8 @@ export default function Dashboard() {
       stage: "Deal Matching",
       error: "No applicable deal table found",
       assigned: "Boden Woolstencroft",
+      lastUpdated: "03/02/2026 09:05:19",
+      queueArrival: "03/02/2026 08:43:19",
     },
   ]);
   const [mySearch, setMySearch] = useState("");

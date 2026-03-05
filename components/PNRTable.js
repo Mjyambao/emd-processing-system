@@ -9,19 +9,13 @@ import formatDate from "../utils/helper";
  * PNRTable
  * Props:
  *  - rows: array of PNR rows (must include unique `pnr`)
- *      Suggested optional fields for filtering/sorting:
- *        - lastUpdated: string | number (Date-compatible)
- *        - queueArrival: string | number (Date-compatible)
- *  - search: string
- *  - setSearch: fn
- *  - onRefresh: fn (optional; not wired to a button here)
- *  - onSelect: fn(row)
- *  - selected: selected row object
- *  - onKill: fn(originalIndex)
+ *  - search, setSearch
+ *  - onRefresh (optional)
+ *  - onSelect(row), selected
+ *  - onKill(originalIndex)            // accepted (not used in row buttons here)
  *  - statusFilter: 'all'|'processed'|'processing'|'error'|'human'
- *  - isRefreshing: boolean (optional)
- *  - killingSet: Set of PNR strings currently being killed
- *  - retryingSet: Set of PNR strings currently being retried (optional)
+ *  - isRefreshing (optional)
+ *  - killingSet, retryingSet          // accepted (not used in row buttons here)
  *  - assignees: Array<{ id: string|number, name: string }>
  *  - onAssign: fn({ assignee: {id,name}, items: Array<{pnr, originalIndex}> })
  */
@@ -53,15 +47,22 @@ export default function PNRTable({
     return map;
   }, [rows]);
 
+  // Fallback assignees
   const assigneeOptions = assignees.length
     ? assignees
     : [
-        { id: "u1", name: "Suzan Wan Chen" },
+        { id: "u1", name: "Susan Wan Chen" },
         { id: "u2", name: "Boden Woolstencroft" },
-        { id: "u3", name: "Matt Quinn" },
+        { id: "u3", name: "Matt Quiin" },
       ];
 
-  // Unique status options from data (fallback)
+  // Header filter — only these 3 + Unassigned
+  const FILTER_ASSIGNEES = [
+    "Susan Wan Chen",
+    "Boden Woolstencroft",
+    "Matt Quiin",
+  ];
+
   const statusOptions = useMemo(() => {
     const set = new Set(rows.map((r) => r.status).filter(Boolean));
     const dataOptions = Array.from(set);
@@ -69,72 +70,68 @@ export default function PNRTable({
     return ["processed", "processing", "error", "human"];
   }, [rows]);
 
-  // Status sort ranking (tweak to your preference)
-  const statusRank = {
-    error: 1,
-    human: 2,
-    processing: 3,
-    processed: 4,
-  };
+  const statusRank = { error: 1, human: 2, processing: 3, processed: 4 };
 
   // ─────────────────────────────────────────────────────────────
-  // Toasts (lightweight)
+  // Toasts
   // ─────────────────────────────────────────────────────────────
-  const [toasts, setToasts] = useState([]); // {id, type, message}
+  const [toasts, setToasts] = useState([]);
   const toastIdRef = useRef(0);
   const showToast = (message, { type = "success", duration = 4000 } = {}) => {
     const id = ++toastIdRef.current;
     setToasts((prev) => [...prev, { id, type, message }]);
     if (duration > 0) {
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, duration);
+      setTimeout(
+        () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+        duration,
+      );
     }
   };
   const dismissToast = (id) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
 
   // ─────────────────────────────────────────────────────────────
-  // 1) Column filters + sorting state
+  // 1) Column filters + sorting
   // ─────────────────────────────────────────────────────────────
   const [colFilters, setColFilters] = useState({
     pnr: "",
-    status: "", // empty means no filter; you also have global statusFilter above
-    stage: "",
-    lastUpdatedFrom: "", // yyyy-mm-dd
+    status: "",
+    // stage filter removed (Stage shown via tooltip only)
+    lastUpdatedFrom: "",
     lastUpdatedTo: "",
     queueFrom: "",
     queueTo: "",
     error: "",
-    action: "",
+    assignedNames: [], // committed selection
+    includeUnassigned: false, // committed flag
   });
 
   const updateFilter = (key, value) =>
     setColFilters((prev) => ({ ...prev, [key]: value }));
 
-  // Sort state: key & dir
-  const [sort, setSort] = useState({ key: null, dir: "asc" }); // dir: 'asc' | 'desc'
+  const [sort, setSort] = useState({ key: null, dir: "asc" });
   const toggleSort = (key) => {
     setSort((prev) => {
       if (prev.key !== key) return { key, dir: "asc" };
       if (prev.dir === "asc") return { key, dir: "desc" };
-      return { key: null, dir: "asc" }; // clear sorting
+      return { key: null, dir: "asc" };
     });
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 2) Filtering (+ search + global status filter) & sorting
+  // 2) Filtering & sorting
   // ─────────────────────────────────────────────────────────────
   const filteredIndices = useMemo(() => {
     const q = search.trim().toLowerCase();
     const f = colFilters;
+
     const hasDate = (v) => v && !Number.isNaN(new Date(v).getTime());
     const fromLU = hasDate(f.lastUpdatedFrom)
       ? new Date(f.lastUpdatedFrom).getTime()
       : null;
     const toLU = hasDate(f.lastUpdatedTo)
       ? new Date(f.lastUpdatedTo).getTime() + 24 * 3600 * 1000 - 1
-      : null; // inclusive
+      : null;
     const fromQA = hasDate(f.queueFrom)
       ? new Date(f.queueFrom).getTime()
       : null;
@@ -146,35 +143,28 @@ export default function PNRTable({
       statusFilter === "all" || row.status === statusFilter;
 
     const matchColFilters = (row) => {
-      // PNR (text)
+      // PNR text
       if (
         f.pnr &&
         !String(row.pnr || "")
           .toLowerCase()
           .includes(f.pnr.toLowerCase())
-      ) {
+      )
         return false;
-      }
-      // Status (select)
+
+      // Status
       if (f.status && row.status !== f.status) return false;
-      // Stage (text)
-      if (
-        f.stage &&
-        !String(row.stage || "")
-          .toLowerCase()
-          .includes(f.stage.toLowerCase())
-      ) {
-        return false;
-      }
-      // Last Updated (date range)
+
+      // Last Updated range
       if (fromLU != null || toLU != null) {
         const t =
           row.lastUpdated != null ? new Date(row.lastUpdated).getTime() : null;
-        if (t == null) return false; // no value -> doesn't pass a date filter
+        if (t == null) return false;
         if (fromLU != null && t < fromLU) return false;
         if (toLU != null && t > toLU) return false;
       }
-      // Queue Arrival (date range)
+
+      // Queue Arrival range
       if (fromQA != null || toQA != null) {
         const t =
           row.queueArrival != null
@@ -184,29 +174,48 @@ export default function PNRTable({
         if (fromQA != null && t < fromQA) return false;
         if (toQA != null && t > toQA) return false;
       }
-      // Error (text)
+
+      // Error text
       if (
         f.error &&
         !String(row.error || "")
           .toLowerCase()
           .includes(f.error.toLowerCase())
-      ) {
+      )
         return false;
+
+      // Assigned filter (committed only on Done)
+      const assignedFilterActive =
+        (Array.isArray(f.assignedNames) && f.assignedNames.length > 0) ||
+        f.includeUnassigned;
+
+      if (assignedFilterActive) {
+        const assignedStr = String(row.assigned || "").trim();
+        const isUnassigned = assignedStr.length === 0;
+
+        if (isUnassigned) {
+          if (f.includeUnassigned) return true;
+          return false;
+        }
+
+        const assignedList = assignedStr
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        if (f.assignedNames.length > 0) {
+          const hit = f.assignedNames.some((name) =>
+            assignedList.includes(name),
+          );
+          if (!hit) return false;
+        }
       }
-      // Action (text)
-      if (
-        f.action &&
-        !String(row.action || "")
-          .toLowerCase()
-          .includes(f.action.toLowerCase())
-      ) {
-        return false;
-      }
+
       return true;
     };
 
     const indices = rows.reduce((acc, row, idx) => {
-      // Global search: PNR or Stage only (your previous behavior)
+      // Global search still matches Stage even if Stage column is hidden
       const matchSearch =
         !q ||
         String(row.pnr || "")
@@ -214,14 +223,43 @@ export default function PNRTable({
           .includes(q) ||
         (row.stage && String(row.stage).toLowerCase().includes(q));
 
-      if (matchSearch && matchStatusGlobal(row) && matchColFilters(row)) {
+      if (matchSearch && matchStatusGlobal(row) && matchColFilters(row))
         acc.push(idx);
-      }
       return acc;
     }, []);
 
     // Sorting
-    if (!sort.key) return indices;
+    if (!sort.key) {
+      // Default initial sort:
+      // 1) Status priority: error -> human -> processing -> processed
+      // 2) Queue Arrival: newest first
+      const priority = {
+        error: 1,
+        human: 2,
+        processing: 3,
+        processed: 4,
+      };
+      const getTime = (v) => {
+        if (v == null) return -Infinity;
+        const t = new Date(v).getTime();
+        return Number.isNaN(t) ? -Infinity : t;
+      };
+
+      indices.sort((a, b) => {
+        const ra = priority[rows[a].status] ?? Number.MAX_SAFE_INTEGER;
+        const rb = priority[rows[b].status] ?? Number.MAX_SAFE_INTEGER;
+        if (ra !== rb) return ra - rb;
+
+        const ta = getTime(rows[a].queueArrival);
+        const tb = getTime(rows[b].queueArrival);
+        if (ta !== tb) return tb - ta; // newest first
+
+        // stable by original index
+        return a - b;
+      });
+
+      return indices;
+    }
 
     const getVal = (row, key) => {
       switch (key) {
@@ -229,8 +267,6 @@ export default function PNRTable({
           return String(row.pnr || "").toLowerCase();
         case "status":
           return statusRank[row.status] ?? Number.MAX_SAFE_INTEGER;
-        case "stage":
-          return String(row.stage || "").toLowerCase();
         case "lastUpdated": {
           const t =
             row.lastUpdated != null
@@ -247,6 +283,8 @@ export default function PNRTable({
         }
         case "error":
           return String(row.error || "").toLowerCase();
+        case "assigned":
+          return String(row.assigned || "").toLowerCase();
         case "action":
           return String(row.action || "").toLowerCase();
         default:
@@ -260,7 +298,6 @@ export default function PNRTable({
       const vb = getVal(rows[b], sort.key);
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
-      // stable fallback by original index to avoid jitter
       return a - b;
     });
 
@@ -272,7 +309,6 @@ export default function PNRTable({
     [rows, filteredIndices],
   );
 
-  // Count eligible rows in current filtered set (for helper banners)
   const filteredSelectableCount = useMemo(
     () => filtered.filter(isSelectable).length,
     [filtered],
@@ -293,15 +329,13 @@ export default function PNRTable({
 
   const start = (clampedPage - 1) * pageSize;
   const end = start + pageSize;
-  theadHeightAdjustHack(); // ensure stickies recalc (no-op; see fn below)
+  theadHeightAdjustHack();
   const pageRows = filtered.slice(start, end);
 
-  // Show "X–Y of Z"
   const total = filtered.length;
   const from = total === 0 ? 0 : start + 1;
   const to = Math.min(total, end);
 
-  // Page number buttons (max 5 visible)
   const pageNumbers = useMemo(() => {
     const maxButtons = 5;
     let startPage = Math.max(1, clampedPage - Math.floor(maxButtons / 2));
@@ -314,11 +348,10 @@ export default function PNRTable({
   }, [clampedPage, pageCount]);
 
   // ─────────────────────────────────────────────────────────────
-  // 4) Selection (ONLY for selectable rows)
+  // 4) Selection (only for selectable rows)
   // ─────────────────────────────────────────────────────────────
   const [selectedPNRs, setSelectedPNRs] = useState(() => new Set());
 
-  // Prune selections that are no longer selectable (status changed)
   useEffect(() => {
     setSelectedPNRs((prev) => {
       const next = new Set();
@@ -333,7 +366,6 @@ export default function PNRTable({
 
   const selectedCount = selectedPNRs.size;
 
-  // Derive selectable PNRs for current page
   const pageSelectablePNRs = pageRows.filter(isSelectable).map((r) => r.pnr);
   const pageSelectableCount = pageSelectablePNRs.length;
   const pageSelectedCount = pageSelectablePNRs.reduce(
@@ -344,7 +376,6 @@ export default function PNRTable({
     pageSelectableCount > 0 && pageSelectedCount === pageSelectableCount;
   const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
 
-  // Header checkbox indeterminate state
   const headerCbRef = useRef(null);
   useEffect(() => {
     if (headerCbRef.current) {
@@ -353,7 +384,7 @@ export default function PNRTable({
   }, [pageSomeSelected]);
 
   const toggleRow = (row) => {
-    if (!isSelectable(row)) return; // guard
+    if (!isSelectable(row)) return;
     const pnr = row.pnr;
     setSelectedPNRs((prev) => {
       const next = new Set(prev);
@@ -382,69 +413,24 @@ export default function PNRTable({
   // 5) Assignment modal + loading state
   // ─────────────────────────────────────────────────────────────
   const [assignOpen, setAssignOpen] = useState(false);
-  const [assigning, setAssigning] = useState(false); // spinner/disable during confirm
+  const [assigning, setAssigning] = useState(false);
 
   const openAssign = () => setAssignOpen(true);
   const closeAssign = () => {
     if (!assigning) setAssignOpen(false);
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // 6) Horizontal scroll fades (left/right) visibility
-  // ─────────────────────────────────────────────────────────────
-  const scrollRef = useRef(null);
-  const [showLeftFade, setShowLeftFade] = useState(false);
-  const [showRightFade, setShowRightFade] = useState(false);
-
-  const updateFades = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    setShowLeftFade(scrollLeft > 0);
-    setShowRightFade(scrollLeft + clientWidth < scrollWidth - 1);
-  };
-
-  useEffect(() => {
-    updateFades();
-  }, [filtered, page, pageSize, colFilters, sort]);
-
-  // ─────────────────────────────────────────────────────────────
-  // 7) Row actions
-  // ─────────────────────────────────────────────────────────────
-  function handleKill(viewIndexOnPage, e) {
-    e.stopPropagation();
-    const globalViewIndex = start + viewIndexOnPage;
-    const originalIndex = filteredIndices[globalViewIndex];
-    if (originalIndex == null) return;
-    onKill?.(originalIndex);
-  }
-
-  function handleRetry(viewIndexOnPage, e) {
-    e.stopPropagation();
-    // TODO: wire a real onRetry callback if needed
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // 8) Render
-  // ─────────────────────────────────────────────────────────────
   return (
     <div className="card mb-8 relative">
       {/* Toasts */}
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Header: search + assign/selection summary */}
+      {/* Header */}
       <div className="p-3 border-b border-black/10 flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div className="relative w-full md:w-2/3">
-          {/* <input
-            className="input w-full pl-9"
-            placeholder="Search by PNR or Stage"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search PNR or Stage"
-          /> */}
+          {/* Global search (optional) */}
         </div>
 
-        {/* Always show Assign PNR; disabled when no selection */}
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="text-sm text-black/70">{selectedCount} selected</div>
           <button
@@ -466,7 +452,7 @@ export default function PNRTable({
         </div>
       </div>
 
-      {/* If there are results but none are eligible, show info banner */}
+      {/* Helper banner */}
       {total > 0 && filteredSelectableCount === 0 && (
         <div className="mx-3 my-2 px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded">
           No selectable rows in current results. Only <b>Error</b> or{" "}
@@ -474,43 +460,26 @@ export default function PNRTable({
         </div>
       )}
 
-      {/* Table (horizontally scrollable with sticky header & columns) */}
+      {/* Scroll wrapper (no sticky) */}
       <div
-        ref={scrollRef}
-        onScroll={updateFades}
         className="relative overflow-x-auto scroll-smooth"
         tabIndex={0}
         role="region"
         aria-label="PNR results table"
       >
-        {/* left & right edge fades to indicate overflow (beneath sticky cells) */}
-        {showLeftFade && (
-          <div
-            className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white to-transparent z-40"
-            aria-hidden="true"
-          />
-        )}
-        {showRightFade && (
-          <div
-            className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white to-transparent z-40"
-            aria-hidden="true"
-          />
-        )}
-
-        <table className="table min-w-[1280px] bg-white">
+        <table className="table min-w-[1180px] bg-white">
           <thead>
             <tr>
-              {/* Sticky header cells. First two columns also sticky-left */}
-              <ThStickyCheckboxHeader
+              {/* Checkbox header (no sticky) */}
+              <ThCheckboxHeader
                 headerCbRef={headerCbRef}
                 pageAllSelected={pageAllSelected}
                 pageSelectableCount={pageSelectableCount}
                 toggleSelectAllPage={toggleSelectAllPage}
               />
+
               <ThWithFilter
                 label="PNR"
-                stickyLeft
-                leftPx={8}
                 widthClass="w-[140px]"
                 sortKey="pnr"
                 sort={sort}
@@ -545,20 +514,7 @@ export default function PNRTable({
                 </select>
               </ThWithFilter>
 
-              <ThWithFilter
-                label="Stage"
-                widthClass="w-[180px]"
-                sortKey="stage"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                <input
-                  className="input h-8 text-xs"
-                  placeholder="Filter stage…"
-                  value={colFilters.stage}
-                  onChange={(e) => updateFilter("stage", e.target.value)}
-                />
-              </ThWithFilter>
+              {/* Stage column removed */}
 
               <ThWithFilter
                 label="Last Updated"
@@ -632,26 +588,43 @@ export default function PNRTable({
               </ThWithFilter>
 
               <ThWithFilter
+                label="Assigned To"
+                widthClass="w-[240px]"
+                sortKey="assigned"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <AssigneeMultiSelectFilter
+                  options={FILTER_ASSIGNEES}
+                  selected={colFilters.assignedNames} // committed
+                  includeUnassigned={colFilters.includeUnassigned} // committed
+                  onCommit={({ selected, includeUnassigned }) => {
+                    updateFilter("assignedNames", selected);
+                    updateFilter("includeUnassigned", includeUnassigned);
+                  }}
+                />
+              </ThWithFilter>
+
+              <ThWithFilter
                 label="Action Required"
                 widthClass="w-[220px]"
                 sortKey="action"
                 sort={sort}
                 onSort={toggleSort}
               >
+                {/* Optional: You can wire a text filter for row.action here if needed */}
                 <input
                   className="input h-8 text-xs"
-                  placeholder="Filter action…"
-                  value={colFilters.action}
-                  onChange={(e) => updateFilter("action", e.target.value)}
+                  placeholder="(Actions in details)"
+                  disabled
+                  title="Action buttons moved to PNRDetails"
                 />
               </ThWithFilter>
             </tr>
           </thead>
 
           <tbody>
-            {pageRows.map((row, viewIdx) => {
-              const isKilling = killingSet.has(row.pnr);
-              const isRetrying = retryingSet.has(row.pnr);
+            {pageRows.map((row) => {
               const selectable = isSelectable(row);
               const isChecked = selectable && selectedPNRs.has(row.pnr);
 
@@ -665,10 +638,10 @@ export default function PNRTable({
                       : ""
                   }`}
                 >
-                  {/* Row checkbox: only render if selectable (sticky left col 1) */}
+                  {/* Checkbox (no white bg) */}
                   <td
                     onClick={(e) => e.stopPropagation()}
-                    className="align-middle w-12 sticky left-0 bg-white z-[70] border-r border-black/10"
+                    className="align-middle w-12 border-r border-black/10"
                   >
                     {selectable ? (
                       <input
@@ -682,30 +655,32 @@ export default function PNRTable({
                     )}
                   </td>
 
-                  {/* Sticky left col 2: PNR */}
-                  <td className="w-[140px] font-mono font-semibold text-brand-red whitespace-nowrap sticky left-8 bg-white z-[65] border-r border-black/10">
+                  {/* PNR (no white bg) */}
+                  <td className="w-[140px] font-mono font-semibold text-brand-red whitespace-nowrap border-r border-black/10">
                     {row.pnr}
                   </td>
 
+                  {/* Status with native 'title' tooltip for Stage */}
                   <td className="w-[130px]">
-                    <StatusBadge status={row.status} />
+                    <button
+                      type="button"
+                      className="inline-flex items-center"
+                      title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
+                    >
+                      <StatusBadge status={row.status} />
+                    </button>
                   </td>
 
-                  <td className="w-[180px] text-black/80 truncate">
-                    {row.stage}
+                  {/* Stage column removed */}
+
+                  <td className="w-[190px] text-black/80 whitespace-nowrap">
+                    {row.lastUpdated ? formatDate(row.lastUpdated) : "-"}
                   </td>
 
                   <td className="w-[190px] text-black/80 whitespace-nowrap">
-                    {/* Display fallback for now if your data lacks date fields */}
-                    {row.lastUpdated
-                      ? formatDate(row.lastUpdated)
-                      : formatDate("03/02/2026 13:50:20")}
-                  </td>
-
-                  <td className="w-[190px] text-black/80 whitespace-nowrap">
-                    {row.queueArrival
-                      ? formatDate(row.queueArrival)
-                      : formatDate("03/02/2026 12:43:19")}
+                    {row.queueArrival ? formatDate(row.queueArrival) : "-"}
                   </td>
 
                   <td className="w-[420px] text-black/80">
@@ -741,33 +716,13 @@ export default function PNRTable({
                     </p>
                   </td>
 
+                  <td className="w-[240px] text-black/80 truncate">
+                    {row.assigned || ""}
+                  </td>
+
+                  {/* Action Required column retained (no row-level buttons here) */}
                   <td className="w-[220px] text-black/80">
-                    {row.status === "error" ? (
-                      <>
-                        <button
-                          className="btn btn-secondary h-8 p-2 mr-2"
-                          title="Retry process"
-                          onClick={(e) => handleRetry(viewIdx, e)}
-                          disabled={isRetrying || isKilling}
-                        >
-                          {isRetrying ? <Spinner /> : "Retry"}
-                        </button>
-                        <button
-                          className="btn btn-primary h-8 mt-2"
-                          title="Kill process"
-                          onClick={(e) => handleKill(viewIdx, e)}
-                          disabled={isKilling || isRetrying}
-                        >
-                          {isKilling ? (
-                            <Spinner />
-                          ) : (
-                            <i className="fa-solid fa-xmark" />
-                          )}
-                        </button>
-                      </>
-                    ) : (
-                      (row.action ?? "NA")
-                    )}
+                    {row.action ?? "NA"}
                   </td>
                 </tr>
               );
@@ -784,9 +739,8 @@ export default function PNRTable({
         </table>
       </div>
 
-      {/* Footer: Show dropdown + summary + pagination */}
+      {/* Footer */}
       <div className="p-2 border-t border-black/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-        {/* Show dropdown */}
         <div className="flex items-center gap-2">
           <label htmlFor="pageSize" className="text-xs text-black/70">
             Show
@@ -805,14 +759,12 @@ export default function PNRTable({
           <span className="text-sm text-black/70">entries</span>
         </div>
 
-        {/* Summary */}
         <div className="text-sm text-black/70">
           Showing <span className="font-medium">{from}</span>–
           <span className="font-medium">{to}</span> of{" "}
           <span className="font-medium">{total}</span> entries
         </div>
 
-        {/* Pagination controls */}
         <div className="flex items-center gap-1">
           <button
             className="btn h-9 px-3 text-xs"
@@ -850,12 +802,11 @@ export default function PNRTable({
       <AssignModal
         open={assignOpen}
         onClose={closeAssign}
-        assignees={assignees}
+        assignees={assigneeOptions}
         selectedCount={selectedPNRs.size}
-        confirmLoading={assigning} // spinner in Confirm button
         onConfirm={async ({ mode, selectedAssigneeIds, distribution }) => {
           try {
-            if (assigning) return; // guard double-clicks
+            if (assigning) return;
             const selectedPNRsArr = Array.from(selectedPNRs);
             if (!selectedPNRsArr.length) {
               showToast("No rows selected", { type: "info" });
@@ -868,16 +819,16 @@ export default function PNRTable({
 
             setAssigning(true);
 
-            // Fallback distribution if missing (shouldn't happen)
-            let dist = distribution;
-            if (!dist?.order?.length) {
-              const fallbackOrder = selectedPNRsArr.map(
-                (_, i) => selectedAssigneeIds[i % selectedAssigneeIds.length],
-              );
-              dist = { perAssignee: {}, order: fallbackOrder };
-            }
+            const dist = distribution?.order?.length
+              ? distribution
+              : {
+                  order: selectedPNRsArr.map(
+                    (_, i) =>
+                      selectedAssigneeIds[i % selectedAssigneeIds.length],
+                  ),
+                };
 
-            // Group items by assignee according to dist.order
+            // Group by assignee and call onAssign
             const byAssignee = selectedPNRsArr.reduce((acc, pnr, idx) => {
               const assigneeId = dist.order[idx];
               const originalIndex = pnrToOriginalIndex.get(pnr);
@@ -887,20 +838,18 @@ export default function PNRTable({
               return acc;
             }, {});
 
-            // Call existing onAssign once per assignee (await if it returns a promise)
             for (const [assigneeId, items] of Object.entries(byAssignee)) {
               if (!items.length) continue;
               const assignee = assigneeOptions.find(
                 (a) => String(a.id) === String(assigneeId),
               ) || { id: assigneeId, name: String(assigneeId) };
-
               await Promise.resolve(onAssign?.({ assignee, items }));
             }
 
             const totalAssigned = selectedPNRsArr.length;
             const who =
               mode === "all"
-                ? `evenly to all ${assignees.length} ticketers`
+                ? `evenly to all ${assigneeOptions.length} ticketers`
                 : `to ${selectedAssigneeIds.length} selected ticketer(s)`;
             showToast(`${totalAssigned} PNR(s) assigned ${who}`, {
               type: "success",
@@ -923,10 +872,9 @@ export default function PNRTable({
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Sticky Header Helpers / Components
+   Header Helpers / Components (no sticky)
    ───────────────────────────────────────────────────────────── */
 
-// A tiny no-op to make React run this area each render (keeps sticky layout consistent).
 function theadHeightAdjustHack() {}
 
 function SortIcon({ active, dir }) {
@@ -946,17 +894,10 @@ function ThWithFilter({
   sortKey,
   sort,
   onSort,
-  stickyLeft = false,
-  leftPx = 0, // for sticky left offset
 }) {
-  // z-index ladder for headers: left-most > next > others
-  const baseSticky = stickyLeft
-    ? `sticky left-${leftPx} top-0 z-[85] bg-white border-r border-black/10`
-    : `sticky top-0 z-[80] bg-white`;
-
   return (
     <th
-      className={`${widthClass} ${nowrap ? "whitespace-nowrap" : ""} ${baseSticky}`}
+      className={`${widthClass} ${nowrap ? "whitespace-nowrap" : ""} bg-white`}
       scope="col"
     >
       <div className="flex flex-col gap-1">
@@ -979,17 +920,14 @@ function ThWithFilter({
   );
 }
 
-function ThStickyCheckboxHeader({
+function ThCheckboxHeader({
   headerCbRef,
   pageAllSelected,
   pageSelectableCount,
   toggleSelectAllPage,
 }) {
   return (
-    <th
-      className="w-12 sticky left-0 top-0 z-[90] bg-white border-r border-black/10"
-      scope="col"
-    >
+    <th className="w-12 bg-white border-r border-black/10" scope="col">
       <input
         ref={headerCbRef}
         type="checkbox"
@@ -1004,6 +942,148 @@ function ThStickyCheckboxHeader({
         }
       />
     </th>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Assigned-To Multi-Select with Search (Apply-on-Done)
+   ───────────────────────────────────────────────────────────── */
+function AssigneeMultiSelectFilter({
+  options, // array of names (strings)
+  selected, // committed selected names
+  includeUnassigned, // committed flag
+  onCommit, // ({ selected, includeUnassigned }) => void
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [draftSelected, setDraftSelected] = useState(selected || []);
+  const [draftUnassigned, setDraftUnassigned] = useState(!!includeUnassigned);
+
+  // Reset draft when opening (or when committed values change while open)
+  useEffect(() => {
+    if (open) {
+      setDraftSelected(Array.isArray(selected) ? selected : []);
+      setDraftUnassigned(!!includeUnassigned);
+      setQ("");
+    }
+  }, [open, selected, includeUnassigned]);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return options;
+    return options.filter((n) => n.toLowerCase().includes(s));
+  }, [options, q]);
+
+  const toggleName = (name) => {
+    setDraftSelected((prev) => {
+      const set = new Set(prev);
+      if (set.has(name)) set.delete(name);
+      else set.add(name);
+      return Array.from(set);
+    });
+  };
+
+  const labelText = (() => {
+    const count = selected?.length || 0;
+    if (draftUnassigned && count === 0) return "Unassigned";
+    if (count > 0)
+      return `${count} selected${includeUnassigned ? " + Unassigned" : ""}`;
+    return includeUnassigned ? "Unassigned" : "All";
+  })();
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="input h-8 text-xs w-full flex items-center justify-between"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Filter by assignee(s)"
+      >
+        <span className="truncate">{labelText}</span>
+        <i className={`fa-solid fa-chevron-${open ? "up" : "down"} ml-2`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-[95] mt-1 w-[260px] bg-white border border-black/10 rounded shadow-lg p-2">
+          <div className="mb-2">
+            <input
+              className="input h-8 text-xs w-full"
+              placeholder="Search names…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
+
+          <div className="max-h-[220px] overflow-y-auto pr-1">
+            <label className="flex items-center gap-2 py-1 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={draftUnassigned}
+                onChange={(e) => setDraftUnassigned(e.target.checked)}
+              />
+              <span>Unassigned</span>
+            </label>
+
+            <div className="my-1 border-t border-black/10" />
+
+            {filtered.length === 0 ? (
+              <div className="text-xs text-black/60 py-2 px-1">No matches</div>
+            ) : (
+              filtered.map((name) => (
+                <label
+                  key={name}
+                  className="flex items-center gap-2 py-1 text-xs cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={draftSelected.includes(name)}
+                    onChange={() => toggleName(name)}
+                  />
+                  <span className="truncate">{name}</span>
+                </label>
+              ))
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-black/10">
+            <button
+              className="btn h-8 text-xs"
+              onClick={() => {
+                setDraftSelected([]);
+                setDraftUnassigned(false);
+                setQ("");
+              }}
+            >
+              Clear
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="btn h-8 text-xs"
+                onClick={() => setOpen(false)}
+                title="Close without applying"
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-secondary h-8 text-xs"
+                onClick={() => {
+                  onCommit?.({
+                    selected: draftSelected,
+                    includeUnassigned: draftUnassigned,
+                  });
+                  setOpen(false);
+                }}
+                title="Apply filter"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

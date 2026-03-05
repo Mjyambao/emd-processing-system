@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 /**
- * AssignModal
+ * AssignModal with search for names in the multi-select list,
+ * and selection persistence across filter changes.
  *
  * Props:
  * - open: boolean
@@ -28,13 +29,15 @@ function AssignModal({
   const ALL_VALUE = "__ALL__";
 
   const [distributeEvenly, setDistributeEvenly] = useState(false);
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]); // array<string>
+  const [query, setQuery] = useState("");
 
   // Reset local selection each time the modal opens
   useEffect(() => {
     if (open) {
       setDistributeEvenly(false);
       setSelectedIds([]);
+      setQuery("");
     }
   }, [open]);
 
@@ -48,14 +51,23 @@ function AssignModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // ---------------------------
-  // FIX: All hooks must run on every render, so compute values/hooks BEFORE any early returns.
-  // ---------------------------
+  // ─────────────────────────────────────────────────────────────
+  // Search & selection logic (all hooks run before early return)
+  // ─────────────────────────────────────────────────────────────
 
+  // Filter the visible assignees based on the query (case-insensitive)
+  const filteredAssignees = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return assignees;
+    return assignees.filter((a) => a.name.toLowerCase().includes(q));
+  }, [assignees, query]);
+
+  // Compute resolved IDs (either all assignees if distributeEvenly, or selected ones)
   const resolvedIds = distributeEvenly
     ? assignees.map((a) => a.id)
     : selectedIds;
 
+  // Keep your original distribution behavior & preview
   const distribution = useMemo(
     () => computeDistribution(selectedCount, resolvedIds),
     [selectedCount, resolvedIds],
@@ -64,19 +76,55 @@ function AssignModal({
   const canConfirm =
     selectedCount > 0 && (distributeEvenly || resolvedIds.length > 0);
 
+  /**
+   * Preserve previously selected IDs that are not visible under current filter.
+   * Only apply add/remove changes to IDs that are currently visible.
+   */
   const handleSelectChange = (e) => {
-    const values = Array.from(e.target.selectedOptions).map((o) => o.value);
+    const visibleOptionValues = new Set([
+      ALL_VALUE,
+      ...filteredAssignees.map((a) => String(a.id)),
+    ]);
 
-    if (values.includes(ALL_VALUE)) {
-      // choose All -> evenly distribute among all assignees
+    // Values the user marked as selected in the currently visible <select> options
+    const visibleSelectedValues = new Set(
+      Array.from(e.target.selectedOptions).map((o) => o.value),
+    );
+
+    // Handle All-value behavior (even distribution)
+    if (visibleSelectedValues.has(ALL_VALUE)) {
       setDistributeEvenly(true);
       setSelectedIds(assignees.map((a) => a.id));
-    } else {
-      setDistributeEvenly(false);
-      setSelectedIds(values);
+      return;
     }
+
+    // Otherwise we are in "selected" mode
+    setDistributeEvenly(false);
+
+    setSelectedIds((prev) => {
+      const prevSet = new Set(prev);
+
+      // 1) Remove any IDs that are visible but were UNselected now
+      for (const val of visibleOptionValues) {
+        if (val === ALL_VALUE) continue;
+        const wasSelected = prevSet.has(val);
+        const isSelectedNow = visibleSelectedValues.has(val);
+        if (wasSelected && !isSelectedNow) {
+          prevSet.delete(val);
+        }
+      }
+
+      // 2) Add any newly selected visible IDs
+      for (const val of visibleSelectedValues) {
+        if (val === ALL_VALUE) continue;
+        prevSet.add(val);
+      }
+
+      return Array.from(prevSet);
+    });
   };
 
+  // The select's value: show ALL_VALUE when distributing evenly, else the explicit selected IDs
   const selectValue = distributeEvenly ? [ALL_VALUE] : selectedIds;
 
   const handleConfirm = () => {
@@ -118,28 +166,47 @@ function AssignModal({
         </div>
 
         <div className="px-5 py-4 space-y-2">
-          <label htmlFor="assignee" className="block text-sm">
-            Assign to
+          <label htmlFor="assignee-search" className="block text-sm">
+            Search names
           </label>
+          <input
+            id="assignee-search"
+            className="input w-full h-9 text-sm"
+            placeholder="Type to filter assignees…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
 
-          {/* Multi-select with special "All" option */}
+          <div className="flex items-center justify-between">
+            <label htmlFor="assignee" className="block text-sm">
+              Assign to
+            </label>
+            <span className="text-xs text-black/50">
+              Showing {filteredAssignees.length} of {assignees.length}
+            </span>
+          </div>
+
+          {/* Multi-select with special "All" option.
+              We render "All" then the filtered list.
+              Previously selected items remain selected even if not visible. */}
           <select
             id="assignee"
             className="input w-full"
             multiple
-            size={Math.min(8, (assignees?.length || 0) + 1)}
+            size={Math.min(8, (filteredAssignees.length || 0) + 1)}
             value={selectValue}
             onChange={handleSelectChange}
+            aria-describedby="assignee-help"
           >
             <option value={ALL_VALUE}>All Ticketers — evenly distribute</option>
-            {assignees.map((a) => (
+            {filteredAssignees.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
           </select>
 
-          <p className="text-xs text-black/60">
+          <p id="assignee-help" className="text-xs text-black/60">
             {distributeEvenly ? (
               <>
                 <strong>Even distribution</strong> is enabled. The{" "}
