@@ -599,6 +599,27 @@ export default function PNRDetails({
                 v={details.emdTotal || "—"}
               />
 
+              <Field
+                k={
+                  <>
+                    <i className="fa-solid fa-puzzle-piece text-black/60"></i>{" "}
+                    SSR
+                  </>
+                }
+                v={details.ssrCode || "—"}
+              />
+
+              {/* Other Info from Sabre JSON */}
+              <Field
+                k={
+                  <>
+                    <i className="fa-regular fa-note-sticky text-black/60"></i>{" "}
+                    Other Info
+                  </>
+                }
+                v={details.otherInfo || "—"}
+              />
+
               {/* EMD Desc (editable when Human Input Required) */}
               <div
                 className={`bg-black/5 border ${isHuman ? "border-2 border-red-500" : "border-black/10"} rounded p-3`}
@@ -660,16 +681,6 @@ export default function PNRDetails({
                   </div>
                 </div>
               </div>
-
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-puzzle-piece text-black/60"></i>{" "}
-                    SSR
-                  </>
-                }
-                v={details.ssrCode || "—"}
-              />
 
               {/* RFIC */}
               <div
@@ -788,17 +799,6 @@ export default function PNRDetails({
                   </div>
                 </div>
               </div>
-
-              {/* Other Info from Sabre JSON */}
-              <Field
-                k={
-                  <>
-                    <i className="fa-regular fa-note-sticky text-black/60"></i>{" "}
-                    Other Info
-                  </>
-                }
-                v={details.otherInfo || "—"}
-              />
             </div>
 
             {/* Visible note (replaces old tooltips) */}
