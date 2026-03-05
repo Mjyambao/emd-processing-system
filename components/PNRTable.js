@@ -18,6 +18,7 @@ import formatDate from "../utils/helper";
  *  - killingSet, retryingSet          // accepted (not used in row buttons here)
  *  - assignees: Array<{ id: string|number, name: string }>
  *  - onAssign: fn({ assignee: {id,name}, items: Array<{pnr, originalIndex}> })
+ *  - onUpdateTTL: async fn({ pnr, originalIndex, ttl }) => Promise<void>   // NEW
  */
 export default function PNRTable({
   rows,
@@ -33,6 +34,7 @@ export default function PNRTable({
   retryingSet = new Set(),
   assignees = [],
   onAssign,
+  onUpdateTTL, // NEW
 }) {
   // ─────────────────────────────────────────────────────────────
   // 0) Helpers
@@ -101,6 +103,8 @@ export default function PNRTable({
     lastUpdatedTo: "",
     queueFrom: "",
     queueTo: "",
+    ttlFrom: "", // NEW
+    ttlTo: "", // NEW
     error: "",
     assignedNames: [], // committed selection
     includeUnassigned: false, // committed flag
@@ -119,6 +123,55 @@ export default function PNRTable({
   };
 
   // ─────────────────────────────────────────────────────────────
+  // NEW: TTL local cache (UI persistence until next fetch)
+  // Map<pnr, ttlDateString>
+  const [ttlLocalMap, setTtlLocalMap] = useState(() => new Map());
+  // Clean-up any PNRs that no longer exist
+  useEffect(() => {
+    setTtlLocalMap((prev) => {
+      const next = new Map();
+      const has = new Set(rows.map((r) => r.pnr));
+      for (const [pnr, val] of prev) {
+        if (has.has(pnr)) next.set(pnr, val);
+      }
+      return next;
+    });
+  }, [rows]);
+
+  const getTTLForRow = (row) => {
+    const local = ttlLocalMap.get(row.pnr);
+    if (local) return local; // YYYY-MM-DD (from modal)
+    return row.ttl ?? null; // backend-provided value
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // TTL Modal state
+  // ─────────────────────────────────────────────────────────────
+  const [ttlModal, setTtlModal] = useState({
+    open: false,
+    pnr: null,
+    originalIndex: null,
+    dateStr: "", // YYYY-MM-DD
+    saving: false,
+  });
+
+  const openTTLModalForRow = (row) => {
+    const pnr = row.pnr;
+    const originalIndex = pnrToOriginalIndex.get(pnr);
+    const current = getTTLForRow(row);
+    setTtlModal({
+      open: true,
+      pnr,
+      originalIndex,
+      dateStr: toYYYYMMDD(current),
+      saving: false,
+    });
+  };
+
+  const closeTTLModal = () =>
+    setTtlModal((m) => ({ ...m, open: false, saving: false }));
+
+  // ─────────────────────────────────────────────────────────────
   // 2) Filtering & sorting
   // ─────────────────────────────────────────────────────────────
   const filteredIndices = useMemo(() => {
@@ -126,18 +179,25 @@ export default function PNRTable({
     const f = colFilters;
 
     const hasDate = (v) => v && !Number.isNaN(new Date(v).getTime());
+
     const fromLU = hasDate(f.lastUpdatedFrom)
       ? new Date(f.lastUpdatedFrom).getTime()
       : null;
     const toLU = hasDate(f.lastUpdatedTo)
       ? new Date(f.lastUpdatedTo).getTime() + 24 * 3600 * 1000 - 1
       : null;
+
     const fromQA = hasDate(f.queueFrom)
       ? new Date(f.queueFrom).getTime()
       : null;
     const toQA = hasDate(f.queueTo)
       ? new Date(f.queueTo).getTime() + 24 * 3600 * 1000 - 1
       : null;
+
+    const fromTTL = hasDate(f.ttlFrom) ? new Date(f.ttlFrom).getTime() : null; // NEW
+    const toTTL = hasDate(f.ttlTo)
+      ? new Date(f.ttlTo).getTime() + 24 * 3600 * 1000 - 1
+      : null; // NEW
 
     const matchStatusGlobal = (row) =>
       statusFilter === "all" || row.status === statusFilter;
@@ -175,6 +235,16 @@ export default function PNRTable({
         if (toQA != null && t > toQA) return false;
       }
 
+      // TTL range (uses local override if present)
+      if (fromTTL != null || toTTL != null) {
+        const ttl = getTTLForRow(row);
+        if (!ttl) return false;
+        const t = new Date(ttl).getTime();
+        if (Number.isNaN(t)) return false;
+        if (fromTTL != null && t < fromTTL) return false;
+        if (toTTL != null && t > toTTL) return false;
+      }
+
       // Error text
       if (
         f.error &&
@@ -190,14 +260,22 @@ export default function PNRTable({
         f.includeUnassigned;
 
       if (assignedFilterActive) {
-        const assignedStr = String(row.assigned || "").trim();
-        const isUnassigned = assignedStr.length === 0;
+        const assignedRaw = row.assigned;
+        const assignedStr = String(assignedRaw ?? "").trim();
+
+        // Treat "", "Unassigned", "-" as unassigned
+        const normalized = assignedStr.toLowerCase();
+        const isUnassigned =
+          assignedStr.length === 0 ||
+          normalized === "unassigned" ||
+          assignedStr === "-";
 
         if (isUnassigned) {
-          if (f.includeUnassigned) return true;
-          return false;
+          // Include if 'Unassigned' checkbox selected
+          return !!f.includeUnassigned;
         }
 
+        // Row has assignees
         const assignedList = assignedStr
           .split(",")
           .map((s) => s.trim())
@@ -208,6 +286,9 @@ export default function PNRTable({
             assignedList.includes(name),
           );
           if (!hit) return false;
+        } else {
+          // No names chosen; if only 'Unassigned' is selected, exclude assigned rows
+          if (f.includeUnassigned) return false;
         }
       }
 
@@ -233,12 +314,7 @@ export default function PNRTable({
       // Default initial sort:
       // 1) Status priority: error -> human -> processing -> processed
       // 2) Queue Arrival: newest first
-      const priority = {
-        error: 1,
-        human: 2,
-        processing: 3,
-        processed: 4,
-      };
+      const priority = { error: 1, human: 2, processing: 3, processed: 4 };
       const getTime = (v) => {
         if (v == null) return -Infinity;
         const t = new Date(v).getTime();
@@ -281,6 +357,12 @@ export default function PNRTable({
               : -Infinity;
           return Number.isNaN(t) ? -Infinity : t;
         }
+        case "ttl": {
+          const ttl = getTTLForRow(row);
+          if (!ttl) return -Infinity;
+          const t = new Date(ttl).getTime();
+          return Number.isNaN(t) ? -Infinity : t;
+        }
         case "error":
           return String(row.error || "").toLowerCase();
         case "assigned":
@@ -302,7 +384,7 @@ export default function PNRTable({
     });
 
     return indices;
-  }, [rows, search, statusFilter, colFilters, sort]);
+  }, [rows, search, statusFilter, colFilters, sort, ttlLocalMap]);
 
   const filtered = useMemo(
     () => filteredIndices.map((i) => rows[i]),
@@ -462,12 +544,12 @@ export default function PNRTable({
 
       {/* Scroll wrapper (no sticky) */}
       <div
-        className="relative overflow-x-auto scroll-smooth"
+        className="relative overflow-x-auto scroll-smooth min-h-[380px] pb-4"
         tabIndex={0}
         role="region"
         aria-label="PNR results table"
       >
-        <table className="table min-w-[1180px] bg-white">
+        <table className="table min-w-[1280px] bg-white">
           <thead>
             <tr>
               {/* Checkbox header (no sticky) */}
@@ -572,6 +654,33 @@ export default function PNRTable({
                 </div>
               </ThWithFilter>
 
+              {/* TTL column: sortable + date filter */}
+              <ThWithFilter
+                label="TTL (Ticketing Time Limit)"
+                widthClass="w-[180px]"
+                nowrap
+                sortKey="ttl"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                <div className="flex gap-1">
+                  <input
+                    type="date"
+                    className="input h-8 text-xs"
+                    value={colFilters.ttlFrom}
+                    onChange={(e) => updateFilter("ttlFrom", e.target.value)}
+                    aria-label="TTL from"
+                  />
+                  <input
+                    type="date"
+                    className="input h-8 text-xs"
+                    value={colFilters.ttlTo}
+                    onChange={(e) => updateFilter("ttlTo", e.target.value)}
+                    aria-label="TTL to"
+                  />
+                </div>
+              </ThWithFilter>
+
               <ThWithFilter
                 label="Error Details"
                 widthClass="w-[420px]"
@@ -612,7 +721,6 @@ export default function PNRTable({
                 sort={sort}
                 onSort={toggleSort}
               >
-                {/* Optional: You can wire a text filter for row.action here if needed */}
                 <input
                   className="input h-8 text-xs"
                   placeholder="(Actions in details)"
@@ -627,6 +735,7 @@ export default function PNRTable({
             {pageRows.map((row) => {
               const selectable = isSelectable(row);
               const isChecked = selectable && selectedPNRs.has(row.pnr);
+              const ttlForRow = getTTLForRow(row); // could be null or 'YYYY-MM-DD'
 
               return (
                 <tr
@@ -667,7 +776,9 @@ export default function PNRTable({
                       className="inline-flex items-center"
                       title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
                       onClick={(e) => e.stopPropagation()}
-                      aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
+                      aria-label={`Status: ${row.status}. Stage: ${
+                        row.stage ? String(row.stage) : "—"
+                      }`}
                     >
                       <StatusBadge status={row.status} />
                     </button>
@@ -681,6 +792,22 @@ export default function PNRTable({
 
                   <td className="w-[190px] text-black/80 whitespace-nowrap">
                     {row.queueArrival ? formatDate(row.queueArrival) : "-"}
+                  </td>
+
+                  {/* TTL cell (click to open modal) */}
+                  <td className="w-[220px] text-black/80 whitespace-nowrap">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 underline-offset-2 text-black/80 hover:text-brand-red"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openTTLModalForRow(row);
+                      }}
+                      title="Set Ticket Time Limit"
+                    >
+                      {ttlForRow ? toYYYYMMDD(ttlForRow) : "-"}
+                      <i className="fa-regular fa-calendar" />
+                    </button>
                   </td>
 
                   <td className="w-[420px] text-black/80">
@@ -717,7 +844,7 @@ export default function PNRTable({
                   </td>
 
                   <td className="w-[240px] text-black/80 truncate">
-                    {row.assigned || ""}
+                    {String(row.assigned ?? "").trim() || "-"}
                   </td>
 
                   {/* Action Required column retained (no row-level buttons here) */}
@@ -730,7 +857,7 @@ export default function PNRTable({
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="text-center py-6 text-black/60">
+                <td colSpan={9} className="text-center py-6 text-black/60">
                   No matches
                 </td>
               </tr>
@@ -842,7 +969,10 @@ export default function PNRTable({
               if (!items.length) continue;
               const assignee = assigneeOptions.find(
                 (a) => String(a.id) === String(assigneeId),
-              ) || { id: assigneeId, name: String(assigneeId) };
+              ) || {
+                id: assigneeId,
+                name: String(assigneeId),
+              };
               await Promise.resolve(onAssign?.({ assignee, items }));
             }
 
@@ -864,6 +994,51 @@ export default function PNRTable({
             });
           } finally {
             setAssigning(false);
+          }
+        }}
+      />
+
+      {/* TTL Modal */}
+      <TTLModal
+        open={ttlModal.open}
+        dateStr={ttlModal.dateStr}
+        saving={ttlModal.saving}
+        onCancel={closeTTLModal}
+        onDateChange={(v) =>
+          setTtlModal((m) => ({ ...m, dateStr: (v || "").slice(0, 10) }))
+        }
+        onSave={async () => {
+          if (!ttlModal.pnr || ttlModal.originalIndex == null) return;
+          if (!ttlModal.dateStr) {
+            showToast("Choose a date first", { type: "info" });
+            return;
+          }
+          try {
+            setTtlModal((m) => ({ ...m, saving: true }));
+            const payload = {
+              pnr: ttlModal.pnr,
+              originalIndex: ttlModal.originalIndex,
+              ttl: ttlModal.dateStr, // YYYY-MM-DD
+            };
+
+            // Persist to parent/backend
+            await Promise.resolve(onUpdateTTL?.(payload));
+
+            // Reflect immediately in UI
+            setTtlLocalMap((prev) => {
+              const next = new Map(prev);
+              next.set(ttlModal.pnr, ttlModal.dateStr);
+              return next;
+            });
+
+            showToast(`TTL saved for ${ttlModal.pnr}`, { type: "success" });
+            closeTTLModal();
+          } catch (e) {
+            console.error("Save TTL failed:", e);
+            showToast("Failed to save TTL. Please try again.", {
+              type: "error",
+            });
+            setTtlModal((m) => ({ ...m, saving: false }));
           }
         }}
       />
@@ -1062,7 +1237,7 @@ function AssigneeMultiSelectFilter({
               <button
                 className="btn h-8 text-xs"
                 onClick={() => setOpen(false)}
-                title="Close without applying"
+                title="Close"
               >
                 Cancel
               </button>
@@ -1126,4 +1301,66 @@ function ToastViewport({ toasts, onDismiss }) {
       ))}
     </div>
   );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TTL Modal (inline, no external deps)
+   ───────────────────────────────────────────────────────────── */
+function TTLModal({ open, dateStr, saving, onCancel, onDateChange, onSave }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[98] flex items-center justify-center"
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        className="absolute inset-0 bg-black/30"
+        onClick={saving ? undefined : onCancel}
+      />
+      <div className="relative z-[99] w-[360px] bg-white rounded-lg shadow-xl border border-black/10 p-4">
+        <h3 className="text-base font-semibold mb-2">
+          Set Ticket Time Limit (TTL)
+        </h3>
+
+        <div className="mb-4">
+          <label className="block text-sm text-black/70 mb-1">TTL Date</label>
+          <input
+            type="date"
+            className="input h-9 w-full"
+            value={dateStr || ""}
+            onChange={(e) => onDateChange?.(e.target.value)}
+            disabled={saving}
+          />
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <button className="btn h-9" onClick={onCancel} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-primary h-9 inline-flex items-center gap-2 disabled:opacity-60"
+            onClick={onSave}
+            disabled={saving}
+          >
+            {saving && <Spinner size={16} />}
+            <span>Save TTL</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Utilities
+   ───────────────────────────────────────────────────────────── */
+function toYYYYMMDD(input) {
+  if (!input) return "";
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
