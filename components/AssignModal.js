@@ -1,24 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-/**
- * AssignModal with search for names in the multi-select list,
- * and selection persistence across filter changes.
- *
- * Props:
- * - open: boolean
- * - onClose: () => void
- * - assignees: Array<{ id: string, name: string }>
- * - selectedCount: number
- * - onConfirm: (payload) => void
- *    payload = {
- *      mode: 'all' | 'selected',
- *      selectedAssigneeIds: string[],
- *      distribution: {
- *        perAssignee: Record<assigneeId, number>,
- *        order: string[] // assigneeId for PNR index 0..selectedCount-1
- *      }
- *    }
- */
 function AssignModal({
   open,
   onClose,
@@ -29,7 +10,7 @@ function AssignModal({
   const ALL_VALUE = "__ALL__";
 
   const [distributeEvenly, setDistributeEvenly] = useState(false);
-  const [selectedIds, setSelectedIds] = useState([]); // array<string>
+  const [selectedIds, setSelectedIds] = useState([]);
   const [query, setQuery] = useState("");
 
   // Reset local selection each time the modal opens
@@ -50,10 +31,6 @@ function AssignModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
-
-  // ─────────────────────────────────────────────────────────────
-  // Search & selection logic (all hooks run before early return)
-  // ─────────────────────────────────────────────────────────────
 
   // Filter the visible assignees based on the query (case-insensitive)
   const filteredAssignees = useMemo(() => {
@@ -76,10 +53,6 @@ function AssignModal({
   const canConfirm =
     selectedCount > 0 && (distributeEvenly || resolvedIds.length > 0);
 
-  /**
-   * Preserve previously selected IDs that are not visible under current filter.
-   * Only apply add/remove changes to IDs that are currently visible.
-   */
   const handleSelectChange = (e) => {
     const visibleOptionValues = new Set([
       ALL_VALUE,
@@ -104,7 +77,6 @@ function AssignModal({
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
 
-      // 1) Remove any IDs that are visible but were UNselected now
       for (const val of visibleOptionValues) {
         if (val === ALL_VALUE) continue;
         const wasSelected = prevSet.has(val);
@@ -114,7 +86,6 @@ function AssignModal({
         }
       }
 
-      // 2) Add any newly selected visible IDs
       for (const val of visibleSelectedValues) {
         if (val === ALL_VALUE) continue;
         prevSet.add(val);
@@ -124,14 +95,13 @@ function AssignModal({
     });
   };
 
-  // The select's value: show ALL_VALUE when distributing evenly, else the explicit selected IDs
   const selectValue = distributeEvenly ? [ALL_VALUE] : selectedIds;
 
   const handleConfirm = () => {
     const payload = {
       mode: distributeEvenly ? "all" : "selected",
       selectedAssigneeIds: resolvedIds,
-      distribution, // { perAssignee, order }
+      distribution,
     };
     onConfirm?.(payload);
   };
@@ -186,9 +156,6 @@ function AssignModal({
             </span>
           </div>
 
-          {/* Multi-select with special "All" option.
-              We render "All" then the filtered list.
-              Previously selected items remain selected even if not visible. */}
           <select
             id="assignee"
             className="input w-full"

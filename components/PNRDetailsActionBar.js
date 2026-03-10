@@ -1,11 +1,11 @@
-// components/PNRDetailsActionBar.js
 import { useMemo, useState } from "react";
+import SingleSelectWithSearch from "./SingleSelectWithSearch";
 
 export default function PNRDetailsActionBar({
-  errorDetails, // string e.g., 'error' | 'processing' | ...
-  onRetry, // () => Promise|void
-  onRemoveFromQueue, // () => Promise|void
-  onSendToQueue, // ({ queueType: 'main'|'personal', assigneeName?: string }) => Promise|void
+  errorDetails,
+  onRetry,
+  onRemoveFromQueue,
+  onSendToQueue,
 }) {
   const [open, setOpen] = useState(false);
   const [oasisOpen, setOasisOpen] = useState(false);
@@ -16,26 +16,27 @@ export default function PNRDetailsActionBar({
   );
 
   return (
-    <div className="flex items-center gap-2">
-      <div className="text-sm">
-        <span className="text-black/60 mr-2">Error Details:</span>
+    <div>
+      <div className="text-sm w-[250px] mb-2">
+        <span className="text-black/60 mr-1">Error Details:</span>
         <strong className="font-semibold">{errorDetails}</strong>
       </div>
 
       <div>
+        <span className="text-black/60 mr-2">Action:</span>
         <button
           type="button"
-          className="btn btn-secondary h-8"
+          className="btn btn-secondary h-8 w-[140px] text-black/50"
           onClick={() => setOpen((v) => !v)}
           aria-haspopup="menu"
           aria-expanded={open}
         >
-          Actions{" "}
-          <i className={`fa-solid fa-chevron-${open ? "up" : "down"} ml-1`} />
+          Select Action
+          <i className={`fa-solid fa-chevron-${open ? "up" : "down"} ml-4`} />
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-1 w-[220px] bg-white border border-black/10 rounded shadow-lg z-[120]">
+          <div className="absolute right-25 w-[220px] bg-white border border-black/10 rounded shadow-lg z-[120]">
             <button
               className="w-full text-left px-3 py-2 hover:bg-black/5 text-sm"
               onClick={() => {
@@ -92,10 +93,10 @@ function OasisQueueModal({ open, onClose, names = [], onSubmit }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
-      <div className="relative bg-white w-[460px] max-w-[92vw] rounded shadow-lg border border-black/10">
+      <div className="relative bg-white w-[300px] max-w-[92vw] rounded shadow-lg border border-black/10">
         <div className="p-4 border-b border-black/10 flex items-center justify-between">
           <h3 className="text-base font-semibold">Send to Oasis Queue</h3>
           <button
@@ -165,69 +166,6 @@ function OasisQueueModal({ open, onClose, names = [], onSubmit }) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function SingleSelectWithSearch({
-  options = [],
-  value,
-  onChange,
-  placeholder = "Search…",
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return options;
-    return options.filter((o) => o.toLowerCase().includes(s));
-  }, [options, q]);
-
-  const select = (name) => {
-    onChange?.(name);
-    setOpen(false);
-  };
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        className="input h-9 w-full flex items-center justify-between"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="truncate">{value || "Select…"}</span>
-        <i className={`fa-solid fa-chevron-${open ? "up" : "down"} ml-2`} />
-      </button>
-
-      {open && (
-        <div className="absolute z-[95] mt-1 w-full bg-white border border-black/10 rounded shadow-lg p-2">
-          <div className="mb-2">
-            <input
-              className="input h-9 w-full text-sm"
-              placeholder={placeholder}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </div>
-
-          <div className="max-h-[220px] overflow-y-auto">
-            {filtered.length === 0 ? (
-              <div className="text-sm text-black/60 p-2">No matches</div>
-            ) : (
-              filtered.map((name) => (
-                <button
-                  key={name}
-                  className="w-full text-left px-2 py-2 hover:bg-black/5 text-sm"
-                  onClick={() => select(name)}
-                >
-                  {name}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,14 +1,20 @@
-// pages/dashboard.js
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+
+// Components
 import TopNav from "../components/TopNav";
 import PNRTable from "../components/PNRTable";
 import PNRDetails from "../components/PNRDetails";
-import ToastStack from "../components/Toast";
+import ToastStack from "../components/Toasts";
 import Spinner from "../components/Spinner";
 import Chip from "../components/Chip";
+
+// Utils
 import { initialPnrs, refreshStatuses } from "../lib/sampleData";
 import { requireAuth } from "../lib/auth";
+
+// APIs
+// import { logout } from "../api/userApi";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -23,7 +29,6 @@ export default function Dashboard() {
   const [allRefreshing, setAllRefreshing] = useState(false);
   const [allStatus, setAllStatus] = useState("all"); // 'all'|'processed'|'processing'|'error'|'human'
 
-  // My Queues (replace with your real "mine" dataset)
   const [myRows, setMyRows] = useState([
     {
       pnr: "MY987B",
@@ -167,6 +172,8 @@ export default function Dashboard() {
 
   function handleLogout() {
     localStorage.removeItem("session");
+    //Trigger logout API to clear session
+    // logout();
     router.replace("/");
   }
 
