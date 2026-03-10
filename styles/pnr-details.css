@@ -1,0 +1,118 @@
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulseFocus {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduce motion for all components that use animations */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+
+/* --- Helpers for fade-in wrapper --- */
+.fade-in-up {
+  opacity: 0;
+  transform: translateY(4px);
+  will-change: transform, opacity;
+  animation: fadeInUp 260ms ease-out forwards;
+}
+
+.toast-container {
+  width: 90vw;
+  max-width: 340px;
+}
+.toast-item {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px; /* circle */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: toastIn 220ms ease-out forwards;
+  cursor: pointer;
+}
+
+.pnr-details.compact .card {
+  padding: 12px;
+}
+.pnr-details.compact .section-title {
+  margin: 6px 0 8px;
+}
+.pnr-details.compact .grid-tight {
+  gap: 0.5rem;
+}
+.pnr-details.compact .row-tight {
+  margin-top: 0.5rem;
+}
+.pnr-details.compact .cell-tight {
+  padding: 6px 8px;
+}
+.pnr-details.compact .header-tight {
+  padding: 6px 8px;
+}
+.pnr-details.compact .btn-xs {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.pnr-details.compact .input-xs {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+/* A light border background used multiple times */
+.pnr-details .bg-soft {
+  background: rgba(0, 0, 0, 0.03);
+}
+.pnr-details .bg-soft-strong {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* Subtle ring for "needs attention" */
+.pnr-details .ring-attn {
+  border-color: #fca5a5; /* red-300 */
+  box-shadow: 0 0 0 1px #fecaca; /* red-200 (outer) */
+}
+.pnr-details .pulse-focus-once {
+  animation: pulseFocus 900ms ease-out 1;
+}
+
+/* Notes row label and value */
+.pnr-details .notes-label {
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.6);
+}
+.pnr-details .notes-value {
+  font-size: 13px;
+  font-weight: 500;
+}
