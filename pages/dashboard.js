@@ -5,12 +5,16 @@ import { useRouter } from "next/router";
 import TopNav from "../components/TopNav";
 import PNRTable from "../components/PNRTable";
 import PNRDetails from "../components/PNRDetails";
-import ToastStack from "../components/Toasts";
+import ToastViewport from "../components/ToastViewport";
 import Spinner from "../components/Spinner";
 import Chip from "../components/Chip";
+import ReportingDashboard from "../components/ReportingDashboard";
+import ReportsModule from "../components/ReportsModule";
+import AIAgentsDockPortal from "../components/AIAgentsDockPortal";
 
 // Utils
 import { initialPnrs, refreshStatuses } from "../lib/sampleData";
+import { generateReportSampleData } from "../lib/reportSampleData";
 import { requireAuth } from "../lib/auth";
 
 // APIs
@@ -19,7 +23,7 @@ import { requireAuth } from "../lib/auth";
 export default function Dashboard() {
   const router = useRouter();
   // Tabs
-  const TABS = { ALL: "all", MINE: "mine" };
+  const TABS = { ALL: "all", MINE: "mine", REPORTS: "reports" };
   const [activeTab, setActiveTab] = useState(TABS.ALL);
 
   // All Queue
@@ -28,6 +32,10 @@ export default function Dashboard() {
   const [allSelected, setAllSelected] = useState(null);
   const [allRefreshing, setAllRefreshing] = useState(false);
   const [allStatus, setAllStatus] = useState("all"); // 'all'|'processed'|'processing'|'error'|'human'
+
+  const [reportData] = useState(() =>
+    generateReportSampleData({ days: 30, itemsPerDay: 8 }),
+  );
 
   const [myRows, setMyRows] = useState([
     {
@@ -108,6 +116,7 @@ export default function Dashboard() {
     setMyRows((p) => refreshStatuses(p));
     setMyRefreshing(false);
   }
+
   // helper to mark busy/not busy
   function withBusy(setter, pnr, busy) {
     setter((prev) => {
@@ -181,6 +190,7 @@ export default function Dashboard() {
     <div className="min-h-screen">
       <TopNav onLogout={handleLogout} />
 
+      {/* ORIGINAL spacing preserved (no reserved padding for dock) */}
       <main className="mx-auto max-w-6xl p-4">
         {/* Header */}
         <div className="mb-3 flex items-center gap-2 text-sm text-black/70">
@@ -215,6 +225,7 @@ export default function Dashboard() {
               All Queue{" "}
               <span className="ml-1 text-black/50">({allCounts.total})</span>
             </button>
+
             <button
               type="button"
               onClick={() => setActiveTab(TABS.MINE)}
@@ -231,89 +242,119 @@ export default function Dashboard() {
               My Queues{" "}
               <span className="ml-1 text-black/50">({myCounts.total})</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab(TABS.REPORTS)}
+              className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
+                activeTab === TABS.REPORTS
+                  ? "border-brand-red text-brand-red bg-red-50"
+                  : "border-transparent text-black/70 hover:text-black"
+              }`}
+              aria-selected={activeTab === TABS.REPORTS}
+              role="tab"
+              title="Reports"
+            >
+              <i className="fa-solid fa-chart-pie mr-1"></i>
+              Reports
+            </button>
           </div>
         </div>
 
-        {/* Status filter chips for the active tab */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Chip
-            label={`All (${counters.total})`}
-            active={statusFilter === "all"}
-            onClick={() => setStatus("all")}
-          />
-          {activeTab === TABS.ALL ? (
-            <>
-              <Chip
-                label={`Processed (${counters.processed})`}
-                color="green"
-                active={statusFilter === "processed"}
-                onClick={() => setStatus("processed")}
-              />
-              <Chip
-                label={`Processing (${counters.processing})`}
-                color="yellow"
-                active={statusFilter === "processing"}
-                onClick={() => setStatus("processing")}
-              />
-            </>
-          ) : (
-            ""
-          )}
+        {activeTab !== TABS.REPORTS ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Chip
+              label={`All (${counters.total})`}
+              active={statusFilter === "all"}
+              onClick={() => setStatus("all")}
+            />
 
-          <Chip
-            label={`Error (${counters.error})`}
-            color="red"
-            active={statusFilter === "error"}
-            onClick={() => setStatus("error")}
-          />
-          <Chip
-            label={`Human (${counters.human})`}
-            color="gray"
-            active={statusFilter === "human"}
-            onClick={() => setStatus("human")}
-          />
-        </div>
+            {activeTab === TABS.ALL ? (
+              <>
+                <Chip
+                  label={`Processed (${counters.processed})`}
+                  color="green"
+                  active={statusFilter === "processed"}
+                  onClick={() => setStatus("processed")}
+                />
+                <Chip
+                  label={`Processing (${counters.processing})`}
+                  color="yellow"
+                  active={statusFilter === "processing"}
+                  onClick={() => setStatus("processing")}
+                />
+              </>
+            ) : (
+              ""
+            )}
 
-        {/* Table for active tab */}
-        <PNRTable
-          rows={rows}
-          search={search}
-          setSearch={setSearch}
-          onRefresh={onRefresh}
-          onSelect={setSelected}
-          selected={selected}
-          onKill={onKill}
-          statusFilter={statusFilter}
-          killingSet={killing}
-          retryingSet={retrying}
-          assignees={[
-            { id: "t-01", name: "Susan Wan Chen" },
-            { id: "t-02", name: "Boden Woolstencroft" },
-            { id: "t-03", name: "Matt Quinn" },
-          ]}
-          onAssign={({ assignee, items }) => {
-            // items: [{ pnr, originalIndex }, ...]
-            // Do your API call or state update here
-            console.log("Assign to:", assignee, "Items:", items);
-          }}
-        />
+            <Chip
+              label={`Error (${counters.error})`}
+              color="red"
+              active={statusFilter === "error"}
+              onClick={() => setStatus("error")}
+            />
+            <Chip
+              label={`Human (${counters.human})`}
+              color="gray"
+              active={statusFilter === "human"}
+              onClick={() => setStatus("human")}
+            />
+          </div>
+        ) : null}
 
-        {/* Details panel with toast on approve */}
-        <PNRDetails
-          selected={selected}
-          onApprove={({ pnr }) => {
-            setRows((list) =>
-              list.map((r) =>
-                r.pnr === pnr ? { ...r, status: "processed", action: "NA" } : r,
-              ),
-            );
-            pushToast({ type: "success", message: `Approved • ${pnr}` });
-          }}
-        />
+        {activeTab === TABS.REPORTS ? (
+          <ReportsModule
+            onOpenPNR={(pnr) => {
+              setActiveTab(TABS.ALL);
+              const found = allRows.find((r) => r.pnr === pnr);
+              if (found) setAllSelected(found);
+            }}
+          />
+        ) : (
+          <>
+            <PNRTable
+              rows={rows}
+              search={search}
+              setSearch={setSearch}
+              onRefresh={onRefresh}
+              onSelect={setSelected}
+              selected={selected}
+              onKill={onKill}
+              statusFilter={statusFilter}
+              killingSet={killing}
+              retryingSet={retrying}
+              assignees={[
+                { id: "t-01", name: "Susan Wan Chen" },
+                { id: "t-02", name: "Boden Woolstencroft" },
+                { id: "t-03", name: "Matt Quinn" },
+              ]}
+              onAssign={({ assignee, items }) => {
+                console.log("Assign to:", assignee, "Items:", items);
+              }}
+            />
+
+            <PNRDetails
+              selected={selected}
+              onApprove={({ pnr }) => {
+                setRows((list) =>
+                  list.map((r) =>
+                    r.pnr === pnr
+                      ? { ...r, status: "processed", action: "NA" }
+                      : r,
+                  ),
+                );
+                pushToast({ type: "success", message: `Approved • ${pnr}` });
+              }}
+            />
+          </>
+        )}
 
         {/* Toasts */}
-        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
+
+      <AIAgentsDockPortal />
     </div>
   );
 }

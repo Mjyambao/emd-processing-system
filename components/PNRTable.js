@@ -11,21 +11,8 @@ import AssigneeMultiSelectFilter from "./AssigneeMultiSelectFilter";
 import formatDate from "../utils/helper";
 import toYYYYMMDD from "../utils/helper";
 
-/*
- * PNRTable
- * Props:
- *  - rows: array of PNR rows (must include unique `pnr`)
- *  - search, setSearch
- *  - onRefresh (optional)
- *  - onSelect(row), selected
- *  - onKill(originalIndex)            // accepted (not used in row buttons here)
- *  - statusFilter: 'all'|'processed'|'processing'|'error'|'human'
- *  - isRefreshing (optional)
- *  - killingSet, retryingSet          // accepted (not used in row buttons here)
- *  - assignees: Array<{ id: string|number, name: string }>
- *  - onAssign: fn({ assignee: {id,name}, items: Array<{pnr, originalIndex}> })
- *  - onUpdateTTL: async fn({ pnr, originalIndex, ttl }) => Promise<void>   // NEW
- */
+// API
+import { getPnrQueueList } from "../api/pnrApi";
 
 export default function PNRTable({
   rows,
@@ -43,43 +30,97 @@ export default function PNRTable({
   onAssign,
   onUpdateTTL,
 }) {
+  /**
+   * -----------------------------
+   * Helpers
+   * -----------------------------
+   */
+  const includesCI = (value, query) => {
+    const v = String(value ?? "").toLowerCase();
+    const q = String(query ?? "")
+      .trim()
+      .toLowerCase();
+    if (!q) return true;
+    return v.includes(q);
+  };
+
+  const normalizeStatus = (raw) => {
+    const s = String(raw ?? "")
+      .trim()
+      .toLowerCase();
+    if (!s) return "";
+    if (s === "error") return "error";
+    if (s.includes("human")) return "human";
+    if (s.includes("processing")) return "processing";
+    if (s.includes("processed") || s.includes("completed")) return "processed";
+    return s;
+  };
+
+  const uiStatusToApiStatus = (s) => {
+    switch (String(s || "").toLowerCase()) {
+      case "error":
+        return "Error";
+      case "human":
+        return "Human Input Required";
+      case "processing":
+        return "Processing";
+      case "processed":
+        return "Processed";
+      default:
+        // if user selects a raw status value that already matches backend
+        return s || undefined;
+    }
+  };
+
+  const toIsoStartOfDayZ = (yyyyMmDd) => {
+    if (!yyyyMmDd) return undefined;
+    return new Date(`${yyyyMmDd}T00:00:00.000Z`).toISOString();
+  };
+
+  const toIsoEndOfDayZ = (yyyyMmDd) => {
+    if (!yyyyMmDd) return undefined;
+    return new Date(`${yyyyMmDd}T23:59:59.999Z`).toISOString();
+  };
+
+  const mapSortKeyToSwaggerField = (key) => {
+    switch (key) {
+      case "pnr":
+        return "pnr";
+      case "status":
+        return "status";
+      case "lastUpdated":
+        return "lastUpdated";
+      case "queueArrival":
+        return "queueArrival";
+      case "ttl":
+        return "ttl";
+      case "error":
+        return "errorDetails";
+      case "assigned":
+        return "assignedTo";
+      default:
+        return "queueArrival";
+    }
+  };
+
+  const mapApiItemToRow = (item) => ({
+    pnr: item?.pnrId ?? item?.pnr ?? "",
+    status: normalizeStatus(item?.status),
+    stage: item?.stage ?? "",
+    lastUpdated: item?.lastUpdated ?? null,
+    queueArrival: item?.queueArrival ?? null,
+    ttl: item?.ttl ?? null,
+    error: item?.errorDetails ?? "",
+    assigned: item?.assignedTo ?? "",
+    action: item?.actionRequired ?? "",
+  });
+
   const isSelectable = (row) =>
     row.status === "error" || row.status === "human";
 
-  const pnrToOriginalIndex = useMemo(() => {
-    const map = new Map();
-    rows.forEach((r, idx) => map.set(r.pnr, idx));
-    return map;
-  }, [rows]);
-
-  // Fallback assignees
-  const assigneeOptions = assignees.length
-    ? assignees
-    : [
-        { id: "u1", name: "Susan Wan Chen" },
-        { id: "u2", name: "Boden Woolstencroft" },
-        { id: "u3", name: "Matt Quiin" },
-      ];
-
-  // Header filter + Unassigned
-  const FILTER_ASSIGNEES = [
-    "Susan Wan Chen",
-    "Boden Woolstencroft",
-    "Matt Quiin",
-  ];
-
-  const statusOptions = useMemo(() => {
-    const set = new Set(rows.map((r) => r.status).filter(Boolean));
-    const dataOptions = Array.from(set);
-    if (dataOptions.length) return dataOptions;
-    return ["processed", "processing", "error", "human"];
-  }, [rows]);
-
-  const statusRank = { error: 1, human: 2, processing: 3, processed: 4 };
-
-  // Toasts
   const [toasts, setToasts] = useState([]);
   const toastIdRef = useRef(0);
+
   const showToast = (message, { type = "success", duration = 4000 } = {}) => {
     const id = ++toastIdRef.current;
     setToasts((prev) => [...prev, { id, type, message }]);
@@ -90,6 +131,7 @@ export default function PNRTable({
       );
     }
   };
+
   const dismissToast = (id) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
 
@@ -103,14 +145,13 @@ export default function PNRTable({
     ttlFrom: "",
     ttlTo: "",
     error: "",
-    action: "",
     assignedNames: [],
     includeUnassigned: false,
   });
+
   const updateFilter = (key, value) =>
     setColFilters((prev) => ({ ...prev, [key]: value }));
 
-  // Per-column "filter UI open" state (added action)
   const [filterOpen, setFilterOpen] = useState({
     pnr: false,
     status: false,
@@ -119,10 +160,11 @@ export default function PNRTable({
     ttl: false,
     error: false,
     assigned: false,
-    action: false, // NEW
   });
+
   const toggleFilterUI = (key) =>
     setFilterOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+
   const closeAllFilterUI = () =>
     setFilterOpen({
       pnr: false,
@@ -132,10 +174,8 @@ export default function PNRTable({
       ttl: false,
       error: false,
       assigned: false,
-      action: false,
     });
 
-  // Active dot indicator per column (added action)
   const isFilterActive = useMemo(
     () => ({
       pnr: !!colFilters.pnr?.trim(),
@@ -144,7 +184,6 @@ export default function PNRTable({
       queueArrival: !!colFilters.queueFrom || !!colFilters.queueTo,
       ttl: !!colFilters.ttlFrom || !!colFilters.ttlTo,
       error: !!colFilters.error?.trim(),
-      action: !!colFilters.action?.trim(), // NEW
       assigned:
         (Array.isArray(colFilters.assignedNames) &&
           colFilters.assignedNames.length > 0) ||
@@ -153,7 +192,6 @@ export default function PNRTable({
     [colFilters],
   );
 
-  // Close all filter panels with ESC
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "Escape") closeAllFilterUI();
@@ -162,7 +200,13 @@ export default function PNRTable({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /**
+   * -----------------------------
+   * Sorting (server-side)
+   * -----------------------------
+   */
   const [sort, setSort] = useState({ key: null, dir: "asc" });
+
   const toggleSort = (key) => {
     setSort((prev) => {
       if (prev.key !== key) return { key, dir: "asc" };
@@ -171,31 +215,247 @@ export default function PNRTable({
     });
   };
 
+  const [apiRows, setApiRows] = useState([]);
+  const [apiMeta, setApiMeta] = useState({
+    page: 1,
+    pageSize: 10,
+    totalRecords: 0,
+    totalPages: 0,
+  });
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
+
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+
+  const effectiveRows = apiRows;
+
+  const statusOptions = useMemo(() => {
+    const set = new Set(effectiveRows.map((r) => r.status).filter(Boolean));
+    const opts = Array.from(set);
+    return opts.length ? opts : ["processed", "processing", "error", "human"];
+  }, [effectiveRows]);
+
+  const assigneeOptions = assignees.length
+    ? assignees
+    : [
+        { id: "u1", name: "Susan Wan Chen" },
+        { id: "u2", name: "Boden Woolstencroft" },
+        { id: "u3", name: "Matt Quiin" },
+      ];
+
+  const FILTER_ASSIGNEES = [
+    "Susan Wan Chen",
+    "Boden Woolstencroft",
+    "Matt Quiin",
+  ];
+
+  const buildQueryParams = () => {
+    const f = colFilters;
+
+    const chosenStatusUi =
+      f.status || (statusFilter !== "all" ? statusFilter : "");
+    const status = chosenStatusUi
+      ? uiStatusToApiStatus(chosenStatusUi)
+      : undefined;
+
+    let assignedTo;
+
+    if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
+      assignedTo = f.assignedNames[0];
+    } else if (
+      f.includeUnassigned &&
+      (!f.assignedNames || f.assignedNames.length === 0)
+    ) {
+      assignedTo = "Unassigned";
+    } else {
+      assignedTo = undefined;
+    }
+
+    const pnr = f.pnr?.trim()
+      ? f.pnr.trim()
+      : search?.trim()
+        ? search.trim()
+        : undefined;
+
+    const errorDetails = f.error?.trim() ? f.error.trim() : undefined;
+
+    const lastUpdatedFrom = f.lastUpdatedFrom
+      ? toIsoStartOfDayZ(f.lastUpdatedFrom)
+      : undefined;
+    const lastUpdatedTo = f.lastUpdatedTo
+      ? toIsoEndOfDayZ(f.lastUpdatedTo)
+      : undefined;
+
+    const queueArrivalFrom = f.queueFrom
+      ? toIsoStartOfDayZ(f.queueFrom)
+      : undefined;
+    const queueArrivalTo = f.queueTo ? toIsoEndOfDayZ(f.queueTo) : undefined;
+
+    const ttlFrom = f.ttlFrom ? toIsoStartOfDayZ(f.ttlFrom) : undefined;
+    const ttlTo = f.ttlTo ? toIsoEndOfDayZ(f.ttlTo) : undefined;
+
+    // Sort: "field:dir"
+    const sortField = mapSortKeyToSwaggerField(sort.key);
+    const sortDir = sort.key ? sort.dir : "desc";
+    const sortParam = `${sortField}:${sortDir}`;
+
+    return {
+      page: Math.max(1, page), // backend expects 1-based
+      pageSize: Math.min(100, Math.max(1, pageSize)),
+      status,
+      assignedTo,
+      pnr,
+      errorDetails,
+      lastUpdatedFrom,
+      lastUpdatedTo,
+      queueArrivalFrom,
+      queueArrivalTo,
+      ttlFrom,
+      ttlTo,
+      sort: sortParam,
+    };
+  };
+
+  const fetchPnrList = async () => {
+    setApiLoading(true);
+    setApiError("");
+
+    try {
+      const query = buildQueryParams();
+      const res = await getPnrQueueList(query);
+
+      console.log("HELLO");
+      console.log("RES: ", res);
+
+      const data = res?.data ?? res;
+
+      const items = Array.isArray(data?.items) ? data.items : [];
+      let mapped = items.map(mapApiItemToRow);
+
+      if (
+        Array.isArray(colFilters.assignedNames) &&
+        colFilters.assignedNames.length > 1
+      ) {
+        mapped = mapped.filter((r) =>
+          colFilters.assignedNames.some((name) => includesCI(r.assigned, name)),
+        );
+      }
+
+      if (
+        colFilters.includeUnassigned &&
+        Array.isArray(colFilters.assignedNames) &&
+        colFilters.assignedNames.length > 0
+      ) {
+        mapped = mapped.filter((r) => {
+          const assignedStr = String(r.assigned ?? "").trim();
+          const normalized = assignedStr.toLowerCase();
+          const isUnassigned =
+            assignedStr.length === 0 ||
+            normalized === "unassigned" ||
+            assignedStr === "-";
+
+          if (isUnassigned) return true;
+          return colFilters.assignedNames.some((name) =>
+            includesCI(assignedStr, name),
+          );
+        });
+      }
+
+      setApiRows(mapped);
+
+      setApiMeta({
+        page: typeof data?.page === "number" ? data.page : query.page,
+        pageSize:
+          typeof data?.pageSize === "number" ? data.pageSize : query.pageSize,
+        totalRecords:
+          typeof data?.totalRecords === "number" ? data.totalRecords : 0,
+        totalPages: typeof data?.totalPages === "number" ? data.totalPages : 0,
+      });
+
+      if (typeof data?.pageSize === "number" && data.pageSize !== pageSize) {
+        setPageSize(data.pageSize);
+      }
+      if (typeof data?.page === "number" && data.page !== page) {
+        setPage(data.page);
+      }
+    } catch (e) {
+      console.error("Fetch PNR list failed:", e);
+      setApiError(e?.message || "Failed to load PNR list.");
+      setApiRows([]);
+      setApiMeta((m) => ({ ...m, totalRecords: 0, totalPages: 0 }));
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  // Reset to page 1 when filters/sort/search/pageSize change
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, colFilters, sort, pageSize]);
+
+  // Debounced fetch on relevant changes
+  useEffect(() => {
+    const t = setTimeout(() => {
+      fetchPnrList();
+    }, 250);
+
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, sort, statusFilter, search, colFilters]);
+
+  const totalRecords = apiMeta.totalRecords;
+  const totalPages = Math.max(1, apiMeta.totalPages || 1);
+  const clampedPage = Math.min(page, totalPages);
+
+  const pageRows = effectiveRows;
+
+  const from = totalRecords === 0 ? 0 : (clampedPage - 1) * pageSize + 1;
+  const to =
+    totalRecords === 0 ? 0 : Math.min(totalRecords, from + pageRows.length - 1);
+
+  const pageNumbers = useMemo(() => {
+    const maxButtons = 5;
+    let startPage = Math.max(1, clampedPage - Math.floor(maxButtons / 2));
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+    startPage = Math.max(1, endPage - maxButtons + 1);
+    return Array.from(
+      { length: endPage - startPage + 1 },
+      (_, i) => startPage + i,
+    );
+  }, [clampedPage, totalPages]);
+
+  const pnrToOriginalIndex = useMemo(() => {
+    const map = new Map();
+    const offset = (clampedPage - 1) * pageSize;
+    pageRows.forEach((r, idx) => map.set(r.pnr, offset + idx));
+    return map;
+  }, [pageRows, clampedPage, pageSize]);
+
   const [ttlLocalMap, setTtlLocalMap] = useState(() => new Map());
-  // Clean-up any PNRs that no longer exist
+
   useEffect(() => {
     setTtlLocalMap((prev) => {
       const next = new Map();
-      const has = new Set(rows.map((r) => r.pnr));
+      const has = new Set(pageRows.map((r) => r.pnr));
       for (const [pnr, val] of prev) {
         if (has.has(pnr)) next.set(pnr, val);
       }
       return next;
     });
-  }, [rows]);
+  }, [pageRows]);
 
   const getTTLForRow = (row) => {
     const local = ttlLocalMap.get(row.pnr);
-    if (local) return local; // YYYY-MM-DD (from modal)
+    if (local) return local;
     return row.ttl ?? null;
   };
 
-  // TTL Modal state
   const [ttlModal, setTtlModal] = useState({
     open: false,
     pnr: null,
     originalIndex: null,
-    dateStr: "", // YYYY-MM-DD
+    dateStr: "",
     saving: false,
   });
 
@@ -215,276 +475,19 @@ export default function PNRTable({
   const closeTTLModal = () =>
     setTtlModal((m) => ({ ...m, open: false, saving: false }));
 
-  // Filtering & sorting
-  const filteredIndices = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const f = colFilters;
-
-    const hasDate = (v) => v && !Number.isNaN(new Date(v).getTime());
-
-    const fromLU = hasDate(f.lastUpdatedFrom)
-      ? new Date(f.lastUpdatedFrom).getTime()
-      : null;
-    const toLU = hasDate(f.lastUpdatedTo)
-      ? new Date(f.lastUpdatedTo).getTime() + 24 * 3600 * 1000 - 1
-      : null;
-
-    const fromQA = hasDate(f.queueFrom)
-      ? new Date(f.queueFrom).getTime()
-      : null;
-    const toQA = hasDate(f.queueTo)
-      ? new Date(f.queueTo).getTime() + 24 * 3600 * 1000 - 1
-      : null;
-
-    const fromTTL = hasDate(f.ttlFrom) ? new Date(f.ttlFrom).getTime() : null;
-    const toTTL = hasDate(f.ttlTo)
-      ? new Date(f.ttlTo).getTime() + 24 * 3600 * 1000 - 1
-      : null;
-
-    const matchStatusGlobal = (row) =>
-      statusFilter === "all" || row.status === statusFilter;
-
-    const matchColFilters = (row) => {
-      // PNR text
-      if (
-        f.pnr &&
-        !String(row.pnr || "")
-          .toLowerCase()
-          .includes(f.pnr.toLowerCase())
-      )
-        return false;
-
-      // Status
-      if (f.status && row.status !== f.status) return false;
-
-      // Last Updated range
-      if (fromLU != null || toLU != null) {
-        const t =
-          row.lastUpdated != null ? new Date(row.lastUpdated).getTime() : null;
-        if (t == null) return false;
-        if (fromLU != null && t < fromLU) return false;
-        if (toLU != null && t > toLU) return false;
-      }
-
-      // Queue Arrival range
-      if (fromQA != null || toQA != null) {
-        const t =
-          row.queueArrival != null
-            ? new Date(row.queueArrival).getTime()
-            : null;
-        if (t == null) return false;
-        if (fromQA != null && t < fromQA) return false;
-        if (toQA != null && t > toQA) return false;
-      }
-
-      // TTL range (uses local override if present)
-      if (fromTTL != null || toTTL != null) {
-        const ttl = getTTLForRow(row);
-        if (!ttl) return false;
-        const t = new Date(ttl).getTime();
-        if (Number.isNaN(t)) return false;
-        if (fromTTL != null && t < fromTTL) return false;
-        if (toTTL != null && t > toTTL) return false;
-      }
-
-      // Error text
-      if (
-        f.error &&
-        !String(row.error || "")
-          .toLowerCase()
-          .includes(f.error.toLowerCase())
-      )
-        return false;
-
-      if (
-        f.action &&
-        !String(row.action || "")
-          .toLowerCase()
-          .includes(f.action.toLowerCase())
-      )
-        return false;
-
-      // Assigned filter (committed only on Done)
-      const assignedFilterActive =
-        (Array.isArray(f.assignedNames) && f.assignedNames.length > 0) ||
-        f.includeUnassigned;
-
-      if (assignedFilterActive) {
-        const assignedRaw = row.assigned;
-        const assignedStr = String(assignedRaw ?? "").trim();
-
-        // Treat "", "Unassigned", "-" as unassigned
-        const normalized = assignedStr.toLowerCase();
-        const isUnassigned =
-          assignedStr.length === 0 ||
-          normalized === "unassigned" ||
-          assignedStr === "-";
-
-        if (isUnassigned) {
-          // Include if 'Unassigned' checkbox selected
-          return !!f.includeUnassigned;
-        }
-
-        // Row has assignees
-        const assignedList = assignedStr
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-
-        if (f.assignedNames.length > 0) {
-          const hit = f.assignedNames.some((name) =>
-            assignedList.includes(name),
-          );
-          if (!hit) return false;
-        } else {
-          if (f.includeUnassigned) return false;
-        }
-      }
-
-      return true;
-    };
-
-    const indices = rows.reduce((acc, row, idx) => {
-      const matchSearch =
-        !q ||
-        String(row.pnr || "")
-          .toLowerCase()
-          .includes(q) ||
-        (row.stage && String(row.stage).toLowerCase().includes(q));
-
-      if (matchSearch && matchStatusGlobal(row) && matchColFilters(row))
-        acc.push(idx);
-      return acc;
-    }, []);
-
-    // Sorting
-    if (!sort.key) {
-      const priority = { error: 1, human: 2, processing: 3, processed: 4 };
-      const getTime = (v) => {
-        if (v == null) return -Infinity;
-        const t = new Date(v).getTime();
-        return Number.isNaN(t) ? -Infinity : t;
-      };
-
-      indices.sort((a, b) => {
-        const ra = priority[rows[a].status] ?? Number.MAX_SAFE_INTEGER;
-        const rb = priority[rows[b].status] ?? Number.MAX_SAFE_INTEGER;
-        if (ra !== rb) return ra - rb;
-
-        const ta = getTime(rows[a].queueArrival);
-        const tb = getTime(rows[b].queueArrival);
-        if (ta !== tb) return tb - ta; // newest first
-
-        // stable by original index
-        return a - b;
-      });
-
-      return indices;
-    }
-
-    const getVal = (row, key) => {
-      switch (key) {
-        case "pnr":
-          return String(row.pnr || "").toLowerCase();
-        case "status":
-          return statusRank[row.status] ?? Number.MAX_SAFE_INTEGER;
-        case "lastUpdated": {
-          const t =
-            row.lastUpdated != null
-              ? new Date(row.lastUpdated).getTime()
-              : -Infinity;
-          return Number.isNaN(t) ? -Infinity : t;
-        }
-        case "queueArrival": {
-          const t =
-            row.queueArrival != null
-              ? new Date(row.queueArrival).getTime()
-              : -Infinity;
-          return Number.isNaN(t) ? -Infinity : t;
-        }
-        case "ttl": {
-          const ttl = getTTLForRow(row);
-          if (!ttl) return -Infinity;
-          const t = new Date(ttl).getTime();
-          return Number.isNaN(t) ? -Infinity : t;
-        }
-        case "error":
-          return String(row.error || "").toLowerCase();
-        case "assigned":
-          return String(row.assigned || "").toLowerCase();
-        case "action":
-          return String(row.action || "").toLowerCase();
-        default:
-          return "";
-      }
-    };
-
-    const dir = sort.dir === "asc" ? 1 : -1;
-    indices.sort((a, b) => {
-      const va = getVal(rows[a], sort.key);
-      const vb = getVal(rows[b], sort.key);
-      if (va < vb) return -1 * dir;
-      if (va > vb) return 1 * dir;
-      return a - b;
-    });
-
-    return indices;
-  }, [rows, search, statusFilter, colFilters, sort, ttlLocalMap]);
-
-  const filtered = useMemo(
-    () => filteredIndices.map((i) => rows[i]),
-    [rows, filteredIndices],
-  );
-
-  const filteredSelectableCount = useMemo(
-    () => filtered.filter(isSelectable).length,
-    [filtered],
-  );
-
-  // Pagination
-  const [pageSize, setPageSize] = useState(10);
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter, rows, pageSize, colFilters, sort]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const clampedPage = Math.min(page, pageCount);
-
-  const start = (clampedPage - 1) * pageSize;
-  const end = start + pageSize;
-  const pageRows = filtered.slice(start, end);
-
-  const total = filtered.length;
-  const from = total === 0 ? 0 : start + 1;
-  const to = Math.min(total, end);
-
-  const pageNumbers = useMemo(() => {
-    const maxButtons = 5;
-    let startPage = Math.max(1, clampedPage - Math.floor(maxButtons / 2));
-    let endPage = Math.min(pageCount, startPage + maxButtons - 1);
-    startPage = Math.max(1, endPage - maxButtons + 1);
-    return Array.from(
-      { length: endPage - startPage + 1 },
-      (_, i) => startPage + i,
-    );
-  }, [clampedPage, pageCount]);
-
-  // Selection (only for selectable rows)
   const [selectedPNRs, setSelectedPNRs] = useState(() => new Set());
 
   useEffect(() => {
     setSelectedPNRs((prev) => {
       const next = new Set();
+      const rowByPnr = new Map(pageRows.map((r) => [r.pnr, r]));
       for (const pnr of prev) {
-        const idx = pnrToOriginalIndex.get(pnr);
-        const row = idx != null ? rows[idx] : null;
+        const row = rowByPnr.get(pnr);
         if (row && isSelectable(row)) next.add(pnr);
       }
       return next;
     });
-  }, [rows, pnrToOriginalIndex]);
+  }, [pageRows]);
 
   const selectedCount = selectedPNRs.size;
 
@@ -531,7 +534,6 @@ export default function PNRTable({
 
   const clearSelection = () => setSelectedPNRs(new Set());
 
-  // Assignment modal + loading state
   const [assignOpen, setAssignOpen] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
@@ -540,7 +542,11 @@ export default function PNRTable({
     if (!assigning) setAssignOpen(false);
   };
 
-  // Filter icon helper (inline next to header text)
+  const pageSelectableEligibleCount = useMemo(
+    () => pageRows.filter(isSelectable).length,
+    [pageRows],
+  );
+
   const FilterToggleButton = ({ open, active, onClick, label }) => (
     <button
       type="button"
@@ -588,15 +594,27 @@ export default function PNRTable({
               {assigning ? "Assigning..." : "Assign PNR"}
             </span>
           </button>
+
           <div className="text-sm text-black/70">{selectedCount} selected</div>
+
+          <div className="ml-2 text-xs text-black/50">
+            {apiLoading ? "Loading..." : apiError ? "Failed to load" : ""}
+          </div>
         </div>
       </div>
 
       {/* Helper banner */}
-      {total > 0 && filteredSelectableCount === 0 && (
+      {totalRecords > 0 && pageSelectableEligibleCount === 0 && (
         <div className="mx-3 my-2 px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded">
           No selectable rows in current results. Only <b>Error</b> or{" "}
           <b>Human</b> statuses are eligible for assignment.
+        </div>
+      )}
+
+      {/* API Error banner */}
+      {apiError && (
+        <div className="mx-3 my-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded">
+          {apiError}
         </div>
       )}
 
@@ -607,7 +625,6 @@ export default function PNRTable({
         aria-label="PNR results table"
       >
         <table className="table min-w-[1500px] bg-white">
-          {/* Raise header above tooltips so filter icons remain clickable */}
           <thead className="relative z-[60]">
             <tr>
               <ThCheckboxHeader
@@ -869,34 +886,12 @@ export default function PNRTable({
                 )}
               </ThWithFilter>
 
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Action Required
-                    <FilterToggleButton
-                      open={filterOpen.action}
-                      active={isFilterActive.action}
-                      onClick={() => toggleFilterUI("action")}
-                      label="Action Required"
-                    />
-                  </span>
-                }
-                widthClass="w-[220px]"
-                sortKey="action"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.action && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-8 text-xs w-full"
-                      placeholder="Filter action…"
-                      value={colFilters.action}
-                      onChange={(e) => updateFilter("action", e.target.value)}
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {/* Action Required (filter removed) */}
+              <th className="w-[220px] whitespace-nowrap">
+                <div className="px-3 py-2 font-semibold text-xs text-black/70">
+                  Action Required
+                </div>
+              </th>
             </tr>
           </thead>
 
@@ -904,7 +899,7 @@ export default function PNRTable({
             {pageRows.map((row) => {
               const selectable = isSelectable(row);
               const isChecked = selectable && selectedPNRs.has(row.pnr);
-              const ttlForRow = getTTLForRow(row); // could be null or 'YYYY-MM-DD'
+              const ttlForRow = getTTLForRow(row);
 
               return (
                 <tr
@@ -1018,10 +1013,10 @@ export default function PNRTable({
               );
             })}
 
-            {filtered.length === 0 && (
+            {pageRows.length === 0 && (
               <tr>
                 <td colSpan={9} className="text-center py-6 text-black/60">
-                  No matches
+                  {apiLoading ? "Loading..." : "No matches"}
                 </td>
               </tr>
             )}
@@ -1041,25 +1036,29 @@ export default function PNRTable({
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
             aria-label="Rows per page"
+            disabled={apiLoading}
           >
             <option value={10}>10</option>
             <option value={20}>20</option>
             <option value={50}>50</option>
+            <option value={100}>100</option>
           </select>
           <span className="text-sm text-black/70">entries</span>
         </div>
 
         <div className="text-sm text-black/70">
-          Showing <span className="font-medium">{from}</span>–
+          Showing <span className="font-medium">{from}</span>–{" "}
           <span className="font-medium">{to}</span> of{" "}
-          <span className="font-medium">{total}</span> entries
+          <span className="font-medium">{totalRecords}</span> entries • Page{" "}
+          <span className="font-medium">{clampedPage}</span> of{" "}
+          <span className="font-medium">{totalPages}</span>
         </div>
 
         <div className="flex items-center gap-1">
           <button
             className="btn h-9 px-3 text-xs"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={clampedPage <= 1 || total === 0}
+            disabled={clampedPage <= 1 || totalRecords === 0 || apiLoading}
             aria-label="Previous page"
           >
             Prev
@@ -1071,7 +1070,7 @@ export default function PNRTable({
               className={`btn h-9 px-3 ${p === clampedPage ? "btn-secondary" : ""}`}
               aria-current={p === clampedPage ? "page" : undefined}
               onClick={() => setPage(p)}
-              disabled={total === 0}
+              disabled={totalRecords === 0 || apiLoading}
             >
               {p}
             </button>
@@ -1079,8 +1078,10 @@ export default function PNRTable({
 
           <button
             className="btn h-9 px-3 text-xs"
-            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-            disabled={clampedPage >= pageCount || total === 0}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={
+              clampedPage >= totalPages || totalRecords === 0 || apiLoading
+            }
             aria-label="Next page"
           >
             Next
@@ -1181,13 +1182,11 @@ export default function PNRTable({
             const payload = {
               pnr: ttlModal.pnr,
               originalIndex: ttlModal.originalIndex,
-              ttl: ttlModal.dateStr, // YYYY-MM-DD
+              ttl: ttlModal.dateStr,
             };
 
-            // Persist to parent/backend
             await Promise.resolve(onUpdateTTL?.(payload));
 
-            // Reflect immediately in UI
             setTtlLocalMap((prev) => {
               const next = new Map(prev);
               next.set(ttlModal.pnr, ttlModal.dateStr);

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import StatusBadge from "./StatusBadge";
 import Field from "./Field";
 import Spinner from "./Spinner";
-import Toasts from "./Toasts";
+import ToastViewport from "./ToastViewport";
 import Collapse from "./Collapse";
 import FadeIn from "./FadeIn";
 import PNRDetailsActionBar from "./PNRDetailsActionBar";
@@ -68,6 +68,17 @@ function extractOtherInfoSabre(data) {
     return val || "—";
   } catch {
     return "—";
+  }
+}
+
+function stopIfInteractive(e) {
+  const el = e.target;
+  if (
+    el.closest(
+      'input, select, textarea, a, [role="button"], [data-stop-collapse]',
+    )
+  ) {
+    e.stopPropagation();
   }
 }
 
@@ -195,37 +206,63 @@ export default function PNRDetails({
   // Accordion open passenger index
   const [openPassengerIndex, setOpenPassengerIndex] = useState(-1);
 
+  // -------------------------
+  // Toasts (ToastViewport)
+  // -------------------------
   const [toasts, setToasts] = useState([]);
-  const toastIdRef = useRef(1);
+  const toastTimersRef = useRef({});
 
+  const dismissToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+
+    if (toastTimersRef.current[id]) {
+      clearTimeout(toastTimersRef.current[id]);
+      delete toastTimersRef.current[id];
+    }
+  };
+
+  const pushToast = ({ type = "info", message = "", ttl = 3000 }) => {
+    const id =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    setToasts((prev) => [...prev, { id, type, message }]);
+
+    if (ttl > 0) {
+      toastTimersRef.current[id] = setTimeout(() => {
+        dismissToast(id);
+      }, ttl);
+    }
+
+    return id;
+  };
+
+  // Backward-compatible wrapper so you don't need to update all call sites
   const showToast = ({
     variant = "info",
     ariaLabel = "",
     title = "",
     ttl = 3000,
   }) => {
-    const id = toastIdRef.current++;
-    const toast = { id, variant, ariaLabel, title };
-    let timer = null;
+    const type =
+      variant === "error"
+        ? "error"
+        : variant === "success"
+          ? "success"
+          : "info";
 
-    const startTimer = () => {
-      clearTimeout(timer);
-      if (ttl > 0) {
-        timer = setTimeout(() => {
-          setToasts((prev) => prev.filter((x) => x.id !== id));
-        }, ttl);
-      }
-    };
-    const stopTimer = () => clearTimeout(timer);
-
-    toast.startTimer = startTimer;
-    toast.stopTimer = stopTimer;
-
-    setToasts((prev) => [...prev, toast]);
-    startTimer();
+    const message = title || ariaLabel || "";
+    return pushToast({ type, message, ttl });
   };
-  const closeToast = (id) =>
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  useEffect(() => {
+    return () => {
+      Object.values(toastTimersRef.current).forEach((t) => clearTimeout(t));
+      toastTimersRef.current = {};
+    };
+  }, []);
+  // -------------------------
 
   // Safe handler fallbacks
   const callbacks = {
@@ -677,7 +714,8 @@ export default function PNRDetails({
 
   return (
     <div className="pnr-details compact card mt-3 p-3 mb-6">
-      <Toasts items={toasts} onClose={closeToast} position="bottom-right" />
+      {/* ToastViewport (replaces Toasts) */}
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
 
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -891,6 +929,9 @@ export default function PNRDetails({
                         className={`p-2 ${
                           needsAttention ? "pulse-focus-once" : ""
                         }`}
+                        onPointerDownCapture={stopIfInteractive}
+                        onMouseDownCapture={stopIfInteractive}
+                        onClickCapture={stopIfInteractive}
                       >
                         {/* Traveler & Flight */}
                         <FadeIn className="mb-2">
@@ -1241,11 +1282,25 @@ export default function PNRDetails({
                                       <FadeIn delay={80}>
                                         <div className="mt-2 border border-black/10 rounded p-2 bg-black/[0.03]">
                                           <div className="flex flex-col gap-2">
-                                            <div className="flex items-center gap-4">
+                                            <div
+                                              data-stop-collapse
+                                              className="flex items-center gap-4"
+                                            >
                                               <div className="text-[13px] font-medium">
                                                 Is this an ADM?
                                               </div>
-                                              <label className="inline-flex items-center gap-1 text-[13px]">
+                                              <label
+                                                className="inline-flex items-center gap-1 text-[13px]"
+                                                onPointerDown={(e) =>
+                                                  e.stopPropagation()
+                                                }
+                                                onMouseDown={(e) =>
+                                                  e.stopPropagation()
+                                                }
+                                                onClick={(e) =>
+                                                  e.stopPropagation()
+                                                }
+                                              >
                                                 <input
                                                   type="radio"
                                                   name={`adm-${passengerIndex}-${emdIndex}`}
@@ -1253,7 +1308,10 @@ export default function PNRDetails({
                                                   checked={
                                                     emd.adm.isAdm === false
                                                   }
-                                                  onChange={() =>
+                                                  onClick={(e) =>
+                                                    e.stopPropagation()
+                                                  }
+                                                  onChange={(e) => {
                                                     setPnrDetails((prev) => {
                                                       const next =
                                                         deepClone(prev);
@@ -1263,8 +1321,9 @@ export default function PNRDetails({
                                                         emdIndex
                                                       ].adm.isAdm = false;
                                                       return next;
-                                                    })
-                                                  }
+                                                    });
+                                                    e.stopPropagation();
+                                                  }}
                                                 />
                                                 <span>No</span>
                                               </label>

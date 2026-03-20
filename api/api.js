@@ -1,7 +1,10 @@
 let authToken = null;
 
 // Read base URL from env and remove trailing slashes
-const BASE_URL = (process.env.NEXT_API_BASE_URL || "").replace(/\/+$/, "");
+const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(
+  /\/+$/,
+  "",
+);
 
 // Default timeout (ms) for API requests. (20 secs)
 const DEFAULT_TIMEOUT = 20000;

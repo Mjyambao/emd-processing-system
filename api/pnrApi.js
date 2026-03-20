@@ -5,8 +5,43 @@ import { api } from "./api";
  *
  * @param {Object} params
  */
-export function getPnrQueueList(params = {}) {
-  return api.get("/api/v1/pnrs", params);
+export async function getPnrQueueList(params = {}) {
+  const {
+    page = 1,
+    pageSize = 10,
+    status,
+    assignedTo,
+    pnr,
+    errorDetails,
+    lastUpdatedFrom,
+    lastUpdatedTo,
+    queueArrivalFrom,
+    queueArrivalTo,
+    ttlFrom,
+    ttlTo,
+    sort,
+  } = params;
+
+  const qs = new URLSearchParams();
+
+  qs.set("page", String(page));
+  qs.set("pageSize", String(pageSize));
+
+  if (status) qs.set("status", String(status));
+  if (assignedTo) qs.set("assignedTo", String(assignedTo));
+  if (pnr) qs.set("pnr", String(pnr));
+  if (errorDetails) qs.set("errorDetails", String(errorDetails));
+
+  if (lastUpdatedFrom) qs.set("lastUpdatedFrom", String(lastUpdatedFrom));
+  if (lastUpdatedTo) qs.set("lastUpdatedTo", String(lastUpdatedTo));
+  if (queueArrivalFrom) qs.set("queueArrivalFrom", String(queueArrivalFrom));
+  if (queueArrivalTo) qs.set("queueArrivalTo", String(queueArrivalTo));
+  if (ttlFrom) qs.set("ttlFrom", String(ttlFrom));
+  if (ttlTo) qs.set("ttlTo", String(ttlTo));
+
+  if (sort) qs.set("sort", String(sort));
+
+  return api.get(`/api/v1/pnrs?${qs.toString()}`);
 }
 
 /*
