@@ -36,6 +36,377 @@ const COLORS = {
   orange: "#f97316",
 };
 
+// --------------------------------------------------
+// Drill‑down modal configuration
+// --------------------------------------------------
+const MODAL_CONFIG = {
+  Throughput: {
+    columns: ["pnr", "status", "assigned", "stage", "createdAt", "errorClass"],
+  },
+  "Avg Completion Time": {
+    statuses: ["processed"],
+    columns: [
+      "pnr",
+      "status",
+      "assigned",
+      "stage",
+      "createdAt",
+      "completionMinutes",
+      "slaMinutes",
+    ],
+  },
+  "Error Rate": {
+    statuses: ["error", "human"],
+    columns: ["pnr", "status", "assigned", "stage", "createdAt", "errorClass"],
+  },
+  Exceptions: {
+    statuses: ["error", "human"],
+    columns: [
+      "pnr",
+      "status",
+      "assigned",
+      "stage",
+      "createdAt",
+      "adm",
+      "feedback",
+      "errorClass",
+    ],
+  },
+  "Throughput over time": {
+    columns: ["pnr", "status", "assigned", "stage", "createdAt", "errorClass"],
+  },
+  "AI vs Human corrections": {
+    statuses: ["processed"],
+    columns: [
+      "pnr",
+      "status",
+      "isHumanCorrected",
+      "assigned",
+      "createdAt",
+      "completionMinutes",
+    ],
+  },
+  "End-to-end completion time": {
+    statuses: ["processed"],
+    columns: [
+      "pnr",
+      "status",
+      "assigned",
+      "stage",
+      "createdAt",
+      "completionMinutes",
+      "slaMinutes",
+    ],
+  },
+  "Assignments to ticketers": {
+    statuses: ["error", "human"],
+    columns: ["pnr", "status", "assigned", "stage", "createdAt", "errorClass"],
+  },
+  "Error visibility & classification": {
+    statuses: ["error"],
+    columns: ["pnr", "status", "assigned", "stage", "createdAt", "errorClass"],
+  },
+  "LLM metrics (avg in range)": {
+    statuses: ["processed"],
+    columns: [
+      "pnr",
+      "status",
+      "stage",
+      "createdAt",
+      "completionMinutes",
+      "slaMinutes",
+    ],
+  },
+  "LLM metrics trend over time": {
+    statuses: ["processed"],
+    columns: [
+      "pnr",
+      "status",
+      "stage",
+      "createdAt",
+      "llm.accuracy",
+      "llm.coherence",
+      "llm.consistency",
+      "llm.groundedness",
+    ],
+  },
+};
+
+// --------------------------------------------------
+// Column definitions per modal
+// --------------------------------------------------
+const TICKETER_NAMES = [
+  "Alice Reyes",
+  "Ben Santos",
+  "Clara Mendez",
+  "David Cruz",
+  "Elena Ramos",
+  "Felix Torres",
+  "Grace Lim",
+  "Henry Uy",
+];
+
+function getTicketerName(seed) {
+  return TICKETER_NAMES[seed % TICKETER_NAMES.length];
+}
+
+function getModalColumnDefs(modalTitle, onOpenPNR) {
+  const pnrCol = {
+    key: "pnr",
+    header: "PNR",
+    render: (r) => (
+      <button
+        type="button"
+        className="text-brand-red hover:underline font-medium"
+        onClick={() => onOpenPNR?.(r.pnr)}
+        title="Open in Dashboard"
+      >
+        {r.pnr}
+      </button>
+    ),
+  };
+
+  const statusCol = {
+    key: "status",
+    header: "Status",
+    render: (r) => <StatusBadge status={r.status} />,
+  };
+  const assignedCol = {
+    key: "assigned",
+    header: "Assigned To",
+    render: (r) => r.assigned || "—",
+  };
+  const stageCol = {
+    key: "stage",
+    header: "Stage",
+    render: (r) => r.stage || "—",
+  };
+  const createdAtCol = {
+    key: "createdAt",
+    header: "Date Created",
+    render: (r) =>
+      r.createdAt && r.createdAt !== "—"
+        ? new Date(r.createdAt).toLocaleString()
+        : "—",
+  };
+  const errorClassCol = {
+    key: "errorClass",
+    header: "Error Details",
+    render: (r) => r.errorClass || "—",
+  };
+  const completionCol = {
+    key: "completionMinutes",
+    header: "Completion Time",
+    render: (r) => minutesToHrs(r.completionMinutes),
+  };
+  const slaCol = {
+    key: "slaMinutes",
+    header: "SLA",
+    render: (r) => minutesToHrs(r.slaMinutes),
+  };
+  const admCol = {
+    key: "adm",
+    header: "Is ADM?",
+    render: (r) => (
+      <span className={r.adm ? "text-red-600 font-medium" : "text-black/50"}>
+        {r.adm ? "Yes" : "No"}
+      </span>
+    ),
+  };
+  const feedbackCol = {
+    key: "feedback",
+    header: "Feedback",
+    render: (r) => (
+      <span
+        className={r.feedback ? "text-yellow-600 font-medium" : "text-black/50"}
+      >
+        {r.feedback ? "Yes" : "No"}
+      </span>
+    ),
+  };
+  const isHumanCorrectedCol = {
+    key: "isHumanCorrected",
+    header: "Is Human Corrected?",
+    render: (r) => (
+      <span
+        className={
+          r.isHumanCorrected
+            ? "text-orange-600 font-medium"
+            : "text-green-600 font-medium"
+        }
+      >
+        {r.isHumanCorrected ? "Yes" : "No"}
+      </span>
+    ),
+  };
+  const assignedHumanCorrectedCol = {
+    key: "assigned",
+    header: "Assigned To",
+    render: (r) => (r.isHumanCorrected ? r.assigned || "—" : "-"),
+  };
+  const accuracyCol = {
+    key: "llmAccuracy",
+    header: "Accuracy",
+    render: (r) =>
+      r.llmAccuracy != null ? `${Math.round(r.llmAccuracy * 100)}%` : "—",
+  };
+  const coherenceCol = {
+    key: "llmCoherence",
+    header: "Coherence",
+    render: (r) =>
+      r.llmCoherence != null ? `${Math.round(r.llmCoherence * 100)}%` : "—",
+  };
+  const consistencyCol = {
+    key: "llmConsistency",
+    header: "Consistency",
+    render: (r) =>
+      r.llmConsistency != null ? `${Math.round(r.llmConsistency * 100)}%` : "—",
+  };
+  const groundednessCol = {
+    key: "llmGroundedness",
+    header: "Groundedness",
+    render: (r) =>
+      r.llmGroundedness != null
+        ? `${Math.round(r.llmGroundedness * 100)}%`
+        : "—",
+  };
+
+  const configs = {
+    Throughput: [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      errorClassCol,
+    ],
+    "Avg Completion Time": [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      completionCol,
+      slaCol,
+    ],
+    "Error Rate": [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      errorClassCol,
+    ],
+    Exceptions: [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      admCol,
+      feedbackCol,
+      errorClassCol,
+    ],
+    "Throughput over time": [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      errorClassCol,
+    ],
+    "AI vs Human corrections": [
+      pnrCol,
+      statusCol,
+      isHumanCorrectedCol,
+      assignedHumanCorrectedCol,
+      createdAtCol,
+      completionCol,
+    ],
+    "AI RFIC/RFISC vs Human corrections": [
+      pnrCol,
+      statusCol,
+      isHumanCorrectedCol,
+      assignedHumanCorrectedCol,
+      createdAtCol,
+      completionCol,
+    ],
+    "End-to-end completion time": [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      completionCol,
+      slaCol,
+    ],
+    "Assignments to ticketers": [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      errorClassCol,
+    ],
+    "Error visibility & classification": [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      errorClassCol,
+    ],
+    "LLM metrics (avg in range)": [
+      pnrCol,
+      statusCol,
+      stageCol,
+      createdAtCol,
+      completionCol,
+      slaCol,
+    ],
+    "LLM metrics trend over time": [
+      pnrCol,
+      statusCol,
+      stageCol,
+      createdAtCol,
+      accuracyCol,
+      coherenceCol,
+      consistencyCol,
+      groundednessCol,
+    ],
+  };
+
+  // Normalize title for drill-down titles that include "— Label" suffix
+  const baseTitle = Object.keys(configs).find((k) => modalTitle.startsWith(k));
+  return (
+    configs[baseTitle] || [
+      pnrCol,
+      statusCol,
+      assignedCol,
+      stageCol,
+      createdAtCol,
+      errorClassCol,
+    ]
+  );
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    processed: "bg-green-100 text-green-700",
+    processing: "bg-blue-100 text-blue-700",
+    human: "bg-yellow-100 text-yellow-700",
+    error: "bg-red-100 text-red-700",
+  };
+  const cls = map[status] || "bg-gray-100 text-gray-700";
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
+    >
+      {status || "—"}
+    </span>
+  );
+}
+
 function toDateKey(iso) {
   const d = new Date(iso);
   const yyyy = d.getFullYear();
@@ -74,7 +445,239 @@ function minutesToHrs(min) {
   return `${h}h ${m}m`;
 }
 
-function Card({ title, value, sub, icon, tone = "default" }) {
+// ------------------------------
+// Click-to-drilldown Modal + Table helpers
+// ------------------------------
+function safeStr(v) {
+  if (v === null || v === undefined) return "";
+  return String(v);
+}
+
+function uniq(arr) {
+  return Array.from(new Set(arr));
+}
+
+function buildSampleDetails({ title = "Detail", label = "", value = 0 } = {}) {
+  const base = `${title}|${label}|${value}`;
+  const seed = base.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const stages = ["Queue", "Extract", "Match", "Validate", "Post", "Complete"];
+  const owners = [
+    "Alice Reyes",
+    "Ben Santos",
+    "Clara Mendez",
+    "David Cruz",
+    "Elena Ramos",
+    "Felix Torres",
+    "Grace Lim",
+    "Henry Uy",
+  ];
+  const errorClasses = [
+    "Pricing",
+    "Fare",
+    "Ticket",
+    "Tax",
+    "Segment",
+    "Unknown",
+  ];
+  const llmMetricSets = [
+    { accuracy: 0.91, coherence: 0.87, consistency: 0.93, groundedness: 0.89 },
+    { accuracy: 0.78, coherence: 0.82, consistency: 0.8, groundedness: 0.75 },
+    { accuracy: 0.95, coherence: 0.9, consistency: 0.88, groundedness: 0.92 },
+    { accuracy: 0.7, coherence: 0.74, consistency: 0.72, groundedness: 0.68 },
+    { accuracy: 0.85, coherence: 0.83, consistency: 0.86, groundedness: 0.84 },
+  ];
+
+  // Determine which statuses to use based on modal title
+  let allowedStatuses;
+  if (
+    title === "Avg Completion Time" ||
+    title === "End-to-end completion time" ||
+    title === "LLM metrics (avg in range)" ||
+    title === "LLM metrics trend over time" ||
+    title === "AI vs Human corrections" ||
+    title === "AI RFIC/RFISC vs Human corrections"
+  ) {
+    allowedStatuses = ["processed"];
+  } else if (
+    title === "Error Rate" ||
+    title === "Exceptions" ||
+    title === "Assignments to ticketers"
+  ) {
+    allowedStatuses = ["error", "human"];
+  } else if (title === "Error visibility & classification") {
+    allowedStatuses = ["error"];
+  } else {
+    allowedStatuses = ["processed", "processing", "human", "error"];
+  }
+
+  // Always generate exactly 10 rows
+  const n = 10;
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const s = (seed + i * 97) % 1000;
+    const dt = new Date(Date.now() - ((s % 14) + 1) * 24 * 60 * 60 * 1000);
+    const ticketerSeed = (s + 5) % owners.length;
+    const isHumanCorrected = s % 3 !== 0;
+    const llm = llmMetricSets[(s + i) % llmMetricSets.length];
+
+    rows.push({
+      id: `RPT-${(seed % 9000) + 1000}-${i + 1}`,
+      pnr: `PNR${(seed % 90000) + 10000 + i}`,
+      status: allowedStatuses[s % allowedStatuses.length],
+      assigned: isHumanCorrected ? owners[ticketerSeed] : "-",
+      stage: stages[(s + 2) % stages.length],
+      createdAt: dt.toISOString(),
+      completionMinutes: (s % 180) + 10,
+      slaMinutes: (s % 240) + 30,
+      errorClass: errorClasses[(s + 3) % errorClasses.length],
+      hilRequired: s % 5 === 0,
+      slaBreached: s % 7 === 0,
+      adm: s % 9 === 0,
+      feedback: s % 6 === 0,
+      isHumanCorrected,
+      llmAccuracy: llm.accuracy,
+      llmCoherence: llm.coherence,
+      llmConsistency: llm.consistency,
+      llmGroundedness: llm.groundedness,
+      llm: {
+        accuracy: llm.accuracy,
+        coherence: llm.coherence,
+        consistency: llm.consistency,
+        groundedness: llm.groundedness,
+      },
+      description: `Sample detail row for ${title}${label ? ` (${label})` : ""}.`,
+      __sample: true,
+    });
+  }
+  return rows;
+}
+
+function normalizeReportRow(x) {
+  const isHumanCorrected = !(
+    x?.aiRFIC === x?.humanRFIC && x?.aiRFISC === x?.humanRFISC
+  );
+  return {
+    id: x?.id,
+    pnr: x?.pnr ?? "—",
+    status: x?.status ?? "—",
+    assigned: isHumanCorrected ? (x?.assigned ?? "Unassigned") : "-",
+    stage: x?.stage ?? "—",
+    createdAt: x?.createdAt ?? "—",
+    completionMinutes: x?.completionMinutes,
+    slaMinutes: x?.slaMinutes,
+    errorClass: x?.errorClass ?? "",
+    hilRequired: !!x?.hilRequired,
+    slaBreached: !!x?.slaBreached,
+    adm: !!x?.adm,
+    feedback: !!x?.feedback,
+    isHumanCorrected,
+    aiRFIC: x?.aiRFIC,
+    aiRFISC: x?.aiRFISC,
+    humanRFIC: x?.humanRFIC,
+    humanRFISC: x?.humanRFISC,
+    llmAccuracy: x?.llm?.accuracy,
+    llmConsistency: x?.llm?.consistency,
+    llmGroundedness: x?.llm?.groundedness,
+    llmCoherence: x?.llm?.coherence,
+    llm: x?.llm,
+    description: x?.description ?? "",
+    __raw: x,
+  };
+}
+
+function ClickableTooltip({ active, payload, label, metricLabel, onPick }) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div className="rounded-xl border border-black/10 bg-white p-3 shadow-lg">
+      <div className="text-sm font-medium text-black">{safeStr(label)}</div>
+      <div className="mt-2 space-y-1">
+        {payload.map((p, idx) => {
+          const seriesName = p.name || p.dataKey || "Value";
+          const val = p.value;
+          return (
+            <button
+              key={`${seriesName}-${idx}`}
+              type="button"
+              className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1 text-left text-sm hover:bg-black/5"
+              title="Click to drill down"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onPick?.({
+                  metricLabel,
+                  label,
+                  seriesName,
+                  dataKey: p.dataKey,
+                  value: val,
+                  raw: p,
+                  source: "tooltip",
+                });
+              }}
+            >
+              <span className="flex items-center gap-2">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: p.color || "#6b7280" }}
+                />
+                <span className="text-black/70">{safeStr(seriesName)}</span>
+              </span>
+              <span className="font-semibold text-black">{safeStr(val)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 text-[11px] text-black/50">
+        Tip: click a value to view detailed rows
+      </div>
+    </div>
+  );
+}
+
+function DetailModal({ open, title, subtitle, onClose, children }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl">
+          <div className="flex items-start justify-between gap-4 border-b border-black/10 p-4">
+            <div className="min-w-0">
+              <div className="truncate text-base font-semibold text-black">
+                {title}
+              </div>
+              {subtitle ? (
+                <div className="mt-1 text-sm text-black/60">{subtitle}</div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-black/70 hover:text-black"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+          <div className="p-4">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Card({
+  title,
+  value,
+  sub,
+  icon,
+  tone = "default",
+  onClick,
+  clickTitle,
+}) {
   const toneClass =
     tone === "good"
       ? "bg-green-50 border-green-200"
@@ -92,7 +695,20 @@ function Card({ title, value, sub, icon, tone = "default" }) {
           <div className="text-xs uppercase tracking-wide text-black/50">
             {title}
           </div>
-          <div className="mt-1 text-2xl font-semibold text-black">{value}</div>
+          {onClick ? (
+            <button
+              type="button"
+              className="mt-1 inline-flex items-baseline gap-2 rounded-lg px-2 py-1 text-2xl font-semibold text-black hover:bg-black/[0.04]"
+              title={clickTitle || "Click to view details"}
+              onClick={onClick}
+            >
+              <span>{value}</span>
+            </button>
+          ) : (
+            <div className="mt-1 text-2xl font-semibold text-black">
+              {value}
+            </div>
+          )}
           {sub ? <div className="mt-1 text-sm text-black/60">{sub}</div> : null}
         </div>
       </div>
@@ -189,7 +805,25 @@ export default function ReportsModule({ onOpenPNR }) {
     AI: "ai",
     EXCEPTIONS: "exceptions",
   };
+
   const [subTab, setSubTab] = useState(SUBTABS.OVERVIEW);
+
+  // Drill-down modal
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTitle, setDetailTitle] = useState("Details");
+  const [detailSubtitle, setDetailSubtitle] = useState("");
+  const [detailRows, setDetailRows] = useState([]);
+
+  // Modal table controls
+  const [detailSearch, setDetailSearch] = useState("");
+  const [detailSortKey, setDetailSortKey] = useState("createdAt");
+  const [detailSortDir, setDetailSortDir] = useState("desc");
+  const [detailFilters, setDetailFilters] = useState({
+    status: "All",
+    assigned: "All",
+    stage: "All",
+    errorClass: "All",
+  });
 
   // timeframe controls
   const presets = {
@@ -198,25 +832,25 @@ export default function ReportsModule({ onOpenPNR }) {
     MONTHLY: "monthly",
     CUSTOM: "custom",
   };
-  const [preset, setPreset] = useState(presets.MONTHLY);
 
+  const [preset, setPreset] = useState(presets.MONTHLY);
   const now = new Date();
+
   const [from, setFrom] = useState(() => {
     const d = new Date(now);
     d.setDate(d.getDate() - 29);
     return d.toISOString().slice(0, 10);
   });
+
   const [to, setTo] = useState(() => now.toISOString().slice(0, 10));
 
   function setPresetRange(p) {
     setPreset(p);
     const dTo = new Date();
     const dFrom = new Date(dTo);
-
     if (p === presets.DAILY) dFrom.setDate(dTo.getDate() - 0);
     if (p === presets.WEEKLY) dFrom.setDate(dTo.getDate() - 6);
     if (p === presets.MONTHLY) dFrom.setDate(dTo.getDate() - 29);
-
     setFrom(dFrom.toISOString().slice(0, 10));
     setTo(dTo.toISOString().slice(0, 10));
   }
@@ -245,14 +879,6 @@ export default function ReportsModule({ onOpenPNR }) {
     loadReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // If you want: auto-refetch when range changes (API later)
-  // For now, we do NOT auto-refetch to keep it light.
-  // You can uncomment this once API is ready.
-  //
-  // useEffect(() => {
-  //   loadReports({ from, to });
-  // }, [from, to]);
 
   const filtered = useMemo(() => {
     const f = new Date(from + "T00:00:00.000Z").getTime();
@@ -288,7 +914,6 @@ export default function ReportsModule({ onOpenPNR }) {
       if (x.status === "processed") row.processed += 1;
       if (x.status === "human") row.human += 1;
       if (x.status === "error") row.error += 1;
-
       if (typeof x.completionMinutes === "number") {
         row.completionSamples.push(x.completionMinutes);
       }
@@ -365,19 +990,31 @@ export default function ReportsModule({ onOpenPNR }) {
   }, [filtered]);
 
   const llmRadar = useMemo(() => {
-    const acc = avg(filtered.map((x) => x.llm?.accuracy ?? 0).filter(Boolean));
+    const acc = avg(
+      filtered
+        .map((x) => x.llm?.accuracy ?? 0)
+        .filter((n) => typeof n === "number"),
+    );
     const con = avg(
-      filtered.map((x) => x.llm?.consistency ?? 0).filter(Boolean),
+      filtered
+        .map((x) => x.llm?.consistency ?? 0)
+        .filter((n) => typeof n === "number"),
     );
     const gro = avg(
-      filtered.map((x) => x.llm?.groundedness ?? 0).filter(Boolean),
+      filtered
+        .map((x) => x.llm?.groundedness ?? 0)
+        .filter((n) => typeof n === "number"),
     );
-    const coh = avg(filtered.map((x) => x.llm?.coherence ?? 0).filter(Boolean));
+    const coh = avg(
+      filtered
+        .map((x) => x.llm?.coherence ?? 0)
+        .filter((n) => typeof n === "number"),
+    );
     return [
-      { metric: "Accuracy", value: acc },
-      { metric: "Consistency", value: con },
-      { metric: "Groundedness", value: gro },
-      { metric: "Coherence", value: coh },
+      { metric: "Accuracy", value: acc || 0 },
+      { metric: "Consistency", value: con || 0 },
+      { metric: "Groundedness", value: gro || 0 },
+      { metric: "Coherence", value: coh || 0 },
     ];
   }, [filtered]);
 
@@ -413,6 +1050,234 @@ export default function ReportsModule({ onOpenPNR }) {
     admList.length,
     feedbackList.length,
   ]);
+
+  // ------------------------------
+  // Drill-down modal helpers
+  // ------------------------------
+  const closeDetailModal = () => setDetailOpen(false);
+
+  const openDetailModal = ({
+    title,
+    subtitle,
+    rows,
+    fallback,
+    config,
+  } = {}) => {
+    // Normalize title for drill-down titles that include " — Label" suffix
+    const baseTitle =
+      Object.keys(MODAL_CONFIG).find((k) => title?.startsWith(k)) || title;
+
+    const modalConfig =
+      config || MODAL_CONFIG[baseTitle] || MODAL_CONFIG[title];
+
+    const applyStatusRules = (list) => {
+      if (!modalConfig?.statuses) return list;
+      return list.filter((r) => modalConfig.statuses.includes(r.status));
+    };
+
+    let finalRows = Array.isArray(rows) ? rows.map(normalizeReportRow) : [];
+
+    // Apply modal status rules
+    finalRows = applyStatusRules(finalRows);
+
+    // Fallback to sample data if no real rows
+    if (!finalRows.length) {
+      finalRows = applyStatusRules(
+        buildSampleDetails({
+          title: baseTitle,
+          label: subtitle,
+          value: 10,
+        }),
+      );
+    }
+
+    // Always cap at 10 rows
+    finalRows = finalRows.slice(0, 10);
+
+    setDetailTitle(title);
+    setDetailSubtitle(subtitle || "");
+    setDetailRows(finalRows);
+    setDetailSearch("");
+    setDetailFilters({
+      status: "All",
+      assigned: "All",
+      stage: "All",
+      errorClass: "All",
+    });
+    setDetailOpen(true);
+  };
+
+  const handleChartPick = ({
+    metricLabel,
+    label,
+    seriesName,
+    value,
+    source,
+  }) => {
+    let rows = [];
+
+    const dayRow =
+      dailyAgg.find((d) => d.date === label) ||
+      dailyAgg.find((d) => d.key === label);
+    const dayKey = dayRow?.key;
+
+    if (metricLabel === "Throughput over time") {
+      rows = dayKey
+        ? filtered.filter((x) => toDateKey(x.createdAt) === dayKey)
+        : [];
+      if (seriesName === "Processed")
+        rows = rows.filter((x) => x.status === "processed");
+      if (seriesName === "Human")
+        rows = rows.filter((x) => x.status === "human");
+      if (seriesName === "Error")
+        rows = rows.filter((x) => x.status === "error");
+    } else if (metricLabel === "End-to-end completion time") {
+      rows = dayKey
+        ? filtered.filter((x) => toDateKey(x.createdAt) === dayKey)
+        : filtered;
+      rows = rows.filter((x) => typeof x.completionMinutes === "number");
+    } else if (metricLabel === "Assignments to ticketers") {
+      rows = filtered.filter((x) => (x.assigned || "Unassigned") === label);
+    } else if (metricLabel === "Error visibility & classification") {
+      rows = filtered.filter(
+        (x) =>
+          x.status === "error" && (x.errorClass || "Unclassified") === label,
+      );
+    } else if (
+      metricLabel === "AI vs Human corrections" ||
+      metricLabel === "AI RFIC/RFISC vs Human corrections"
+    ) {
+      if (label === "Matched AI") {
+        rows = filtered.filter(
+          (x) => x.aiRFIC === x.humanRFIC && x.aiRFISC === x.humanRFISC,
+        );
+      } else if (label === "Human corrected") {
+        rows = filtered.filter(
+          (x) => !(x.aiRFIC === x.humanRFIC && x.aiRFISC === x.humanRFISC),
+        );
+      } else {
+        rows = filtered;
+      }
+    } else if (metricLabel === "LLM metrics trend over time") {
+      rows = dayKey
+        ? filtered.filter((x) => toDateKey(x.createdAt) === dayKey)
+        : filtered;
+      rows = rows.filter((x) => !!x.llm);
+    } else if (metricLabel === "LLM metrics (avg in range)") {
+      rows = filtered.filter((x) => !!x.llm);
+    } else {
+      rows = filtered;
+    }
+
+    const sub = [
+      seriesName ? `${seriesName}` : null,
+      label ? `${label}` : null,
+      value !== undefined ? `${value}` : null,
+      source ? `${source}` : null,
+    ]
+      .filter(Boolean)
+      .join(" • ");
+
+    openDetailModal({
+      title: `${metricLabel || "Details"}${label ? ` — ${label}` : ""}`,
+      subtitle: sub,
+      rows,
+      fallback: buildSampleDetails({
+        title: metricLabel || "Details",
+        label,
+        value,
+      }),
+      source,
+    });
+  };
+
+  // detailOptions for modal dropdowns
+  const detailOptions = useMemo(() => {
+    const statuses = uniq(
+      detailRows.map((r) => r.status).filter(Boolean),
+    ).sort();
+    const assigned = uniq(
+      detailRows.map((r) => r.assigned).filter((v) => Boolean(v) && v !== "-"),
+    ).sort();
+    const stages = uniq(detailRows.map((r) => r.stage).filter(Boolean)).sort();
+    const errorClasses = uniq(
+      detailRows.map((r) => r.errorClass).filter(Boolean),
+    ).sort();
+
+    return {
+      status: ["All", ...statuses],
+      assigned: ["All", ...assigned],
+      stage: ["All", ...stages],
+      errorClass: ["All", ...errorClasses],
+    };
+  }, [detailRows]);
+
+  const filteredDetailRows = useMemo(() => {
+    const q = detailSearch.trim().toLowerCase();
+
+    let rows = detailRows.filter((r) => {
+      if (detailFilters.status !== "All" && r.status !== detailFilters.status)
+        return false;
+      if (
+        detailFilters.assigned !== "All" &&
+        r.assigned !== detailFilters.assigned
+      )
+        return false;
+      if (detailFilters.stage !== "All" && r.stage !== detailFilters.stage)
+        return false;
+      if (
+        detailFilters.errorClass !== "All" &&
+        (r.errorClass || "") !== detailFilters.errorClass
+      )
+        return false;
+
+      if (!q) return true;
+
+      const hay = [
+        r.pnr,
+        r.status,
+        r.assigned,
+        r.stage,
+        r.createdAt,
+        r.errorClass,
+        r.description,
+      ]
+        .map(safeStr)
+        .join(" ")
+        .toLowerCase();
+
+      return hay.includes(q);
+    });
+
+    rows.sort((a, b) => {
+      const av = a?.[detailSortKey];
+      const bv = b?.[detailSortKey];
+      const aNum = Number(av);
+      const bNum = Number(bv);
+      const bothNums = !Number.isNaN(aNum) && !Number.isNaN(bNum);
+      let cmp = 0;
+      if (bothNums) cmp = aNum - bNum;
+      else cmp = safeStr(av).localeCompare(safeStr(bv));
+      return detailSortDir === "asc" ? cmp : -cmp;
+    });
+
+    return rows;
+  }, [detailRows, detailSearch, detailFilters, detailSortKey, detailSortDir]);
+
+  const toggleDetailSort = (key) => {
+    if (detailSortKey !== key) {
+      setDetailSortKey(key);
+      setDetailSortDir("asc");
+      return;
+    }
+    setDetailSortDir((d) => (d === "asc" ? "desc" : "asc"));
+  };
+
+  // Derive column defs for the currently open modal
+  const activeModalColumns = useMemo(
+    () => getModalColumnDefs(detailTitle, onOpenPNR),
+    [detailTitle, onOpenPNR],
+  );
 
   const rangeControls = (
     <div className="flex flex-wrap items-center gap-2">
@@ -561,6 +1426,18 @@ export default function ReportsModule({ onOpenPNR }) {
           value={kpis.total}
           sub="PNRs created in range"
           icon={<i className="fa-solid fa-chart-line" />}
+          onClick={() =>
+            openDetailModal({
+              title: "Throughput",
+              subtitle: `PNRs created in range • ${filtered.length} items`,
+              rows: filtered,
+              fallback: buildSampleDetails({
+                title: "Throughput",
+                value: kpis.total,
+              }),
+              source: "kpi",
+            })
+          }
         />
         <Card
           title="Avg Completion Time"
@@ -568,6 +1445,20 @@ export default function ReportsModule({ onOpenPNR }) {
           sub="End-to-end average"
           icon={<i className="fa-solid fa-stopwatch" />}
           tone={kpis.avgCompletion > 90 ? "warn" : "default"}
+          onClick={() =>
+            openDetailModal({
+              title: "Avg Completion Time",
+              subtitle: "Rows with completion time in range",
+              rows: filtered.filter(
+                (x) => typeof x.completionMinutes === "number",
+              ),
+              fallback: buildSampleDetails({
+                title: "Avg Completion Time",
+                value: kpis.avgCompletion,
+              }),
+              source: "kpi",
+            })
+          }
         />
         <Card
           title="Error Rate"
@@ -575,6 +1466,20 @@ export default function ReportsModule({ onOpenPNR }) {
           sub={`${kpis.error} errors • ${kpis.human} human-in-loop`}
           icon={<i className="fa-solid fa-triangle-exclamation" />}
           tone={kpis.errorRate > 0.2 ? "bad" : "default"}
+          onClick={() =>
+            openDetailModal({
+              title: "Error Rate",
+              subtitle: `${kpis.error} error rows in range (plus ${kpis.human} human-in-loop)`,
+              rows: filtered.filter(
+                (x) => x.status === "error" || x.status === "human",
+              ),
+              fallback: buildSampleDetails({
+                title: "Error Rate",
+                value: kpis.error,
+              }),
+              source: "kpi",
+            })
+          }
         />
         <Card
           title="Exceptions"
@@ -582,6 +1487,20 @@ export default function ReportsModule({ onOpenPNR }) {
           sub={`${kpis.feedback} with feedback`}
           icon={<i className="fa-solid fa-shield-halved" />}
           tone={kpis.slaBreaches > 0 ? "warn" : "good"}
+          onClick={() =>
+            openDetailModal({
+              title: "Exceptions",
+              subtitle: `${kpis.slaBreaches} SLA breaches • ${kpis.adms} ADM • ${kpis.feedback} with feedback`,
+              rows: filtered.filter(
+                (x) => x.slaBreached || x.adm || x.feedback,
+              ),
+              fallback: buildSampleDetails({
+                title: "Exceptions",
+                value: kpis.slaBreaches + kpis.adms,
+              }),
+              source: "kpi",
+            })
+          }
         />
       </div>
 
@@ -600,14 +1519,36 @@ export default function ReportsModule({ onOpenPNR }) {
                 </div>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={dailyAgg}>
+                    <AreaChart
+                      data={dailyAgg}
+                      onClick={(state) => {
+                        const label = state?.activeLabel;
+                        const ap = state?.activePayload || [];
+                        const first = ap?.[0];
+                        handleChartPick({
+                          metricLabel: "Throughput over time",
+                          label,
+                          seriesName: first?.name,
+                          value: first?.value,
+                          source: "area",
+                        });
+                      }}
+                    >
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke="rgba(0,0,0,0.06)"
                       />
                       <XAxis dataKey="date" />
                       <YAxis allowDecimals={false} />
-                      <Tooltip />
+                      <Tooltip
+                        content={(props) => (
+                          <ClickableTooltip
+                            {...props}
+                            metricLabel="Throughput over time"
+                            onPick={handleChartPick}
+                          />
+                        )}
+                      />
                       <Legend />
                       <Area
                         type="monotone"
@@ -645,13 +1586,32 @@ export default function ReportsModule({ onOpenPNR }) {
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Tooltip />
+                      <Tooltip
+                        content={(props) => (
+                          <ClickableTooltip
+                            {...props}
+                            metricLabel="AI vs Human corrections"
+                            onPick={handleChartPick}
+                          />
+                        )}
+                      />
                       <Legend />
                       <Pie
                         data={aiVsHuman}
                         dataKey="value"
                         nameKey="name"
                         outerRadius={90}
+                        className="cursor-pointer"
+                        onClick={(d) => {
+                          const payload = d?.payload || d;
+                          handleChartPick({
+                            metricLabel: "AI vs Human corrections",
+                            label: payload?.name,
+                            seriesName: "",
+                            value: payload?.value,
+                            source: "",
+                          });
+                        }}
                       >
                         {aiVsHuman.map((_, idx) => (
                           <Cell
@@ -688,14 +1648,36 @@ export default function ReportsModule({ onOpenPNR }) {
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={dailyAgg}>
+                  <LineChart
+                    data={dailyAgg}
+                    onClick={(state) => {
+                      const label = state?.activeLabel;
+                      const ap = state?.activePayload || [];
+                      const first = ap?.[0];
+                      handleChartPick({
+                        metricLabel: "End-to-end completion time",
+                        label,
+                        seriesName: first?.name,
+                        value: first?.value,
+                        source: "line",
+                      });
+                    }}
+                  >
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="rgba(0,0,0,0.06)"
                     />
                     <XAxis dataKey="date" />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip
+                      content={(props) => (
+                        <ClickableTooltip
+                          {...props}
+                          metricLabel="End-to-end completion time"
+                          onPick={handleChartPick}
+                        />
+                      )}
+                    />
                     <Line
                       type="monotone"
                       dataKey="avgCompletion"
@@ -722,12 +1704,31 @@ export default function ReportsModule({ onOpenPNR }) {
                     />
                     <XAxis type="number" allowDecimals={false} />
                     <YAxis type="category" dataKey="name" width={140} />
-                    <Tooltip />
+                    <Tooltip
+                      content={(props) => (
+                        <ClickableTooltip
+                          {...props}
+                          metricLabel="Assignments to ticketers"
+                          onPick={handleChartPick}
+                        />
+                      )}
+                    />
                     <Bar
                       dataKey="count"
                       name="Assigned"
                       fill={COLORS.purple}
                       radius={[6, 6, 6, 6]}
+                      className="cursor-pointer"
+                      onClick={(d) => {
+                        const payload = d?.payload || {};
+                        handleChartPick({
+                          metricLabel: "Assignments to ticketers",
+                          label: payload?.name,
+                          seriesName: "Assigned",
+                          value: d?.value,
+                          source: "bar",
+                        });
+                      }}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -752,12 +1753,31 @@ export default function ReportsModule({ onOpenPNR }) {
                       height={60}
                     />
                     <YAxis allowDecimals={false} />
-                    <Tooltip />
+                    <Tooltip
+                      content={(props) => (
+                        <ClickableTooltip
+                          {...props}
+                          metricLabel="Error visibility & classification"
+                          onPick={handleChartPick}
+                        />
+                      )}
+                    />
                     <Bar
                       dataKey="count"
                       name="Errors"
                       fill={COLORS.brand}
                       radius={[6, 6, 0, 0]}
+                      className="cursor-pointer"
+                      onClick={(d) => {
+                        const payload = d?.payload || {};
+                        handleChartPick({
+                          metricLabel: "Error visibility & classification",
+                          label: payload?.name,
+                          seriesName: "Errors",
+                          value: d?.value,
+                          source: "bar",
+                        });
+                      }}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -781,9 +1801,24 @@ export default function ReportsModule({ onOpenPNR }) {
                 </div>
                 <div className="text-xs text-black/50">
                   Total:{" "}
-                  <span className="font-semibold text-black">
+                  <button
+                    type="button"
+                    className="font-semibold text-brand-red hover:underline"
+                    onClick={() =>
+                      openDetailModal({
+                        title: "PNRs requiring Human-in-the-Loop (HIL)",
+                        subtitle: `Total: ${hilList.length} in range`,
+                        rows: hilList,
+                        fallback: buildSampleDetails({
+                          title: "HIL",
+                          value: hilList.length,
+                        }),
+                        source: "total",
+                      })
+                    }
+                  >
                     {hilList.length}
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -823,9 +1858,24 @@ export default function ReportsModule({ onOpenPNR }) {
                 </div>
                 <div className="text-xs text-black/50">
                   Total:{" "}
-                  <span className="font-semibold text-black">
+                  <button
+                    type="button"
+                    className="font-semibold text-brand-red hover:underline"
+                    onClick={() =>
+                      openDetailModal({
+                        title: "PNRs with feedback (any ADM status)",
+                        subtitle: `Total: ${feedbackList.length} in range`,
+                        rows: feedbackList,
+                        fallback: buildSampleDetails({
+                          title: "Feedback",
+                          value: feedbackList.length,
+                        }),
+                        source: "total",
+                      })
+                    }
+                  >
                     {feedbackList.length}
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -872,7 +1922,21 @@ export default function ReportsModule({ onOpenPNR }) {
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={llmRadar}>
+                  <RadarChart
+                    data={llmRadar}
+                    onClick={() =>
+                      openDetailModal({
+                        title: "LLM metrics (avg in range)",
+                        subtitle: "Rows contributing to LLM metrics in range",
+                        rows: filtered.filter((x) => !!x.llm),
+                        fallback: buildSampleDetails({
+                          title: "LLM metrics (avg in range)",
+                          value: 12,
+                        }),
+                        source: "radar",
+                      })
+                    }
+                  >
                     <PolarGrid />
                     <PolarAngleAxis dataKey="metric" />
                     <PolarRadiusAxis
@@ -898,14 +1962,37 @@ export default function ReportsModule({ onOpenPNR }) {
               </div>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={dailyAgg}>
+                  <LineChart
+                    data={dailyAgg}
+                    onClick={(state) => {
+                      const label = state?.activeLabel;
+                      const ap = state?.activePayload || [];
+                      const first = ap?.[0];
+                      handleChartPick({
+                        metricLabel: "LLM metrics trend over time",
+                        label,
+                        seriesName: first?.name,
+                        value: first?.value,
+                        source: "line",
+                      });
+                    }}
+                  >
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="rgba(0,0,0,0.06)"
                     />
                     <XAxis dataKey="date" />
                     <YAxis domain={[0, 1]} tickFormatter={(v) => pct(v)} />
-                    <Tooltip formatter={(v) => pct(v)} />
+                    <Tooltip
+                      formatter={(v) => pct(v)}
+                      content={(props) => (
+                        <ClickableTooltip
+                          {...props}
+                          metricLabel="LLM metrics trend over time"
+                          onPick={handleChartPick}
+                        />
+                      )}
+                    />
                     <Legend />
                     <Line
                       type="monotone"
@@ -943,13 +2030,32 @@ export default function ReportsModule({ onOpenPNR }) {
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Tooltip />
+                    <Tooltip
+                      content={(props) => (
+                        <ClickableTooltip
+                          {...props}
+                          metricLabel="AI RFIC/RFISC vs Human corrections"
+                          onPick={handleChartPick}
+                        />
+                      )}
+                    />
                     <Legend />
                     <Pie
                       data={aiVsHuman}
                       dataKey="value"
                       nameKey="name"
                       outerRadius={95}
+                      className="cursor-pointer"
+                      onClick={(d) => {
+                        const payload = d?.payload || d;
+                        handleChartPick({
+                          metricLabel: "AI RFIC/RFISC vs Human corrections",
+                          label: payload?.name,
+                          seriesName: "",
+                          value: payload?.value,
+                          source: "",
+                        });
+                      }}
                     >
                       {aiVsHuman.map((_, idx) => (
                         <Cell
@@ -980,9 +2086,24 @@ export default function ReportsModule({ onOpenPNR }) {
                 </div>
                 <div className="text-xs text-black/50">
                   Total:{" "}
-                  <span className="font-semibold text-black">
+                  <button
+                    type="button"
+                    className="font-semibold text-brand-red hover:underline"
+                    onClick={() =>
+                      openDetailModal({
+                        title: "SLA breached PNRs",
+                        subtitle: `Total: ${slaBreaches.length} in range`,
+                        rows: slaBreaches,
+                        fallback: buildSampleDetails({
+                          title: "SLA breached",
+                          value: slaBreaches.length,
+                        }),
+                        source: "total",
+                      })
+                    }
+                  >
                     {slaBreaches.length}
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -1023,9 +2144,24 @@ export default function ReportsModule({ onOpenPNR }) {
                 <div className="text-sm font-medium text-black">ADMs</div>
                 <div className="text-xs text-black/50">
                   Total:{" "}
-                  <span className="font-semibold text-black">
+                  <button
+                    type="button"
+                    className="font-semibold text-brand-red hover:underline"
+                    onClick={() =>
+                      openDetailModal({
+                        title: "ADMs",
+                        subtitle: `Total: ${admList.length} in range`,
+                        rows: admList,
+                        fallback: buildSampleDetails({
+                          title: "ADM",
+                          value: admList.length,
+                        }),
+                        source: "total",
+                      })
+                    }
+                  >
                     {admList.length}
-                  </span>
+                  </button>
                 </div>
               </div>
 
@@ -1059,6 +2195,161 @@ export default function ReportsModule({ onOpenPNR }) {
           </div>
         </Section>
       ) : null}
+
+      {/* Drill-down Modal */}
+      <DetailModal
+        open={detailOpen}
+        title={detailTitle}
+        subtitle={detailSubtitle}
+        onClose={closeDetailModal}
+      >
+        {/* Filters row */}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-6">
+          <div className="lg:col-span-2">
+            <input
+              value={detailSearch}
+              onChange={(e) => setDetailSearch(e.target.value)}
+              placeholder="Search details…"
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+            />
+          </div>
+
+          <div className="lg:col-span-1">
+            <select
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              value={detailFilters.status}
+              onChange={(e) =>
+                setDetailFilters((p) => ({ ...p, status: e.target.value }))
+              }
+            >
+              {detailOptions.status.map((opt) => (
+                <option key={`st-${opt}`} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lg:col-span-1">
+            <select
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              value={detailFilters.assigned}
+              onChange={(e) =>
+                setDetailFilters((p) => ({ ...p, assigned: e.target.value }))
+              }
+            >
+              {detailOptions.assigned.map((opt) => (
+                <option key={`as-${opt}`} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lg:col-span-1">
+            <select
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              value={detailFilters.stage}
+              onChange={(e) =>
+                setDetailFilters((p) => ({ ...p, stage: e.target.value }))
+              }
+            >
+              {detailOptions.stage.map((opt) => (
+                <option key={`sg-${opt}`} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="lg:col-span-1">
+            <select
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              value={detailFilters.errorClass}
+              onChange={(e) =>
+                setDetailFilters((p) => ({ ...p, errorClass: e.target.value }))
+              }
+            >
+              {detailOptions.errorClass.map((opt) => (
+                <option key={`ec-${opt || "blank"}`} value={opt}>
+                  {opt || "(blank)"}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Dynamic table using activeModalColumns */}
+        <div className="mt-4 overflow-auto rounded-xl border border-black/10">
+          <table className="min-w-full border-collapse text-left text-sm">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b border-black/10">
+                {activeModalColumns.map((col) => (
+                  <th
+                    key={col.key}
+                    className="cursor-pointer whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-black/60 hover:text-black select-none"
+                    onClick={() => toggleDetailSort(col.key)}
+                  >
+                    <span className="flex items-center gap-1">
+                      {col.header}
+                      {detailSortKey === col.key ? (
+                        <span className="text-black/40">
+                          {detailSortDir === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : null}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {!filteredDetailRows.length ? (
+                <tr>
+                  <td
+                    colSpan={activeModalColumns.length}
+                    className="px-3 py-10 text-center text-black/50"
+                  >
+                    No rows match your filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredDetailRows.slice(0, 10).map((r, idx) => (
+                  <tr
+                    key={`${r.pnr}-${idx}`}
+                    className="border-b border-black/5 hover:bg-black/[0.02]"
+                  >
+                    {activeModalColumns.map((col) => (
+                      <td key={col.key} className="px-3 py-2 whitespace-nowrap">
+                        {typeof col.render === "function"
+                          ? col.render(r)
+                          : safeStr(r[col.key])}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-xs text-black/50">
+          <div>
+            Showing{" "}
+            <span className="font-semibold text-black">
+              {Math.min(filteredDetailRows.length, 10)}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold text-black">
+              {filteredDetailRows.length}
+            </span>{" "}
+            rows
+            {filteredDetailRows.length > 10 ? " (truncated to 10)" : ""}
+          </div>
+          <div className="text-black/40">
+            Click chart values, bars, slices, or tooltip numbers to drill down.
+          </div>
+        </div>
+      </DetailModal>
     </div>
   );
 }

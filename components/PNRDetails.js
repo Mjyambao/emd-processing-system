@@ -12,11 +12,24 @@ import PNRDetailsActionBar from "./PNRDetailsActionBar";
 // Utils
 import formatDate from "../utils/helper";
 
-// APIs
-//---
-
+// -------------------------
+// Helpers
+// -------------------------
 const normalize = (v) => (v ?? "").toString().trim();
 const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+
+function safeUpper(v) {
+  return normalize(v).toUpperCase();
+}
+
+function statusToComparable(v) {
+  // supports: HUMAN_INPUT_REQUIRED, Human Input Required, human_input_required
+  return normalize(v)
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function getEmdDiff(current, baseline) {
   const diffs = [];
@@ -48,6 +61,7 @@ function extractOtherInfoSabre(data) {
   try {
     const traveler = data?.travelers?.[0] || {};
     const anc = traveler?.ancillaries?.[0] || {};
+
     const candidates = [
       anc?.otherInfo,
       anc?.otherInformation,
@@ -64,6 +78,7 @@ function extractOtherInfoSabre(data) {
       const firstString = candidates[0].find((v) => typeof v === "string");
       if (firstString) return firstString;
     }
+
     const val = candidates.find((v) => typeof v === "string");
     return val || "—";
   } catch {
@@ -86,7 +101,7 @@ function stopIfInteractive(e) {
  * Notes / Suggestions helper (Human Input Required only)
  * - Not a field, no user input
  * - Shows guidance for RFIC / RFISC / EMD Desc
- * - Includes a useful airline code lookup link (like your previous example)
+ * - Includes a useful airline code lookup link
  */
 const AIRLINE_CODE_LOOKUP_URL =
   "https://www.iata.org/en/publications/directories/code-search/";
@@ -94,7 +109,6 @@ const AIRLINE_CODE_LOOKUP_URL =
 /** Very lightweight heuristics (safe + helpful, without hardcoding airline-specific mappings) */
 function buildEmdSuggestions({ rfic, rfisc, emdDesc }) {
   const list = [];
-
   const rficVal = normalize(rfic);
   const rfiscVal = normalize(rfisc);
   const descVal = normalize(emdDesc);
@@ -147,19 +161,6 @@ function buildEmdSuggestions({ rfic, rfisc, emdDesc }) {
     });
   }
 
-  // Airline code lookup link (your request: like the previous example w/ link)
-  list.push({
-    variant: "info",
-    parts: [
-      "Need to validate airline / carrier codes? Use the ",
-      {
-        linkText: "Airline Code Lookup",
-        href: AIRLINE_CODE_LOOKUP_URL,
-      },
-      " to confirm the carrier code format.",
-    ],
-  });
-
   // Consistency suggestion
   list.push({
     variant: "info",
@@ -169,6 +170,432 @@ function buildEmdSuggestions({ rfic, rfisc, emdDesc }) {
   return list;
 }
 
+// Coerce aiSuggestions from API into a clean array of strings
+function coerceAiSuggestions(value) {
+  if (value == null) return [];
+
+  // Array of strings or objects
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((v) => {
+        if (typeof v === "string") return [v];
+        if (v && typeof v === "object") {
+          const cand = [v.text, v.suggestion, v.message, v.value].find(
+            (x) => typeof x === "string" && normalize(x),
+          );
+          return cand ? [cand] : [];
+        }
+        return [];
+      })
+      .map((s) => normalize(s))
+      .filter(Boolean);
+  }
+
+  // Single string (split into bullets/lines if applicable)
+  if (typeof value === "string") {
+    const parts = value
+      .split(/\r?\n|•|\u2022|;+/g)
+      .map((s) => normalize(s))
+      .filter(Boolean);
+    return parts.length ? parts : [normalize(value)];
+  }
+
+  // Single object
+  if (typeof value === "object") {
+    return [value.text, value.suggestion, value.message, value.value]
+      .filter((x) => typeof x === "string")
+      .map((s) => normalize(s))
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+// Extract LLM metrics (accuracy, consistency, coherence, groundedness) from API shapes.
+function coerceLlmMetrics(value) {
+  // Accept a variety of shapes:
+  // - { metrics: { accuracy, consistency, coherence, groundedness } }
+  // - { llmMetrics: { ... } }
+  // - { accuracy, consistency, coherence, groundedness }
+  // - [{ metrics: {...}}] (pick first)
+  const pickNum = (v) => {
+    if (v == null) return null;
+    if (typeof v === "number" && !Number.isNaN(v)) return v;
+    if (typeof v === "string") {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+  const tryObj = (obj) => {
+    if (!obj || typeof obj !== "object") return null;
+    const m = obj.metrics || obj.llmMetrics || obj;
+    const out = {
+      accuracy: pickNum(m.confidence),
+      consistency: pickNum(m.consistency),
+      coherence: pickNum(m.coherence),
+      groundedness: pickNum(m.groundedness),
+    };
+    const hasAny = Object.values(out).some((v) => v != null);
+    return hasAny ? out : null;
+  };
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const got = tryObj(item);
+      if (got) return got;
+    }
+    return null;
+  }
+  return tryObj(value);
+}
+
+// Extract knowledge sources / ground-truth citations from API shapes.
+function coerceKnowledgeSources(value) {
+  // Accept a variety of shapes:
+  // - { citations: [{ title, url }] }
+  // - { knowledgeSources: [...] }
+  // - { sources: [...] }
+  // - array of strings/objects
+  const normalizeUrl = (u) => {
+    const s = normalize(u);
+    return s ? s : null;
+  };
+  const toItem = (v) => {
+    if (typeof v.source_article === "string") {
+      const url = normalizeUrl(v.source_article);
+      return url ? { title: url, url } : null;
+    }
+    if (v && typeof v === "object") {
+      const url = normalizeUrl(v.source_url || v.source_link);
+      const title = normalize(v.source_article);
+      return url ? { title: title || url, url } : null;
+    }
+    return null;
+  };
+  const root = value && typeof value === "object";
+  const arr = Array.isArray(root) ? root : [];
+  const out = [];
+  for (const v of arr) {
+    const item = toItem(v.source_article);
+    if (item) out.push(item);
+  }
+  // de-dupe by url
+  const seen = new Set();
+  return out.filter((it) => {
+    if (seen.has(it.url)) return false;
+    seen.add(it.url);
+    return true;
+  });
+}
+// -------------------------
+// API mapping
+// -------------------------
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+function buildPnrDetailsUrl(pnrId) {
+  const id = encodeURIComponent(pnrId || "");
+  const path = `/api/v1/pnrs/${id}`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
+// Feedback (ADM) API
+function buildEmdFeedbackUrl(emdId) {
+  const id = encodeURIComponent(emdId || "");
+  const path = `/api/v1/pnrs/emd-items/${id}/feedback`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
+// Build AE API
+function buildBuildAeUrl(pnrId) {
+  const id = encodeURIComponent(pnrId || "");
+  const path = `/api/v1/pnrs/${id}/build-ae`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
+async function postBuildAE(pnrId, payload, { signal } = {}) {
+  const url = buildBuildAeUrl(pnrId);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload || {}),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const err = new Error(
+      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
+
+  const txt = await res.text().catch(() => "");
+  try {
+    return txt ? JSON.parse(txt) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getEmdFeedbackId(emd) {
+  // Prefer server-side identifiers
+  const id = emd?.emdItemId ?? emd?.ancillaryItemId;
+  if (id != null && String(id).trim() !== "") return id;
+  // Fallback to EMD number if it looks valid (best-effort)
+  const no = emd?.emdNo;
+  if (no && no !== "—" && String(no).trim() !== "") return no;
+  return null;
+}
+
+async function patchEmdFeedback(emdId, payload, { signal } = {}) {
+  const url = buildEmdFeedbackUrl(emdId);
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload || {}),
+    signal,
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const err = new Error(
+      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
+
+  // Some PATCH endpoints may return empty responses
+  const txt = await res.text().catch(() => "");
+  try {
+    return txt ? JSON.parse(txt) : {};
+  } catch {
+    return {};
+  }
+}
+
+function pickOtherInfoFromApi(pnrApi) {
+  const passengers = pnrApi?.passengers || [];
+  for (const pax of passengers) {
+    const emds = pax?.emdItems || [];
+    for (const emd of emds) {
+      const oi = emd?.otherInfo;
+      if (typeof oi === "string" && normalize(oi)) return oi;
+    }
+  }
+  return "—";
+}
+
+function mapApiToPnrDetails(pnrApi) {
+  const header = pnrApi?.header || {};
+  const flights = Array.isArray(pnrApi?.flights) ? pnrApi.flights : [];
+  const passengersRaw = Array.isArray(pnrApi?.passengers)
+    ? pnrApi.passengers
+    : [];
+
+  const flightById = new Map();
+  flights.forEach((f) => {
+    if (f?.flightId != null) flightById.set(f.flightId, f);
+  });
+
+  const pnrId = pnrApi?.pnrId || header?.pnrId;
+  const createdUtc =
+    header?.bookingCreatedUtc || header?.bookingCreated || header?.createdUtc;
+
+  const common = {
+    // existing UI fields
+    pnr: pnrId,
+    bookingId: header?.bookingId,
+    isTicketed: header?.isTicketed,
+    agencyIata: header?.agencyIataNumber,
+    pcc: header?.userWorkPcc || header?.displayPcc || header?.userHomePcc,
+    created: createdUtc,
+    contactEmail: passengersRaw?.[0]?.primaryEmail || "—",
+    contactPhone: passengersRaw?.[0]?.primaryPhoneNumber || "—",
+    otherInfo: pickOtherInfoFromApi(pnrApi),
+    errorDesc: pnrApi?.errorDetails || null,
+    documentType: header?.documentType || "EMD",
+    brand: header?.brandCode || "—",
+    gds: header?.gds || "—",
+
+    // keep extra fields from API (non-breaking)
+    status: pnrApi?.status,
+    stage: pnrApi?.stage,
+    actionRequired: pnrApi?.actionRequired,
+    assignedTo: pnrApi?.assignedTo,
+    assignedBy: pnrApi?.assignedBy,
+    header,
+    flights,
+  };
+
+  const passengers = passengersRaw.map((pax) => {
+    const paxFlights = Array.isArray(pax?.passengerFlights)
+      ? pax.passengerFlights
+      : [];
+    const firstPaxFlight = paxFlights[0] || {};
+    const linkedFlight =
+      flightById.get(firstPaxFlight.flightId) || flights[0] || {};
+
+    const flightNo =
+      `${linkedFlight?.airlineCode || ""} ${linkedFlight?.flightNumber || ""}`.trim();
+    const operating =
+      `${linkedFlight?.operatingAirlineCode || ""} ${linkedFlight?.operatingFlightNumber || ""}`.trim();
+    const route =
+      `${linkedFlight?.origin || ""} → ${linkedFlight?.destination || ""}`.trim();
+    const dep = linkedFlight?.departureDatetimeUtc || "";
+    const arr = linkedFlight?.arrivalDatetimeUtc || "";
+    const seat = firstPaxFlight?.seatNumber || "—";
+
+    const emdItems = Array.isArray(pax?.emdItems) ? pax.emdItems : [];
+
+    const emds = emdItems.map((item) => {
+      const aeStatus = safeUpper(item?.aeBuildStatus);
+
+      // Editable only if PNR is HUMAN_INPUT_REQUIRED and AE Build Status is PENDING
+      // (exact requirement) — keep computed editable flag for existing logic.
+      const editable = aeStatus === "PENDING";
+
+      // Consider anything not PENDING as already built (non-editable path)
+      const built = aeStatus && aeStatus !== "PENDING";
+
+      const totalAmount = item?.totalAmount ?? item?.subtotalAmount;
+      const currencyCode = item?.currencyCode;
+      const emdTotal =
+        normalize(totalAmount) && normalize(currencyCode)
+          ? `${totalAmount} ${currencyCode}`
+          : normalize(totalAmount)
+            ? `${totalAmount}`
+            : "—";
+
+      const emdNo =
+        item?.emdNumber ||
+        item?.aeNumber ||
+        item?.ancillaryItemId ||
+        item?.emdItemId ||
+        "—";
+
+      const rfic = item?.rfic || "";
+      const rfisc = item?.rfisc || "";
+      const emdDesc = item?.emdDesc || item?.commercialName || "";
+
+      const emd = {
+        emdNo,
+        emdStatus: item?.emdStatusName || item?.emdStatusCode || "—",
+        emdTotal,
+        rfic,
+        rfisc,
+        emdDesc,
+        baseline: { rfic, rfisc, emdDesc },
+        built,
+        editable,
+        notes: "",
+        adm: {
+          isAdm: item?.isAdm != null ? Boolean(item.isAdm) : false,
+          feedback: item?.feedback ?? "",
+          submitted: item?.isAdm != null || item?.feedback != null,
+        },
+
+        // keep API fields (non-breaking)
+        emdItemId: item?.emdItemId,
+        ancillaryItemId: item?.ancillaryItemId,
+        commercialName: item?.commercialName,
+        numberOfItems: item?.numberOfItems,
+        rficName: item?.rficName,
+        airlineCode: item?.airlineCode,
+        vendorCode: item?.vendorCode,
+        isRefundable: item?.isRefundable,
+        isCommissionable: item?.isCommissionable,
+        flightApplicabilityType: item?.flightApplicabilityType,
+        emdStatusCode: item?.emdStatusCode,
+        subtotalAmount: item?.subtotalAmount,
+        taxesAmount: item?.taxesAmount,
+        totalAmount: item?.totalAmount,
+        feesAmount: item?.feesAmount,
+        netRemitAmount: item?.netRemitAmount,
+        currencyCode: item?.currencyCode,
+        aeNumber: item?.aeNumber,
+        aeBuildStatus: item?.aeBuildStatus,
+        aeBuiltUtc: item?.aeBuiltUtc,
+        aiSuggestions: item?.aiSuggestions,
+        buildFeedback: item?.buildFeedback,
+        reviewedBy: item?.reviewedBy,
+        reviewedAtUtc: item?.reviewedAtUtc,
+        isAdm: item?.isAdm,
+        feedback: item?.feedback,
+        otherInfo: item?.otherInfo,
+      };
+
+      // If it is editable (PENDING), treat it as not built
+      if (editable) emd.built = false;
+
+      return emd;
+    });
+
+    const paxName =
+      pax?.fullName ||
+      `${pax?.surname || ""} ${pax?.givenName || ""}`.trim() ||
+      "—";
+
+    return {
+      name: paxName,
+      ticketNo: pax?.ticketNo || pax?.ticketNumber || "—",
+      travelerName: paxName,
+      ...common,
+      flightNo: flightNo || "—",
+      operating: operating || "—",
+      route: route || "—",
+      dep,
+      arr,
+      seat,
+      ssrCode: "—",
+      emds,
+
+      // keep passenger API fields (non-breaking)
+      passengerId: pax?.passengerId,
+      travelerIndex: pax?.travelerIndex,
+      givenName: pax?.givenName,
+      middleName: pax?.middleName,
+      surname: pax?.surname,
+      fullName: pax?.fullName,
+      birthDate: pax?.birthDate,
+      gender: pax?.gender,
+      travelerType: pax?.travelerType,
+      passengerCode: pax?.passengerCode,
+      nameAssociationId: pax?.nameAssociationId,
+      nameReferenceCode: pax?.nameReferenceCode,
+      isGrouped: pax?.isGrouped,
+      primaryEmail: pax?.primaryEmail,
+      primaryPhoneNumber: pax?.primaryPhoneNumber,
+      passengerFlights: paxFlights,
+      emdItems,
+    };
+  });
+
+  return { ...common, passengers, raw: pnrApi };
+}
+
+async function fetchPnrDetails(pnrId, { signal } = {}) {
+  const url = buildPnrDetailsUrl(pnrId);
+  const res = await fetch(url, { signal });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const err = new Error(
+      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+// -------------------------
+// Component
+// -------------------------
 export default function PNRDetails({
   selected,
   onApprove,
@@ -176,8 +603,10 @@ export default function PNRDetails({
   onRemoveFromQueue,
   onSendToQueue,
   onProcessPNR,
+  loggedInUserName,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false);
 
   // Build AE (per-EMD) modal
   const [isBuildModalOpen, setIsBuildModalOpen] = useState(false);
@@ -214,7 +643,6 @@ export default function PNRDetails({
 
   const dismissToast = (id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-
     if (toastTimersRef.current[id]) {
       clearTimeout(toastTimersRef.current[id]);
       delete toastTimersRef.current[id];
@@ -251,7 +679,6 @@ export default function PNRDetails({
         : variant === "success"
           ? "success"
           : "info";
-
     const message = title || ariaLabel || "";
     return pushToast({ type, message, ttl });
   };
@@ -262,9 +689,10 @@ export default function PNRDetails({
       toastTimersRef.current = {};
     };
   }, []);
-  // -------------------------
 
+  // -------------------------
   // Safe handler fallbacks
+  // -------------------------
   const callbacks = {
     retry: onRetry ?? (() => {}),
     removeFromQueue: onRemoveFromQueue ?? (() => {}),
@@ -273,270 +701,341 @@ export default function PNRDetails({
   };
 
   // Status helpers
-  const statusLower = (selected?.status || "").toLowerCase();
-  const isHumanRequired =
-    statusLower === "human" || statusLower === "human input required";
-  const isProcessed = statusLower === "processed";
-  const isError = statusLower.includes("error");
+  const statusSource = pnrDetails?.status ?? selected?.status ?? "";
+  const statusComparable = statusToComparable(statusSource);
 
-  // Error details text (from table row preferred)
+  const isHumanRequired =
+    statusComparable === "human" || statusComparable === "human input required";
+  const isProcessed = statusComparable === "processed";
+  const isError = statusComparable.includes("error");
+
+  // Error details text
   const errorDetailsText =
     selected?.errorDetails ||
     selected?.errorDesc ||
+    pnrDetails?.errorDetails ||
     pnrDetails?.errorDesc ||
     "";
 
   const showErrorPanel = isError && !!normalize(errorDetailsText);
 
+  // -------------------------
+  // Load details (API first, fall back to existing mock behavior)
+  // -------------------------
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     async function load() {
       if (!selected) {
         setPnrDetails(null);
+        setIsDetailsLoading(false);
         return;
       }
 
-      if (selected.pnr === "GLEBNY") {
-        const res = await fetch("/data/sabre-booking.json");
-        const data = await res.json();
-        if (!active) return;
+      // Show loading state while switching PNRs
+      setIsDetailsLoading(true);
+      setPnrDetails(null);
 
-        const traveler = data?.travelers?.[0] || {};
-        const anc = traveler?.ancillaries?.[0] || {};
-        const flight = data?.flights?.[0] || {};
-        const emdTotals = anc?.totals || {};
-        const contactEmail = (data?.contactInfo?.emails || [])[0];
-        const contactPhone = (data?.contactInfo?.phones || [])[0];
-        const ticket0 = (data?.flightTickets || [])[0] || {};
-        const ssr = (data?.specialServices || [])[0] || {};
-
-        const common = {
-          pnr: data?.request?.confirmationId || selected.pnr,
-          bookingId: data?.bookingId,
-          isTicketed: data?.isTicketed,
-          agencyIata: data?.creationDetails?.agencyIataNumber,
-          pcc: data?.creationDetails?.userWorkPcc,
-          created:
-            `${data?.creationDetails?.creationDate || ""} ${data?.creationDetails?.creationTime || ""}`.trim(),
-          contactEmail,
-          contactPhone,
-          otherInfo: extractOtherInfoSabre(data),
-          errorDesc: data?.errors?.[0]?.description,
-          flightNo:
-            `${flight?.airlineCode || ""} ${flight?.flightNumber || ""}`.trim(),
-          operating:
-            `${flight?.operatingAirlineCode || ""} ${flight?.operatingFlightNumber || ""}`.trim(),
-          route: `${flight?.fromAirportCode || ""} → ${flight?.toAirportCode || ""}`,
-          dep: `${flight?.updatedDepartureDate || flight?.departureDate || ""} ${flight?.updatedDepartureTime || flight?.departureTime || ""}`.trim(),
-          arr: `${flight?.updatedArrivalDate || flight?.arrivalDate || ""} ${flight?.updatedArrivalTime || flight?.arrivalTime || ""}`.trim(),
-          seat: flight?.seats?.[0]?.number || "-",
-          ssrCode: ssr?.code || "",
-          documentType: "EMD",
-          brand: "ECO FLEX",
-          gds: "SABRE",
-        };
-
-        const pax1Name =
-          `${traveler?.givenName || ""} ${traveler?.middleName || ""} ${traveler?.surname || ""}`
-            .replace(/\s+/g, " ")
-            .trim() || "DOE/JOHN";
-        const pax1Ticket = ticket0?.number || "0167489825830";
-        const emd1 = {
-          emdNo: anc?.electronicMiscellaneousDocumentNumber || "6074333222111",
-          emdStatus: anc?.statusName || "Confirmed",
-          emdTotal:
-            `${emdTotals?.total || "128.00"} ${emdTotals?.currencyCode || "USD"}`.trim(),
-          rfic: anc?.reasonForIssuanceCode || "C",
-          rfisc: anc?.subcode || "05Z",
-          emdDesc: anc?.commercialName || "UPTO33LB 15KG BAGGAGE",
-          baseline: null,
-          built: true,
-          editable: false,
-          notes: "",
-          adm: { isAdm: false, feedback: "", submitted: false },
-        };
-        emd1.baseline = {
-          rfic: emd1.rfic,
-          rfisc: emd1.rfisc,
-          emdDesc: emd1.emdDesc,
-        };
-
-        const pax2Name = "Jane Smith";
-        const pax2Ticket = "0167489825831";
-        const emd2a = {
-          emdNo: "6074333222112",
-          emdStatus: "On Hold",
-          emdTotal: "45.00 USD",
-          rfic: "C",
-          rfisc: "07B",
-          emdDesc: "PREPAID SEAT 17B",
-          baseline: null,
-          built: false,
-          editable: true,
-          notes: "",
-          adm: { isAdm: false, feedback: "", submitted: false },
-        };
-        emd2a.baseline = {
-          rfic: emd2a.rfic,
-          rfisc: emd2a.rfisc,
-          emdDesc: emd2a.emdDesc,
-        };
-
-        const emd2b = {
-          emdNo: "6074333222113",
-          emdStatus: "On Hold",
-          emdTotal: "30.00 USD",
-          rfic: "C",
-          rfisc: "0BG",
-          emdDesc: "EXTRA BAG 10KG",
-          baseline: null,
-          built: false,
-          editable: true,
-          notes: "",
-          adm: { isAdm: false, feedback: "", submitted: false },
-        };
-        emd2b.baseline = {
-          rfic: emd2b.rfic,
-          rfisc: emd2b.rfisc,
-          emdDesc: emd2b.emdDesc,
-        };
-
-        setPnrDetails({
-          ...common,
-          passengers: [
-            {
-              name: pax1Name,
-              ticketNo: pax1Ticket,
-              travelerName: pax1Name,
-              ...common,
-              emds: [emd1],
-            },
-            {
-              name: pax2Name,
-              ticketNo: pax2Ticket,
-              travelerName: pax2Name,
-              ...common,
-              emds: [emd2a, emd2b],
-            },
-          ],
+      // 1) Try API (integrated)
+      try {
+        const api = await fetchPnrDetails(selected.pnr, {
+          signal: controller.signal,
         });
-      } else {
-        // Mock for non-GLEBNY
-        const common = {
-          pnr: selected.pnr,
-          bookingId: "1SXXX1A2B3C4D",
-          isTicketed: true,
-          agencyIata: "99119911",
-          pcc: "AB12",
-          created: "2024-01-09 15:00",
-          contactEmail: "travel@sabre.com",
-          contactPhone: "+1-555-123-4567",
-          otherInfo: "Unassisted minor international",
-          errorDesc: selected?.errorDesc,
-          flightNo: "AA 123",
-          operating: "UA 321",
-          route: "DFW → HNL",
-          dep: "2024-07-09 09:25",
-          arr: "2024-07-09 12:38",
-          seat: "13A",
-          ssrCode: "WCHR",
-          documentType: "EMD",
-          brand: "ECO FLEX",
-          gds: "SABRE",
-        };
+        if (!active) return;
+        const mapped = mapApiToPnrDetails(api);
 
-        const pax1 = {
-          name: selected.passenger || "DOE/JOHN",
-          ticketNo: "0167489825830",
-          travelerName: selected.passenger || "DOE/JOHN",
-          ...common,
-          emds: [
-            {
-              emdNo: "6074333222111",
-              emdStatus: "Confirmed",
-              emdTotal: "128.00 USD",
-              rfic: "C",
-              rfisc: "05Z",
-              emdDesc: "UPTO33LB 15KG BAGGAGE",
-              baseline: {
+        // Enforce editability rule exactly: only when PNR is HUMAN_INPUT_REQUIRED and emd.aeBuildStatus === PENDING
+        const statusComp = statusToComparable(
+          mapped?.status ?? selected?.status,
+        );
+        const isHuman =
+          statusComp === "human" || statusComp === "human input required";
+        if (mapped?.passengers?.length) {
+          mapped.passengers.forEach((pax) => {
+            (pax.emds || []).forEach((emd) => {
+              const aeStatus = safeUpper(emd?.aeBuildStatus);
+              emd.editable = isHuman && aeStatus === "PENDING";
+              emd.built = emd.editable ? false : true;
+              // Preserve baseline values from initial load
+              if (!emd.baseline)
+                emd.baseline = {
+                  rfic: emd.rfic,
+                  rfisc: emd.rfisc,
+                  emdDesc: emd.emdDesc,
+                };
+            });
+          });
+        }
+
+        setPnrDetails(mapped);
+        setIsDetailsLoading(false);
+        return;
+      } catch (e) {
+        // fall back to existing mock behavior (retain)
+        console.warn("PNR details API load failed; falling back to mock.", e);
+      }
+
+      // 2) Existing mock behavior
+      try {
+        if (selected.pnr === "GLEBNY") {
+          const res = await fetch("/data/sabre-booking.json", {
+            signal: controller.signal,
+          });
+          const data = await res.json();
+          if (!active) return;
+
+          const traveler = data?.travelers?.[0] || {};
+          const anc = traveler?.ancillaries?.[0] || {};
+          const flight = data?.flights?.[0] || {};
+          const emdTotals = anc?.totals || {};
+          const contactEmail = (data?.contactInfo?.emails || [])[0];
+          const contactPhone = (data?.contactInfo?.phones || [])[0];
+          const ticket0 = (data?.flightTickets || [])[0] || {};
+          const ssr = (data?.specialServices || [])[0] || {};
+
+          const common = {
+            pnr: data?.request?.confirmationId || selected.pnr,
+            bookingId: data?.bookingId,
+            isTicketed: data?.isTicketed,
+            agencyIata: data?.creationDetails?.agencyIataNumber,
+            pcc: data?.creationDetails?.userWorkPcc,
+            created:
+              `${data?.creationDetails?.creationDate || ""} ${data?.creationDetails?.creationTime || ""}`.trim(),
+            contactEmail,
+            contactPhone,
+            otherInfo: extractOtherInfoSabre(data),
+            errorDesc: data?.errors?.[0]?.description,
+            flightNo:
+              `${flight?.airlineCode || ""} ${flight?.flightNumber || ""}`.trim(),
+            operating:
+              `${flight?.operatingAirlineCode || ""} ${flight?.operatingFlightNumber || ""}`.trim(),
+            route: `${flight?.fromAirportCode || ""} → ${flight?.toAirportCode || ""}`,
+            dep: `${flight?.updatedDepartureDate || flight?.departureDate || ""} ${flight?.updatedDepartureTime || flight?.departureTime || ""}`.trim(),
+            arr: `${flight?.updatedArrivalDate || flight?.arrivalDate || ""} ${flight?.updatedArrivalTime || flight?.arrivalTime || ""}`.trim(),
+            seat: flight?.seats?.[0]?.number || "-",
+            ssrCode: ssr?.code || "",
+            documentType: "EMD",
+            brand: "ECO FLEX",
+            gds: "SABRE",
+          };
+
+          const pax1Name =
+            `${traveler?.givenName || ""} ${traveler?.middleName || ""} ${traveler?.surname || ""}`
+              .replace(/\s+/g, " ")
+              .trim() || "DOE/JOHN";
+          const pax1Ticket = ticket0?.number || "0167489825830";
+
+          const emd1 = {
+            emdNo:
+              anc?.electronicMiscellaneousDocumentNumber || "6074333222111",
+            emdStatus: anc?.statusName || "Confirmed",
+            emdTotal:
+              `${emdTotals?.total || "128.00"} ${emdTotals?.currencyCode || "USD"}`.trim(),
+            rfic: anc?.reasonForIssuanceCode || "C",
+            rfisc: anc?.subcode || "05Z",
+            emdDesc: anc?.commercialName || "UPTO33LB 15KG BAGGAGE",
+            baseline: null,
+            built: true,
+            editable: false,
+            notes: "",
+            adm: { isAdm: false, feedback: "", submitted: false },
+          };
+          emd1.baseline = {
+            rfic: emd1.rfic,
+            rfisc: emd1.rfisc,
+            emdDesc: emd1.emdDesc,
+          };
+
+          const pax2Name = "Jane Smith";
+          const pax2Ticket = "0167489825831";
+
+          const emd2a = {
+            emdNo: "6074333222112",
+            emdStatus: "On Hold",
+            emdTotal: "45.00 USD",
+            rfic: "C",
+            rfisc: "07B",
+            emdDesc: "PREPAID SEAT 17B",
+            baseline: null,
+            built: false,
+            editable: true,
+            notes: "",
+            adm: { isAdm: false, feedback: "", submitted: false },
+          };
+          emd2a.baseline = {
+            rfic: emd2a.rfic,
+            rfisc: emd2a.rfisc,
+            emdDesc: emd2a.emdDesc,
+          };
+
+          const emd2b = {
+            emdNo: "6074333222113",
+            emdStatus: "On Hold",
+            emdTotal: "30.00 USD",
+            rfic: "C",
+            rfisc: "0BG",
+            emdDesc: "EXTRA BAG 10KG",
+            baseline: null,
+            built: false,
+            editable: true,
+            notes: "",
+            adm: { isAdm: false, feedback: "", submitted: false },
+          };
+          emd2b.baseline = {
+            rfic: emd2b.rfic,
+            rfisc: emd2b.rfisc,
+            emdDesc: emd2b.emdDesc,
+          };
+
+          setPnrDetails({
+            ...common,
+            passengers: [
+              {
+                name: pax1Name,
+                ticketNo: pax1Ticket,
+                travelerName: pax1Name,
+                ...common,
+                emds: [emd1],
+              },
+              {
+                name: pax2Name,
+                ticketNo: pax2Ticket,
+                travelerName: pax2Name,
+                ...common,
+                emds: [emd2a, emd2b],
+              },
+            ],
+          });
+        } else {
+          const common = {
+            pnr: selected.pnr,
+            bookingId: "1SXXX1A2B3C4D",
+            isTicketed: true,
+            agencyIata: "99119911",
+            pcc: "AB12",
+            created: "2024-01-09 15:00",
+            contactEmail: "travel@sabre.com",
+            contactPhone: "+1-555-123-4567",
+            otherInfo: "Unassisted minor international",
+            errorDesc: selected?.errorDesc,
+            flightNo: "AA 123",
+            operating: "UA 321",
+            route: "DFW → HNL",
+            dep: "2024-07-09 09:25",
+            arr: "2024-07-09 12:38",
+            seat: "13A",
+            ssrCode: "WCHR",
+            documentType: "EMD",
+            brand: "ECO FLEX",
+            gds: "SABRE",
+          };
+
+          const pax1 = {
+            name: selected.passenger || "DOE/JOHN",
+            ticketNo: "0167489825830",
+            travelerName: selected.passenger || "DOE/JOHN",
+            ...common,
+            emds: [
+              {
+                emdNo: "6074333222111",
+                emdStatus: "Confirmed",
+                emdTotal: "128.00 USD",
                 rfic: "C",
                 rfisc: "05Z",
                 emdDesc: "UPTO33LB 15KG BAGGAGE",
+                baseline: {
+                  rfic: "C",
+                  rfisc: "05Z",
+                  emdDesc: "UPTO33LB 15KG BAGGAGE",
+                },
+                built: true,
+                editable: false,
+                notes: "",
+                adm: { isAdm: false, feedback: "", submitted: false },
               },
-              built: true,
-              editable: false,
-              notes: "",
-              adm: { isAdm: false, feedback: "", submitted: false },
-            },
-          ],
-        };
+            ],
+          };
 
-        const pax2 = {
-          name: "Jane Smith",
-          ticketNo: "0167489825831",
-          travelerName: "Jane Smith",
-          ...common,
-          emds: [
-            {
-              emdNo: "6074333222112",
-              emdStatus: "On Hold",
-              emdTotal: "45.00 USD",
-              rfic: "C",
-              rfisc: "07B",
-              emdDesc: "PREPAID SEAT 17B",
-              baseline: {
+          const pax2 = {
+            name: "Jane Smith",
+            ticketNo: "0167489825831",
+            travelerName: "Jane Smith",
+            ...common,
+            emds: [
+              {
+                emdNo: "6074333222112",
+                emdStatus: "On Hold",
+                emdTotal: "45.00 USD",
                 rfic: "C",
                 rfisc: "07B",
                 emdDesc: "PREPAID SEAT 17B",
+                baseline: {
+                  rfic: "C",
+                  rfisc: "07B",
+                  emdDesc: "PREPAID SEAT 17B",
+                },
+                built: false,
+                editable: true,
+                notes: "",
+                adm: { isAdm: false, feedback: "", submitted: false },
               },
-              built: false,
-              editable: true,
-              notes: "",
-              adm: { isAdm: false, feedback: "", submitted: false },
-            },
-            {
-              emdNo: "6074333222113",
-              emdStatus: "On Hold",
-              emdTotal: "30.00 USD",
-              rfic: "C",
-              rfisc: "0BG",
-              emdDesc: "EXTRA BAG 10KG",
-              baseline: { rfic: "C", rfisc: "0BG", emdDesc: "EXTRA BAG 10KG" },
-              built: false,
-              editable: true,
-              notes: "",
-              adm: { isAdm: false, feedback: "", submitted: false },
-            },
-          ],
-        };
+              {
+                emdNo: "6074333222113",
+                emdStatus: "On Hold",
+                emdTotal: "30.00 USD",
+                rfic: "C",
+                rfisc: "0BG",
+                emdDesc: "EXTRA BAG 10KG",
+                baseline: {
+                  rfic: "C",
+                  rfisc: "0BG",
+                  emdDesc: "EXTRA BAG 10KG",
+                },
+                built: false,
+                editable: true,
+                notes: "",
+                adm: { isAdm: false, feedback: "", submitted: false },
+              },
+            ],
+          };
 
-        setPnrDetails({ ...common, passengers: [pax1, pax2] });
+          setPnrDetails({ ...common, passengers: [pax1, pax2] });
+        }
+        setIsDetailsLoading(false);
+      } catch (e) {
+        const msg = `Failed to load details: ${e?.message || "Unknown error"}`;
+        showToast({ variant: "error", ariaLabel: msg, title: msg });
       }
     }
 
     load();
     return () => {
       active = false;
+      controller.abort();
     };
   }, [selected]);
 
   // Auto-expand the passenger that needs attention (Human Input Required)
   useEffect(() => {
     if (!pnrDetails?.passengers) return;
+
     if (!isHumanRequired) {
       setOpenPassengerIndex(-1);
       return;
     }
+
     const idx = pnrDetails.passengers.findIndex((passenger) =>
       (passenger.emds || []).some((emd) => emd.editable && !emd.built),
     );
+
     setOpenPassengerIndex(idx >= 0 ? idx : 0);
   }, [pnrDetails, isHumanRequired]);
 
   const inputsNeeded = useMemo(() => {
     if (!isHumanRequired || !pnrDetails?.passengers?.length) return [];
     const list = [];
+
     pnrDetails.passengers.forEach((passenger, passengerIndex) => {
       (passenger.emds || []).forEach((emd, emdIndex) => {
         if (emd.editable && !emd.built) {
@@ -550,6 +1049,7 @@ export default function PNRDetails({
         }
       });
     });
+
     return list;
   }, [pnrDetails, isHumanRequired]);
 
@@ -570,11 +1070,13 @@ export default function PNRDetails({
 
   function openBuildFor(passengerIndex, emdIndex) {
     buildTargetRef.current = { passengerIndex, emdIndex };
+
     const emd = pnrDetails.passengers[passengerIndex].emds[emdIndex];
     const diff = getEmdDiff(
       { rfic: emd.rfic, rfisc: emd.rfisc, emdDesc: emd.emdDesc },
       emd.baseline || { rfic: "", rfisc: "", emdDesc: "" },
     );
+
     setBuildChanges(diff);
     setBuildNotes("");
     setIsBuildModalOpen(true);
@@ -583,31 +1085,81 @@ export default function PNRDetails({
   async function confirmBuildAE() {
     const { passengerIndex, emdIndex } = buildTargetRef.current;
     if (passengerIndex < 0 || emdIndex < 0) return;
+
+    const pnrId = selected?.pnr || pnrDetails?.pnr;
+    const passenger = pnrDetails?.passengers?.[passengerIndex];
+    const emd = passenger?.emds?.[emdIndex];
+
+    // Required identifiers for the Build AE endpoint
+    const emdItemId = emd?.emdItemId || emd?.ancillaryItemId || null;
+    const passengerId = passenger?.passengerId || null;
+
+    if (!pnrId) {
+      const msg = "Cannot build AE: missing PNR Id";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+    if (!emdItemId) {
+      const msg = "Cannot build AE: missing EMD item id (emdItemId)";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+    if (!passengerId) {
+      const msg = "Cannot build AE: missing passenger id (passengerId)";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+
+    // requested_by comes from the logged-in user in session
+    const requestedBy = loggedInUserName || "";
+
     setIsBuildSubmitting(true);
     try {
-      await new Promise((r) => setTimeout(r, 700));
+      const payload = {
+        emd_item_id: emdItemId,
+        rfic: emd?.rfic || "",
+        rfisc: emd?.rfisc || "",
+        commercialName: emd?.emdDesc || "",
+        feedback: buildNotes || "",
+        requested_by: requestedBy,
+      };
 
+      await postBuildAE(pnrId, payload);
+
+      // Update UI state (retain existing behavior)
       setPnrDetails((prev) => {
         const next = deepClone(prev);
-        const emd = next.passengers[passengerIndex].emds[emdIndex];
-        emd.baseline = {
-          rfic: emd.rfic,
-          rfisc: emd.rfisc,
-          emdDesc: emd.emdDesc,
+        const target = next.passengers[passengerIndex].emds[emdIndex];
+
+        target.baseline = {
+          rfic: target.rfic,
+          rfisc: target.rfisc,
+          emdDesc: target.emdDesc,
         };
-        emd.built = true;
+        target.built = true;
+
+        // Keep API-mapped fields in sync (non-breaking)
+        target.aeBuildStatus = target.aeBuildStatus || "BUILT";
+        target.aeBuiltUtc = target.aeBuiltUtc || new Date().toISOString();
+
         return next;
       });
 
       setIsBuildModalOpen(false);
       setBuildChanges([]);
-      const passengerName = pnrDetails.passengers[passengerIndex].name;
+      setBuildNotes("");
+
+      const passengerName = passenger?.name || "Passenger";
       showToast({
         variant: "success",
         ariaLabel: `AE built for ${passengerName}, EMD ${emdIndex + 1}`,
         title: `AE built for ${passengerName}, EMD ${emdIndex + 1}`,
       });
+
       buildTargetRef.current = { passengerIndex: -1, emdIndex: -1 };
+    } catch (e) {
+      const msg = `Failed to build AE: ${e?.message || "Unknown error"}`;
+      showToast({ variant: "error", ariaLabel: msg, title: msg, ttl: 4500 });
     } finally {
       setIsBuildSubmitting(false);
     }
@@ -615,9 +1167,12 @@ export default function PNRDetails({
 
   async function processPNR() {
     if (!allEmdsBuilt) return;
+
     setIsProcessSubmitting(true);
     try {
+      // retain existing simulated latency
       await new Promise((r) => setTimeout(r, 700));
+
       callbacks.processPNR({
         pnr: selected.pnr,
         passengers: pnrDetails.passengers,
@@ -646,15 +1201,18 @@ export default function PNRDetails({
   function requestRemoveFromQueue() {
     setIsRemoveConfirmOpen(true);
   }
+
   function confirmRemoveFromQueue() {
     setIsRemoveConfirmOpen(false);
     callbacks.removeFromQueue(selected.pnr);
+
     showToast({
       variant: "info",
       ariaLabel: `PNR ${selected.pnr} removed from list`,
       title: `PNR ${selected.pnr} removed from list`,
     });
   }
+
   function cancelRemoveFromQueue() {
     setIsRemoveConfirmOpen(false);
   }
@@ -663,28 +1221,54 @@ export default function PNRDetails({
     admTargetRef.current = { passengerIndex, emdIndex };
     setIsAdmConfirmOpen(true);
   }
+
   async function confirmSubmitADM() {
     const { passengerIndex, emdIndex } = admTargetRef.current;
     if (passengerIndex < 0 || emdIndex < 0) return;
+
+    const emd = pnrDetails?.passengers?.[passengerIndex]?.emds?.[emdIndex];
+    const emdId = getEmdFeedbackId(emd);
+    if (!emdId) {
+      const msg = "Cannot submit feedback: missing EMD identifier (emdItemId)";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+
     setIsAdmSubmitting(true);
     try {
-      await new Promise((r) => setTimeout(r, 700));
+      const payload = {
+        isAdm: Boolean(emd?.adm?.isAdm),
+        feedback: emd?.adm?.feedback ?? "",
+      };
+
+      await patchEmdFeedback(emdId, payload);
+
       setPnrDetails((prev) => {
         const next = deepClone(prev);
-        next.passengers[passengerIndex].emds[emdIndex].adm.submitted = true;
+        const target = next.passengers[passengerIndex].emds[emdIndex];
+        target.adm.submitted = true;
+        // Keep API-mapped fields in sync (non-breaking)
+        target.isAdm = payload.isAdm;
+        target.feedback = payload.feedback;
         return next;
       });
+
       setIsAdmConfirmOpen(false);
       showToast({
         variant: "success",
         ariaLabel: `ADM feedback submitted for EMD ${emdIndex + 1}`,
         title: `ADM feedback submitted for EMD ${emdIndex + 1}`,
       });
+
       admTargetRef.current = { passengerIndex: -1, emdIndex: -1 };
+    } catch (e) {
+      const msg = `Failed to submit feedback: ${e?.message || "Unknown error"}`;
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
     } finally {
       setIsAdmSubmitting(false);
     }
   }
+
   function cancelSubmitADM() {
     setIsAdmConfirmOpen(false);
   }
@@ -695,14 +1279,22 @@ export default function PNRDetails({
     setViewJson(null);
     setIsViewLoading(true);
     setIsViewModalOpen(true);
+
     try {
+      // Prefer API snapshot if available
+      if (selected?.pnr) {
+        const json = await fetchPnrDetails(selected.pnr);
+        setViewJson(json);
+        return;
+      }
+
+      // fallback (retain existing)
       const res = await fetch("/data/sabre-booking.json");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      console.log(json);
       setViewJson(json);
     } catch (e) {
-      const msg = `Failed to load sabre-booking.json: ${e?.message || "Unknown error"}`;
+      const msg = `Failed to load PNR snapshot: ${e?.message || "Unknown error"}`;
       setViewError(msg);
       showToast({ variant: "error", ariaLabel: msg, title: msg });
     } finally {
@@ -730,7 +1322,7 @@ export default function PNRDetails({
             className="btn btn-outline h-8 px-3 text-xs"
             type="button"
             onClick={openViewPNR}
-            title="View raw PNR JSON snapshot (sabre-booking.json)"
+            title="View raw PNR JSON snapshot"
           >
             <i className="fa-regular fa-eye mr-1"></i>
             View PNR
@@ -742,6 +1334,7 @@ export default function PNRDetails({
           <div>
             <span className="mr-2">Current Status: </span>
             <StatusBadge status={selected.status} />
+
             {isError ? (
               <FadeIn as="div" className="mt-2">
                 <PNRDetailsActionBar
@@ -798,14 +1391,19 @@ export default function PNRDetails({
       )}
 
       {/* Body */}
-      {pnrDetails ? (
+      {isDetailsLoading ? (
+        <div className="flex items-center gap-2 text-black/70">
+          <Spinner size="sm" /> Loading details…
+        </div>
+      ) : pnrDetails ? (
         <div className="mt-4 space-y-4 text-[13px]">
           {/* PNR & Booking */}
           <section>
             <h4 className="section-title text-[15px]">
               <i className="fa-solid fa-clipboard-list text-brand-red"></i> PNR
-              &amp; Booking
+              & Booking
             </h4>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
               <Field
                 k={
@@ -873,7 +1471,7 @@ export default function PNRDetails({
                     <i className="fa-solid fa-phone text-black/60"></i> Brand
                   </>
                 }
-                v={pnrDetails.brand || "ECO FLEX"}
+                v={pnrDetails.brand || "—"}
               />
             </div>
           </section>
@@ -882,7 +1480,7 @@ export default function PNRDetails({
           <section>
             <h4 className="section-title text-[15px]">
               <i className="fa-solid fa-people-group text-brand-red"></i>{" "}
-              Passengers, Flight &amp; EMDs
+              Passengers, Flight & EMDs
             </h4>
 
             <div className="space-y-3">
@@ -893,12 +1491,11 @@ export default function PNRDetails({
                     (emd) => emd.editable && !emd.built,
                   );
                 const isOpen = openPassengerIndex === passengerIndex;
+
                 return (
                   <div
                     key={`pax-${passengerIndex}`}
-                    className={`rounded border ${
-                      needsAttention ? "ring-attn" : "border-black/10"
-                    } bg-white`}
+                    className={`rounded border ${needsAttention ? "ring-attn" : "border-black/10"} bg-white`}
                   >
                     {/* Accordion Header */}
                     <button
@@ -926,9 +1523,7 @@ export default function PNRDetails({
                     {/* Accordion Body */}
                     <Collapse open={isOpen}>
                       <div
-                        className={`p-2 ${
-                          needsAttention ? "pulse-focus-once" : ""
-                        }`}
+                        className={`p-2 ${needsAttention ? "pulse-focus-once" : ""}`}
                         onPointerDownCapture={stopIfInteractive}
                         onMouseDownCapture={stopIfInteractive}
                         onClickCapture={stopIfInteractive}
@@ -1016,6 +1611,7 @@ export default function PNRDetails({
                           {(passenger.emds || []).map((emd, emdIndex) => {
                             const canEdit =
                               isHumanRequired && emd.editable && !emd.built;
+
                             return (
                               <FadeIn
                                 key={`emd-${passengerIndex}-${emdIndex}`}
@@ -1027,13 +1623,14 @@ export default function PNRDetails({
                                       <i className="fa-solid fa-passport text-brand-red mr-1"></i>
                                       EMD {emdIndex + 1} • {emd.emdNo}
                                     </div>
+
                                     {!canEdit ? (
                                       <span className="text-[12px] text-black/60">
                                         Status: {emd.emdStatus || "—"}
                                       </span>
                                     ) : (
                                       <span className="text-[12px] text-red-600 font-medium">
-                                        Needs Build AE
+                                        Needs AE item to proceed
                                       </span>
                                     )}
                                   </div>
@@ -1177,84 +1774,157 @@ export default function PNRDetails({
                                           )}
                                         </div>
                                       </div>
-
-                                      {/* Notes / Suggestions section (Human Input Required only) */}
-                                      {isHumanRequired && (
-                                        <div className="mt-2">
-                                          <div
-                                            className={`rounded p-2 border ${
-                                              canEdit
-                                                ? "border-red-200 bg-red-50/60"
-                                                : "border-black/10 bg-black/[0.03]"
-                                            }`}
-                                          >
-                                            <div className="text-[12px] text-black/60 flex items-center gap-2">
-                                              <i className="fa-solid fa-circle-info text-black/50"></i>
-                                              Notes / Suggestions
-                                            </div>
-
-                                            <ul className="mt-1 list-disc pl-5 space-y-1 text-[12px] text-black/80">
-                                              {buildEmdSuggestions({
-                                                rfic: emd.rfic,
-                                                rfisc: emd.rfisc,
-                                                emdDesc: emd.emdDesc,
-                                              }).map((item, i) => {
-                                                const danger =
-                                                  item.variant === "warn";
-                                                const ok =
-                                                  item.variant === "ok";
-                                                return (
-                                                  <li
-                                                    key={`emd-suggest-${passengerIndex}-${emdIndex}-${i}`}
-                                                    className={
-                                                      danger
-                                                        ? "text-red-700"
-                                                        : ok
-                                                          ? "text-green-800"
-                                                          : "text-black/80"
-                                                    }
-                                                  >
-                                                    {item.parts ? (
-                                                      <>
-                                                        {item.parts.map(
-                                                          (p, idx) => {
-                                                            if (
-                                                              typeof p ===
-                                                              "string"
-                                                            ) {
-                                                              return (
-                                                                <span
-                                                                  key={`p-${idx}`}
-                                                                >
-                                                                  {p}
-                                                                </span>
-                                                              );
-                                                            }
-                                                            return (
-                                                              <a
-                                                                key={`p-${idx}`}
-                                                                href={p.href}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                className="text-brand-red underline underline-offset-2 hover:opacity-80"
-                                                              >
-                                                                {p.linkText}
-                                                              </a>
-                                                            );
-                                                          },
-                                                        )}
-                                                      </>
-                                                    ) : (
-                                                      item.text
-                                                    )}
-                                                  </li>
-                                                );
-                                              })}
-                                            </ul>
-                                          </div>
-                                        </div>
-                                      )}
                                     </FadeIn>
+
+                                    {/* Notes / Suggestions section (Human Input Required only) */}
+                                    {isHumanRequired && (
+                                      <div className="mt-2">
+                                        <div
+                                          className={`rounded p-2 border ${
+                                            canEdit
+                                              ? "border-red-200 bg-red-50/60"
+                                              : "border-black/10 bg-black/[0.03]"
+                                          }`}
+                                        >
+                                          {(() => {
+                                            const aiRaw = emd.aiSuggestions;
+                                            const aiList =
+                                              coerceAiSuggestions(aiRaw);
+                                            const metrics =
+                                              coerceLlmMetrics(aiRaw);
+                                            const sources =
+                                              coerceKnowledgeSources(aiRaw);
+
+                                            const formatMetric = (v) => {
+                                              if (v == null) return "—";
+                                              const num = Number(v);
+                                              if (!Number.isFinite(num))
+                                                return "—";
+                                              if (num >= 0 && num <= 1)
+                                                return `${Math.round(num * 100)}%`;
+                                              return `${Math.round(num * 100) / 100}`;
+                                            };
+
+                                            return (
+                                              <>
+                                                {metrics && (
+                                                  <div>
+                                                    <div className="text-[12px] text-black/60 font-medium mb-1">
+                                                      LLM Metrics
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1">
+                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                        Accuracy:{" "}
+                                                        <span className="font-medium">
+                                                          {formatMetric(
+                                                            metrics.accuracy,
+                                                          )}
+                                                        </span>
+                                                      </span>
+                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                        Consistency:{" "}
+                                                        <span className="font-medium">
+                                                          {formatMetric(
+                                                            metrics.consistency,
+                                                          )}
+                                                        </span>
+                                                      </span>
+                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                        Coherence:{" "}
+                                                        <span className="font-medium">
+                                                          {formatMetric(
+                                                            metrics.coherence,
+                                                          )}
+                                                        </span>
+                                                      </span>
+                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                        Groundedness:{" "}
+                                                        <span className="font-medium">
+                                                          {formatMetric(
+                                                            metrics.groundedness,
+                                                          )}
+                                                        </span>
+                                                      </span>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                <div className="text-[12px] text-black/60 flex items-center gap-2 mt-2">
+                                                  <i className="fa-solid fa-circle-info text-black/50"></i>
+                                                  Notes / Suggestions
+                                                </div>
+
+                                                <ul className="mt-2 list-disc pl-5 space-y-1 text-[12px] text-black/80">
+                                                  {aiList.length
+                                                    ? aiList.map(
+                                                        (textVal, i) => (
+                                                          <li
+                                                            key={`emd-ai-${passengerIndex}-${emdIndex}-${i}`}
+                                                            className="text-black/80"
+                                                          >
+                                                            {textVal}
+                                                          </li>
+                                                        ),
+                                                      )
+                                                    : buildEmdSuggestions({
+                                                        rfic: emd.rfic,
+                                                        rfisc: emd.rfisc,
+                                                        emdDesc: emd.emdDesc,
+                                                      }).map((item, i) => {
+                                                        const danger =
+                                                          item.variant ===
+                                                          "warn";
+                                                        const ok =
+                                                          item.variant === "ok";
+                                                        return (
+                                                          <li
+                                                            key={`emd-suggest-${passengerIndex}-${emdIndex}-${i}`}
+                                                            className={
+                                                              danger
+                                                                ? "text-red-700"
+                                                                : ok
+                                                                  ? "text-green-800"
+                                                                  : "text-black/80"
+                                                            }
+                                                          >
+                                                            {item.text}
+                                                          </li>
+                                                        );
+                                                      })}
+                                                </ul>
+
+                                                <div className="mt-3">
+                                                  <div className="text-[12px] text-black/60 font-medium mb-1">
+                                                    Knowledge source
+                                                  </div>
+                                                  {emd?.aiSuggestions
+                                                    ?.source_article ? (
+                                                    <a
+                                                      href={
+                                                        emd.aiSuggestions
+                                                          .source_article
+                                                      }
+                                                      target="_blank"
+                                                      rel="noreferrer"
+                                                      className="text-brand-red underline underline-offset-2 hover:opacity-80"
+                                                    >
+                                                      {
+                                                        emd.aiSuggestions
+                                                          .source_article
+                                                      }
+                                                    </a>
+                                                  ) : (
+                                                    <div className="text-[12px] text-black/60">
+                                                      -
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </>
+                                            );
+                                          })()}
+                                        </div>
+                                      </div>
+                                    )}
 
                                     {/* Build AE per EMD */}
                                     {canEdit && (
@@ -1289,6 +1959,7 @@ export default function PNRDetails({
                                               <div className="text-[13px] font-medium">
                                                 Is this an ADM?
                                               </div>
+
                                               <label
                                                 className="inline-flex items-center gap-1 text-[13px]"
                                                 onPointerDown={(e) =>
@@ -1327,6 +1998,7 @@ export default function PNRDetails({
                                                 />
                                                 <span>No</span>
                                               </label>
+
                                               <label className="inline-flex items-center gap-1 text-[13px]">
                                                 <input
                                                   type="radio"
@@ -1351,6 +2023,7 @@ export default function PNRDetails({
                                                 <span>Yes</span>
                                               </label>
                                             </div>
+
                                             <div className="flex items-center gap-2">
                                               <input
                                                 type="text"
@@ -1371,6 +2044,7 @@ export default function PNRDetails({
                                                   })
                                                 }
                                               />
+
                                               <button
                                                 className="btn btn-success h-8 px-3 disabled:opacity-40"
                                                 onClick={() =>
@@ -1384,6 +2058,7 @@ export default function PNRDetails({
                                                 Submit Feedback
                                               </button>
                                             </div>
+
                                             {emd.adm.submitted && (
                                               <div className="text-green-700 text-[12px]">
                                                 <i className="fa-regular fa-circle-check mr-1"></i>
@@ -1436,9 +2111,8 @@ export default function PNRDetails({
           </section>
         </div>
       ) : (
-        <p className="text-black/70">Loading details…</p>
+        <p className="text-black/70">No details to display.</p>
       )}
-
       {/* Build AE Modal (per EMD) */}
       {isBuildModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -1529,6 +2203,7 @@ export default function PNRDetails({
             <div className="text-sm text-black/70">
               Are you sure you want to submit this ADM feedback?
             </div>
+
             <div className="mt-4 flex items-center justify-end gap-2">
               <button className="btn btn-secondary" onClick={cancelSubmitADM}>
                 Cancel
@@ -1565,6 +2240,7 @@ export default function PNRDetails({
               Remove PNR <span className="font-medium">{selected.pnr}</span>{" "}
               from the list?
             </div>
+
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 className="btn btn-secondary"

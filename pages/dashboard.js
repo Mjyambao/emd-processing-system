@@ -22,21 +22,24 @@ import { requireAuth } from "../lib/auth";
 
 export default function Dashboard() {
   const router = useRouter();
+
   // Tabs
   const TABS = { ALL: "all", MINE: "mine", REPORTS: "reports" };
   const [activeTab, setActiveTab] = useState(TABS.ALL);
 
-  // All Queue
+  // All Queue (legacy local sample state kept for other UI behaviors)
   const [allRows, setAllRows] = useState(initialPnrs);
   const [allSearch, setAllSearch] = useState("");
   const [allSelected, setAllSelected] = useState(null);
   const [allRefreshing, setAllRefreshing] = useState(false);
   const [allStatus, setAllStatus] = useState("all"); // 'all'|'processed'|'processing'|'error'|'human'
 
+  // Reports sample
   const [reportData] = useState(() =>
     generateReportSampleData({ days: 30, itemsPerDay: 8 }),
   );
 
+  // My Queue (legacy local sample state kept for other UI behaviors)
   const [myRows, setMyRows] = useState([
     {
       pnr: "MY987B",
@@ -68,6 +71,14 @@ export default function Dashboard() {
 
   const [killing, setKilling] = useState(new Set()); // set of PNRs being killed
   const [retrying, setRetrying] = useState(new Set()); // set of PNRs being retried (optional)
+  const [allTableSnapshot, setAllTableSnapshot] = useState({
+    rows: [],
+    meta: null,
+  });
+  const [myTableSnapshot, setMyTableSnapshot] = useState({
+    rows: [],
+    meta: null,
+  });
 
   // Toasts
   const [toasts, setToasts] = useState([]);
@@ -87,19 +98,35 @@ export default function Dashboard() {
     requireAuth(router);
   }, []);
 
-  // Counters for tabs and chips
+  /**
+   * Counters for chips
+   */
   const countByStatus = (rows) =>
     rows.reduce(
       (acc, r) => {
+        const s = String(r?.status ?? "").toLowerCase();
         acc.total++;
-        acc[r.status] = (acc[r.status] || 0) + 1;
+        acc[s] = (acc[s] || 0) + 1;
         return acc;
       },
       { total: 0, processed: 0, processing: 0, error: 0, human: 0 },
     );
 
-  const allCounts = useMemo(() => countByStatus(allRows), [allRows]);
-  const myCounts = useMemo(() => countByStatus(myRows), [myRows]);
+  const allCounts = useMemo(
+    () =>
+      countByStatus(
+        allTableSnapshot.rows?.length ? allTableSnapshot.rows : allRows,
+      ),
+    [allTableSnapshot.rows, allRows],
+  );
+
+  const myCounts = useMemo(
+    () =>
+      countByStatus(
+        myTableSnapshot.rows?.length ? myTableSnapshot.rows : myRows,
+      ),
+    [myTableSnapshot.rows, myRows],
+  );
 
   // Handlers: All
   async function refreshAll() {
@@ -134,6 +161,7 @@ export default function Dashboard() {
       )
     )
       return;
+
     withBusy(setKilling, victim.pnr, true);
     try {
       // simulate API call
@@ -154,6 +182,7 @@ export default function Dashboard() {
       )
     )
       return;
+
     withBusy(setKilling, victim.pnr, true);
     try {
       await new Promise((r) => setTimeout(r, 700));
@@ -165,7 +194,7 @@ export default function Dashboard() {
     }
   }
 
-  // Which dataset is active
+  // Which dataset is active (kept as your original behavior)
   const rows = activeTab === TABS.ALL ? allRows : myRows;
   const setRows = activeTab === TABS.ALL ? setAllRows : setMyRows;
   const search = activeTab === TABS.ALL ? allSearch : mySearch;
@@ -177,6 +206,8 @@ export default function Dashboard() {
   const onKill = activeTab === TABS.ALL ? killFromAll : killFromMine;
   const statusFilter = activeTab === TABS.ALL ? allStatus : myStatus;
   const setStatus = activeTab === TABS.ALL ? setAllStatus : setMyStatus;
+
+  // ✅ chips use these counters (now synced to PNRTable’s current page rows)
   const counters = activeTab === TABS.ALL ? allCounts : myCounts;
 
   function handleLogout() {
@@ -185,6 +216,12 @@ export default function Dashboard() {
     // logout();
     router.replace("/");
   }
+
+  const session =
+    typeof window !== "undefined"
+      ? JSON.parse(localStorage.getItem("session") || "{}")
+      : {};
+  const loggedInName = session?.name || session?.user?.name || "";
 
   return (
     <div className="min-h-screen">
@@ -199,6 +236,7 @@ export default function Dashboard() {
           </span>
           <span className="text-black/40">/</span>
           <span>PNR Queues</span>
+
           {isRefreshing && (
             <span className="ml-auto animate-pulse text-black/60">
               <i className="fa-solid fa-arrows-rotate"></i> Refreshing…
@@ -261,6 +299,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Chips (now counts based on the currently loaded page rows in PNRTable) */}
         {activeTab !== TABS.REPORTS ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Chip
@@ -332,9 +371,20 @@ export default function Dashboard() {
               onAssign={({ assignee, items }) => {
                 console.log("Assign to:", assignee, "Items:", items);
               }}
+              onRowsChange={({ rows: latestRows, meta }) => {
+                if (activeTab === TABS.ALL)
+                  setAllTableSnapshot({ rows: latestRows, meta });
+                if (activeTab === TABS.MINE)
+                  setMyTableSnapshot({ rows: latestRows, meta });
+              }}
+              assignedToOverride={
+                activeTab === TABS.MINE ? loggedInName : undefined
+              }
+              loggedInUserName={loggedInName}
             />
 
             <PNRDetails
+						  loggedInUserName={loggedInName}
               selected={selected}
               onApprove={({ pnr }) => {
                 setRows((list) =>

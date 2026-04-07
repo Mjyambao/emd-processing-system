@@ -72,7 +72,7 @@ export function getPnrDetails(pnrId) {
  * @param {Object} payload
  */
 export function assignPnrs(payload) {
-  return api.post("/api/v1/pnrs/assign", payload);
+  return api.patch("/api/v1/pnrs/assign", payload);
 }
 
 /*
@@ -136,7 +136,7 @@ export function removePnrFromQueue(pnrId, payload) {
  * @param {Object} payload
  */
 export function buildAeForEmd(emdItemId, payload) {
-  return api.post(
+  return api.patch(
     `/api/v1/emd-s/${encodeURIComponent(emdItemId)}/build-ae`,
     payload,
   );
@@ -150,7 +150,10 @@ export function buildAeForEmd(emdItemId, payload) {
  * @param {Object} payload
  */
 export function processPnr(pnrId, payload = {}) {
-  return api.post(`/api/v1/pnrs/${encodeURIComponent(pnrId)}/process`, payload);
+  return api.patch(
+    `/api/v1/pnrs/${encodeURIComponent(pnrId)}/process`,
+    payload,
+  );
 }
 
 /*

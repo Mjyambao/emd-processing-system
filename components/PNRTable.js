@@ -4,17 +4,16 @@ import Tooltip from "./Tooltip";
 import AssignModal from "./AssignModal";
 import TTLModal from "./TTLModal";
 import ToastViewport from "./ToastViewport";
-
 import ThCheckboxHeader from "./ThCheckboxHeader";
 import ThWithFilter from "./ThWithFilter";
 import AssigneeMultiSelectFilter from "./AssigneeMultiSelectFilter";
 import formatDate from "../utils/helper";
-import toYYYYMMDD from "../utils/helper";
 
 // API
 import { getPnrQueueList } from "../api/pnrApi";
 
 export default function PNRTable({
+  // NOTE: rows prop is kept for compatibility, but table renders API rows (apiRows).
   rows,
   search,
   setSearch,
@@ -29,6 +28,12 @@ export default function PNRTable({
   assignees = [],
   onAssign,
   onUpdateTTL,
+  //  callback to let Dashboard compute chip counts based on table rows (current page)
+  onRowsChange,
+  //  force assignedTo for API query (used by "My Queues" tab to show only logged-in user)
+  // If provided, it overrides Assigned To filter & includeUnassigned logic.
+  assignedToOverride,
+  loggedInUserName,
 }) {
   /**
    * -----------------------------
@@ -49,25 +54,30 @@ export default function PNRTable({
       .trim()
       .toLowerCase();
     if (!s) return "";
-    if (s === "error") return "error";
-    if (s.includes("human")) return "human";
+    if (s === "error" || s.includes("error")) return "error";
+    if (
+      s.includes("human") ||
+      s.includes("input_required") ||
+      s.includes("input required")
+    )
+      return "human";
     if (s.includes("processing")) return "processing";
     if (s.includes("processed") || s.includes("completed")) return "processed";
     return s;
   };
 
+  // UI normalized status -> API enum (based on sample: HUMAN_INPUT_REQUIRED, PROCESSED, etc.)
   const uiStatusToApiStatus = (s) => {
-    switch (String(s || "").toLowerCase()) {
+    switch (String(s ?? "").toLowerCase()) {
       case "error":
-        return "Error";
+        return "ERROR";
       case "human":
-        return "Human Input Required";
+        return "HUMAN_INPUT_REQUIRED";
       case "processing":
-        return "Processing";
+        return "PROCESSING";
       case "processed":
-        return "Processed";
+        return "PROCESSED";
       default:
-        // if user selects a raw status value that already matches backend
         return s || undefined;
     }
   };
@@ -82,12 +92,144 @@ export default function PNRTable({
     return new Date(`${yyyyMmDd}T23:59:59.999Z`).toISOString();
   };
 
+  // Safe date-only string for <input type="date" /> and display
+  const toYYYYMMDD = (value) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Convert TTL input (date-only or datetime-local) to UTC ISO string for the API
+  const ttlInputToUtcIso = (value) => {
+    const s = String(value ?? "").trim();
+    if (!s) return undefined;
+
+    // Date-only: treat as start-of-day in UTC
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return new Date(`${s}T00:00:00.000Z`).toISOString();
+    }
+
+    // Datetime-local (no timezone): JS treats it as local time; convert to ISO UTC
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+
+    // Fallback: if it looks like datetime without timezone, try forcing UTC
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) {
+      const dz = new Date(`${s}Z`);
+      if (!Number.isNaN(dz.getTime())) return dz.toISOString();
+    }
+
+    return undefined;
+  };
+
+  /**
+   * -----------------------------
+   * Assign API (PATCH /api/v1/pnrs/{pnrId}/assign)
+   * -----------------------------
+   * Notes:
+   * - assignmentReason defaults to "Assign to Ticketer"
+   * - queueName defaults to "-"
+   * - userId defaults to 0
+   */
+  const getAssignedBy = () => loggedInUserName || "System";
+
+  const makeCorrelationId = () => {
+    try {
+      if (typeof crypto !== "undefined" && crypto.randomUUID)
+        return crypto.randomUUID();
+    } catch (_) {
+      // ignore
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const patchAssignPnr = async (pnrId, payload) => {
+    const url = `${API_BASE}/api/v1/pnrs/${encodeURIComponent(pnrId)}/assign`;
+
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let msg = `Assign failed (${res.status})`;
+      try {
+        const t = await res.text();
+        if (t) msg = `${msg}: ${t}`;
+      } catch (_) {
+        // ignore
+      }
+      throw new Error(msg);
+    }
+
+    // Response may be empty; swallow JSON parse errors
+    try {
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  };
+
+  // PATCH /api/v1/pnrs/{pnrId}/ttl
+  // Body: { ttlUtc: "2026-04-07T03:37:27.848Z" }
+  const patchTtlPnr = async (pnrId, ttlUtc) => {
+    const url = `${API_BASE}/api/v1/pnrs/${encodeURIComponent(pnrId)}/ttl`;
+
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ ttlUtc }),
+    });
+
+    if (!res.ok) {
+      let msg = `Set TLL failed (${res.status})`;
+      try {
+        const t = await res.text();
+        if (t) msg = `${msg}: ${t}`;
+      } catch (_) {
+        // ignore
+      }
+      throw new Error(msg);
+    }
+
+    // Response may be empty; swallow JSON parse errors
+    try {
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  };
+
   const mapSortKeyToSwaggerField = (key) => {
     switch (key) {
       case "pnr":
-        return "pnr";
+        return "pnrId";
+      case "brand":
+        return "brand";
+      case "gds":
+        return "gds";
+      case "pcc":
+        return "pcc";
+      case "documentType":
+        return "documentType";
       case "status":
         return "status";
+      case "passengerNames":
+        return "passengerNames";
+      case "departureDate":
+        return "departureDate";
       case "lastUpdated":
         return "lastUpdated";
       case "queueArrival":
@@ -99,25 +241,58 @@ export default function PNRTable({
       case "assigned":
         return "assignedTo";
       default:
-        return "queueArrival";
+        return "departureDate";
     }
   };
 
   const mapApiItemToRow = (item) => ({
     pnr: item?.pnrId ?? item?.pnr ?? "",
+    brand: item?.brand ?? "",
+    gds: item?.gds ?? "",
+    pcc: item?.pcc ?? "",
+    documentType: item?.documentType ?? "",
     status: normalizeStatus(item?.status),
+    passengerNames: item?.passengerNames ?? "",
+    departureDate: item?.departureDate ?? null,
+    ttl: item?.ttlUtc ?? item?.ttl ?? null,
     stage: item?.stage ?? "",
-    lastUpdated: item?.lastUpdated ?? null,
     queueArrival: item?.queueArrival ?? null,
-    ttl: item?.ttl ?? null,
+    lastUpdated: item?.lastUpdated ?? null,
     error: item?.errorDetails ?? "",
     assigned: item?.assignedTo ?? "",
     action: item?.actionRequired ?? "",
+
+    // Extra fields kept for downstream actions (e.g., Assign API payload)
+    correlationId: item?.correlationId ?? "",
+    oasisQueueId: item?.oasisQueueId ?? item?.oasisQueueID ?? "",
+    queueName: item?.queueName ?? item?.queue ?? "-",
   });
 
   const isSelectable = (row) =>
     row.status === "error" || row.status === "human";
 
+  // Status priority: Error, Human, Processing, Processed
+  const STATUS_RANK = useMemo(
+    () => ({
+      error: 0,
+      human: 1,
+      processing: 2,
+      processed: 3,
+    }),
+    [],
+  );
+
+  const compareDatesDesc = (a, b) => {
+    const da = a ? new Date(a).getTime() : -Infinity;
+    const db = b ? new Date(b).getTime() : -Infinity;
+    return db - da;
+  };
+
+  /**
+   * -----------------------------
+   * Toasts
+   * -----------------------------
+   */
   const [toasts, setToasts] = useState([]);
   const toastIdRef = useRef(0);
 
@@ -135,9 +310,21 @@ export default function PNRTable({
   const dismissToast = (id) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
 
+  /**
+   * -----------------------------
+   * Column filters
+   * -----------------------------
+   */
   const [colFilters, setColFilters] = useState({
     pnr: "",
+    brand: "",
+    gds: "",
+    pcc: "",
+    documentType: "",
     status: "",
+    passengerNames: "",
+    departureDateFrom: "",
+    departureDateTo: "",
     lastUpdatedFrom: "",
     lastUpdatedTo: "",
     queueFrom: "",
@@ -154,7 +341,13 @@ export default function PNRTable({
 
   const [filterOpen, setFilterOpen] = useState({
     pnr: false,
+    brand: false,
+    gds: false,
+    pcc: false,
+    documentType: false,
     status: false,
+    passengerNames: false,
+    departureDate: false,
     lastUpdated: false,
     queueArrival: false,
     ttl: false,
@@ -168,7 +361,13 @@ export default function PNRTable({
   const closeAllFilterUI = () =>
     setFilterOpen({
       pnr: false,
+      brand: false,
+      gds: false,
+      pcc: false,
+      documentType: false,
       status: false,
+      passengerNames: false,
+      departureDate: false,
       lastUpdated: false,
       queueArrival: false,
       ttl: false,
@@ -179,7 +378,14 @@ export default function PNRTable({
   const isFilterActive = useMemo(
     () => ({
       pnr: !!colFilters.pnr?.trim(),
+      brand: !!colFilters.brand?.trim(),
+      gds: !!colFilters.gds?.trim(),
+      pcc: !!colFilters.pcc?.trim(),
+      documentType: !!colFilters.documentType?.trim(),
       status: !!colFilters.status,
+      passengerNames: !!colFilters.passengerNames?.trim(),
+      departureDate:
+        !!colFilters.departureDateFrom || !!colFilters.departureDateTo,
       lastUpdated: !!colFilters.lastUpdatedFrom || !!colFilters.lastUpdatedTo,
       queueArrival: !!colFilters.queueFrom || !!colFilters.queueTo,
       ttl: !!colFilters.ttlFrom || !!colFilters.ttlTo,
@@ -202,19 +408,25 @@ export default function PNRTable({
 
   /**
    * -----------------------------
-   * Sorting (server-side)
+   * Sorting (server + local tie-break)
    * -----------------------------
+   * Default: Departure Date desc, then Status priority
    */
-  const [sort, setSort] = useState({ key: null, dir: "asc" });
+  const [sort, setSort] = useState({ key: "departureDate", dir: "desc" });
 
   const toggleSort = (key) => {
     setSort((prev) => {
       if (prev.key !== key) return { key, dir: "asc" };
       if (prev.dir === "asc") return { key, dir: "desc" };
-      return { key: null, dir: "asc" };
+      return { key: "departureDate", dir: "desc" }; // revert to default
     });
   };
 
+  /**
+   * -----------------------------
+   * API state
+   * -----------------------------
+   */
   const [apiRows, setApiRows] = useState([]);
   const [apiMeta, setApiMeta] = useState({
     page: 1,
@@ -224,7 +436,6 @@ export default function PNRTable({
   });
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState("");
-
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -250,6 +461,127 @@ export default function PNRTable({
     "Matt Quiin",
   ];
 
+  /**
+   * --------
+   *  Polling
+   * -------_
+   */
+  const POLL_INTERVAL_MS = 60_000; //miliseconds (1 mins)
+
+  // Latest snapshots for diffing
+  const apiRowsRef = useRef([]);
+  const apiMetaRef = useRef({
+    page: 1,
+    pageSize: 10,
+    totalRecords: 0,
+    totalPages: 0,
+  });
+
+  // Keep latest selected PNRs for pin-locking during polling
+  const selectedPNRsRef = useRef(new Set());
+  useEffect(() => {
+    apiRowsRef.current = apiRows;
+  }, [apiRows]);
+  useEffect(() => {
+    apiMetaRef.current = apiMeta;
+  }, [apiMeta]);
+
+  // Prevent overlap
+  const inFlightRef = useRef(false);
+  const requestSeqRef = useRef(0);
+
+  const isSameMeta = (a, b) =>
+    a?.page === b?.page &&
+    a?.pageSize === b?.pageSize &&
+    a?.totalRecords === b?.totalRecords &&
+    a?.totalPages === b?.totalPages;
+
+  const hasRowChanged = (prev, next) => {
+    if (!prev) return true;
+    return (
+      prev.pnr !== next.pnr ||
+      prev.brand !== next.brand ||
+      prev.gds !== next.gds ||
+      prev.pcc !== next.pcc ||
+      prev.documentType !== next.documentType ||
+      prev.status !== next.status ||
+      prev.passengerNames !== next.passengerNames ||
+      prev.departureDate !== next.departureDate ||
+      prev.ttl !== next.ttl ||
+      prev.stage !== next.stage ||
+      prev.queueArrival !== next.queueArrival ||
+      prev.lastUpdated !== next.lastUpdated ||
+      prev.error !== next.error ||
+      prev.assigned !== next.assigned ||
+      prev.action !== next.action
+    );
+  };
+
+  const mergeRowsPreserveIdentity = (prevRows, nextRows, opts = {}) => {
+    const { lockPinned = false, pinnedSet } = opts || {};
+
+    const prevMap = new Map(prevRows.map((r) => [r.pnr, r]));
+    let changed = prevRows.length !== nextRows.length;
+
+    // Preserve object identity for unchanged rows
+    const mergedBase = nextRows.map((nr) => {
+      const pr = prevMap.get(nr.pnr);
+      if (pr && !hasRowChanged(pr, nr)) return pr; // keep identity
+      changed = true;
+      return nr;
+    });
+
+    // When polling, lock pinned rows (selected rows) to their previous indices.
+    // This prevents selected rows from jumping around when new data arrives.
+    if (!lockPinned || !pinnedSet || pinnedSet.size === 0) {
+      return { merged: mergedBase, changed };
+    }
+
+    const nextMap = new Map(mergedBase.map((r) => [r.pnr, r]));
+
+    // Determine pinned indices based on current rendered order (prevRows)
+    const pinnedSlots = [];
+    for (let i = 0; i < prevRows.length; i++) {
+      const pnr = prevRows[i]?.pnr;
+      if (!pnr) continue;
+      if (!pinnedSet.has(pnr)) continue;
+      const updated = nextMap.get(pnr);
+      if (updated) pinnedSlots.push({ index: i, row: updated });
+    }
+
+    if (pinnedSlots.length === 0) {
+      return { merged: mergedBase, changed };
+    }
+
+    // Unpinned list keeps the already-applied sorting (status + queueArrival etc.)
+    const unpinned = mergedBase.filter((r) => !pinnedSet.has(r.pnr));
+
+    const result = new Array(mergedBase.length).fill(null);
+
+    // Place pinned rows at their original positions where possible
+    for (const slot of pinnedSlots) {
+      if (
+        slot.index >= 0 &&
+        slot.index < result.length &&
+        result[slot.index] == null
+      ) {
+        result[slot.index] = slot.row;
+      }
+    }
+
+    // Fill remaining slots with sorted unpinned rows
+    let u = 0;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i] != null) continue;
+      result[i] = unpinned[u++] ?? null;
+    }
+
+    // If something went off (shouldn't), fall back to mergedBase
+    const merged = result.every((x) => x != null) ? result : mergedBase;
+
+    return { merged, changed: true };
+  };
+
   const buildQueryParams = () => {
     const f = colFilters;
 
@@ -259,9 +591,11 @@ export default function PNRTable({
       ? uiStatusToApiStatus(chosenStatusUi)
       : undefined;
 
+    // AssignedTo base logic (existing behavior), unless assignedToOverride is provided.
     let assignedTo;
-
-    if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
+    if (assignedToOverride && String(assignedToOverride).trim()) {
+      assignedTo = String(assignedToOverride).trim();
+    } else if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
       assignedTo = f.assignedNames[0];
     } else if (
       f.includeUnassigned &&
@@ -295,9 +629,28 @@ export default function PNRTable({
     const ttlFrom = f.ttlFrom ? toIsoStartOfDayZ(f.ttlFrom) : undefined;
     const ttlTo = f.ttlTo ? toIsoEndOfDayZ(f.ttlTo) : undefined;
 
+    // Text filters
+    const brand = f.brand?.trim() ? f.brand.trim() : undefined;
+    const gds = f.gds?.trim() ? f.gds.trim() : undefined;
+    const pcc = f.pcc?.trim() ? f.pcc.trim() : undefined;
+    const documentType = f.documentType?.trim()
+      ? f.documentType.trim()
+      : undefined;
+    const passengerNames = f.passengerNames?.trim()
+      ? f.passengerNames.trim()
+      : undefined;
+
+    // Date range filter
+    const departureDateFrom = f.departureDateFrom
+      ? toIsoStartOfDayZ(f.departureDateFrom)
+      : undefined;
+    const departureDateTo = f.departureDateTo
+      ? toIsoEndOfDayZ(f.departureDateTo)
+      : undefined;
+
     // Sort: "field:dir"
-    const sortField = mapSortKeyToSwaggerField(sort.key);
-    const sortDir = sort.key ? sort.dir : "desc";
+    const sortField = mapSortKeyToSwaggerField(sort?.key || "departureDate");
+    const sortDir = sort?.dir || "desc";
     const sortParam = `${sortField}:${sortDir}`;
 
     return {
@@ -306,6 +659,13 @@ export default function PNRTable({
       status,
       assignedTo,
       pnr,
+      brand,
+      gds,
+      pcc,
+      documentType,
+      passengerNames,
+      departureDateFrom,
+      departureDateTo,
       errorDetails,
       lastUpdatedFrom,
       lastUpdatedTo,
@@ -313,26 +673,63 @@ export default function PNRTable({
       queueArrivalTo,
       ttlFrom,
       ttlTo,
-      sort: sortParam,
+      // sort: sortParam,
     };
   };
 
-  const fetchPnrList = async () => {
-    setApiLoading(true);
-    setApiError("");
+  const applyLocalSecondarySort = (rowsToSort) => {
+    // Always enforce:
+    // 1) Status priority: error -> human -> processing -> processed
+    // 2) Queue Arrival desc (latest first)
+    // 3) Departure Date desc
+    // Tie-breaker: PNR
+    return [...rowsToSort].sort((a, b) => {
+      const ra = STATUS_RANK[a.status] ?? 99;
+      const rb = STATUS_RANK[b.status] ?? 99;
+      if (ra !== rb) return ra - rb;
+
+      const qa = a.queueArrival
+        ? new Date(a.queueArrival).getTime()
+        : -Infinity;
+      const qb = b.queueArrival
+        ? new Date(b.queueArrival).getTime()
+        : -Infinity;
+      if (qa !== qb) return qb - qa;
+
+      const d = compareDatesDesc(a.departureDate, b.departureDate);
+      if (d !== 0) return d;
+
+      return String(a.pnr ?? "").localeCompare(String(b.pnr ?? ""));
+    });
+  };
+
+  const fetchPnrList = async ({ silent = false, reason = "manual" } = {}) => {
+    // Avoid overlapping calls
+    if (inFlightRef.current) return;
+
+    const seq = ++requestSeqRef.current;
+    inFlightRef.current = true;
+
+    if (!silent) {
+      setApiLoading(true);
+      setApiError("");
+    }
 
     try {
       const query = buildQueryParams();
       const res = await getPnrQueueList(query);
-
-      console.log("HELLO");
-      console.log("RES: ", res);
-
       const data = res?.data ?? res;
+
+      // Safety: ignore out-of-order responses
+      if (seq !== requestSeqRef.current) {
+        inFlightRef.current = false;
+        return;
+      }
 
       const items = Array.isArray(data?.items) ? data.items : [];
       let mapped = items.map(mapApiItemToRow);
 
+      // Existing multi-assignee client-side logic (kept)
       if (
         Array.isArray(colFilters.assignedNames) &&
         colFilters.assignedNames.length > 1
@@ -344,8 +741,7 @@ export default function PNRTable({
 
       if (
         colFilters.includeUnassigned &&
-        Array.isArray(colFilters.assignedNames) &&
-        colFilters.assignedNames.length > 0
+        Array.isArray(colFilters.assignedNames)
       ) {
         mapped = mapped.filter((r) => {
           const assignedStr = String(r.assigned ?? "").trim();
@@ -354,65 +750,145 @@ export default function PNRTable({
             assignedStr.length === 0 ||
             normalized === "unassigned" ||
             assignedStr === "-";
-
           if (isUnassigned) return true;
+          if (colFilters.assignedNames.length === 0) return true;
           return colFilters.assignedNames.some((name) =>
             includesCI(assignedStr, name),
           );
         });
       }
 
-      setApiRows(mapped);
+      mapped = applyLocalSecondarySort(mapped);
 
-      setApiMeta({
+      const nextMeta = {
         page: typeof data?.page === "number" ? data.page : query.page,
         pageSize:
           typeof data?.pageSize === "number" ? data.pageSize : query.pageSize,
         totalRecords:
           typeof data?.totalRecords === "number" ? data.totalRecords : 0,
         totalPages: typeof data?.totalPages === "number" ? data.totalPages : 0,
-      });
+      };
 
+      //  Diff rows/meta BEFORE updating state
+      const prevRows = apiRowsRef.current;
+      const prevMeta = apiMetaRef.current;
+
+      const { merged, changed: rowsChanged } = mergeRowsPreserveIdentity(
+        prevRows,
+        mapped,
+      );
+      const metaChanged = !isSameMeta(prevMeta, nextMeta);
+
+      //  Only update state if necessary
+      if (rowsChanged) setApiRows(merged);
+      if (metaChanged) setApiMeta(nextMeta);
+
+      // Always clear error on success (even for silent polling)
+      setApiError("");
+
+      // Keep local pageSize in sync if backend returns different value
       if (typeof data?.pageSize === "number" && data.pageSize !== pageSize) {
         setPageSize(data.pageSize);
       }
-      if (typeof data?.page === "number" && data.page !== page) {
+
+      // Clamp page if totalPages shrank (important for polling updates)
+      const safeTotalPages = Math.max(1, nextMeta.totalPages || 1);
+      if (page > safeTotalPages) {
+        setPage(safeTotalPages);
+      } else if (typeof data?.page === "number" && data.page !== page) {
         setPage(data.page);
+      }
+
+      //  Notify parent only if something changed (prevents chip-count churn)
+      if (rowsChanged || metaChanged) {
+        try {
+          onRowsChange?.({
+            rows: rowsChanged ? merged : prevRows,
+            meta: nextMeta,
+          });
+        } catch {
+          // no-op
+        }
       }
     } catch (e) {
       console.error("Fetch PNR list failed:", e);
+
+      // For polling: don't wipe table contents; just set error text
       setApiError(e?.message || "Failed to load PNR list.");
-      setApiRows([]);
-      setApiMeta((m) => ({ ...m, totalRecords: 0, totalPages: 0 }));
+
+      if (!silent) {
+        // Original behavior for non-silent fetches
+        setApiRows([]);
+        setApiMeta((m) => ({ ...m, totalRecords: 0, totalPages: 0 }));
+
+        try {
+          onRowsChange?.({
+            rows: [],
+            meta: { page, pageSize, totalRecords: 0, totalPages: 0 },
+          });
+        } catch {
+          // no-op
+        }
+      }
     } finally {
-      setApiLoading(false);
+      inFlightRef.current = false;
+      if (!silent) setApiLoading(false);
     }
   };
 
   // Reset to page 1 when filters/sort/search/pageSize change
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, colFilters, sort, pageSize]);
+  }, [search, statusFilter, colFilters, sort, pageSize, assignedToOverride]);
 
-  // Debounced fetch on relevant changes
+  // Debounced fetch on relevant changes (normal fetch - not silent)
   useEffect(() => {
     const t = setTimeout(() => {
-      fetchPnrList();
+      fetchPnrList({ silent: false, reason: "params-change" });
     }, 250);
 
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, sort, statusFilter, search, colFilters]);
+  }, [
+    page,
+    pageSize,
+    sort,
+    statusFilter,
+    search,
+    colFilters,
+    assignedToOverride,
+  ]);
 
-  const totalRecords = apiMeta.totalRecords;
+  //  Poll for updates every 30 seconds
+  const fetchRef = useRef(fetchPnrList);
+  useEffect(() => {
+    fetchRef.current = fetchPnrList;
+  });
+
+  useEffect(() => {
+    if (!POLL_INTERVAL_MS || POLL_INTERVAL_MS <= 0) return;
+
+    const id = setInterval(() => {
+      // Skip polling when tab not visible
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchRef.current?.({ silent: true, reason: "poll" });
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, []);
+
+  const totalRecordsRaw = apiMeta.totalRecords;
   const totalPages = Math.max(1, apiMeta.totalPages || 1);
   const clampedPage = Math.min(page, totalPages);
 
   const pageRows = effectiveRows;
+  // If polling adds rows but the backend meta lags, ensure the footer still reflects the latest count.
+  const displayedMax = (clampedPage - 1) * pageSize + (pageRows?.length || 0);
+  const totalRecords = Math.max(totalRecordsRaw || 0, displayedMax);
 
-  const from = totalRecords === 0 ? 0 : (clampedPage - 1) * pageSize + 1;
+  const from = pageRows.length === 0 ? 0 : (clampedPage - 1) * pageSize + 1;
   const to =
-    totalRecords === 0 ? 0 : Math.min(totalRecords, from + pageRows.length - 1);
+    pageRows.length === 0 ? 0 : (clampedPage - 1) * pageSize + pageRows.length;
 
   const pageNumbers = useMemo(() => {
     const maxButtons = 5;
@@ -432,6 +908,11 @@ export default function PNRTable({
     return map;
   }, [pageRows, clampedPage, pageSize]);
 
+  /**
+   * -----------------------------
+   * TTL local
+   * -----------------------------
+   */
   const [ttlLocalMap, setTtlLocalMap] = useState(() => new Map());
 
   useEffect(() => {
@@ -445,11 +926,7 @@ export default function PNRTable({
     });
   }, [pageRows]);
 
-  const getTTLForRow = (row) => {
-    const local = ttlLocalMap.get(row.pnr);
-    if (local) return local;
-    return row.ttl ?? null;
-  };
+  const getTTLForRow = (row) => ttlLocalMap.get(row.pnr) || row.ttl || null;
 
   const [ttlModal, setTtlModal] = useState({
     open: false,
@@ -475,7 +952,16 @@ export default function PNRTable({
   const closeTTLModal = () =>
     setTtlModal((m) => ({ ...m, open: false, saving: false }));
 
+  /**
+   * -----------------------------
+   * Selection
+   * -----------------------------
+   */
   const [selectedPNRs, setSelectedPNRs] = useState(() => new Set());
+
+  useEffect(() => {
+    selectedPNRsRef.current = selectedPNRs;
+  }, [selectedPNRs]);
 
   useEffect(() => {
     setSelectedPNRs((prev) => {
@@ -490,22 +976,23 @@ export default function PNRTable({
   }, [pageRows]);
 
   const selectedCount = selectedPNRs.size;
-
   const pageSelectablePNRs = pageRows.filter(isSelectable).map((r) => r.pnr);
   const pageSelectableCount = pageSelectablePNRs.length;
+
   const pageSelectedCount = pageSelectablePNRs.reduce(
     (cnt, pnr) => cnt + (selectedPNRs.has(pnr) ? 1 : 0),
     0,
   );
+
   const pageAllSelected =
     pageSelectableCount > 0 && pageSelectedCount === pageSelectableCount;
   const pageSomeSelected = pageSelectedCount > 0 && !pageAllSelected;
 
   const headerCbRef = useRef(null);
+
   useEffect(() => {
-    if (headerCbRef.current) {
+    if (headerCbRef.current)
       headerCbRef.current.indeterminate = pageSomeSelected;
-    }
   }, [pageSomeSelected]);
 
   const toggleRow = (row) => {
@@ -523,21 +1010,97 @@ export default function PNRTable({
     if (pageSelectableCount === 0) return;
     setSelectedPNRs((prev) => {
       const next = new Set(prev);
-      if (pageAllSelected) {
+      if (pageAllSelected)
         pageSelectablePNRs.forEach((pnr) => next.delete(pnr));
-      } else {
-        pageSelectablePNRs.forEach((pnr) => next.add(pnr));
-      }
+      else pageSelectablePNRs.forEach((pnr) => next.add(pnr));
       return next;
     });
   };
 
   const clearSelection = () => setSelectedPNRs(new Set());
 
+  /**
+   * -----------------------------
+   * Assign modal
+   * -----------------------------
+   */
   const [assignOpen, setAssignOpen] = useState(false);
   const [assigning, setAssigning] = useState(false);
 
+  const assignPnrsToAssignee = async (assignee, items) => {
+    // Items: [{ pnr, originalIndex }]
+    const assignedTo = assignee?.name ?? String(assignee?.id ?? "");
+    const assignedBy = getAssignedBy();
+
+    const failures = [];
+
+    // Limit concurrency to avoid flooding API
+    const CONCURRENCY = 5;
+    const queue = [...items];
+
+    const runOne = async (it) => {
+      const pnrId = it.pnr;
+      const row = apiRowsRef.current?.find?.((r) => r.pnr === pnrId);
+
+      const payload = {
+        assignedTo,
+        assignedBy,
+        assignmentReason: "Assign to Ticketer",
+        correlationId: row?.correlationId || makeCorrelationId(),
+        oasisQueueId: row?.oasisQueueId || "testQueueID",
+        queueName: "testQueueName",
+        userId: 1,
+      };
+
+      await patchAssignPnr(pnrId, payload);
+
+      // Apply local UI update for that PNR immediately
+      setApiRows((prev) =>
+        prev.map((r) => (r.pnr === pnrId ? { ...r, assigned: assignedTo } : r)),
+      );
+    };
+
+    const workers = Array.from(
+      { length: Math.min(CONCURRENCY, queue.length) },
+      () =>
+        (async () => {
+          while (queue.length) {
+            const it = queue.shift();
+            if (!it) break;
+            try {
+              await runOne(it);
+            } catch (e) {
+              failures.push({ pnr: it.pnr, error: e });
+            }
+          }
+        })(),
+    );
+
+    await Promise.all(workers);
+
+    // Optional notification hook for parent (kept for compatibility)
+    try {
+      await Promise.resolve(
+        onAssign?.({ assignee, items, assignedTo, assignedBy, failures }),
+      );
+    } catch (_) {
+      // ignore parent callback errors to avoid masking API results
+    }
+
+    if (failures.length) {
+      const list = failures
+        .slice(0, 3)
+        .map((f) => f.pnr)
+        .join(", ");
+      const more = failures.length > 3 ? ` (+${failures.length - 3} more)` : "";
+      throw new Error(
+        `Failed to assign ${failures.length} PNR(s): ${list}${more}`,
+      );
+    }
+  };
+
   const openAssign = () => setAssignOpen(true);
+
   const closeAssign = () => {
     if (!assigning) setAssignOpen(false);
   };
@@ -624,7 +1187,7 @@ export default function PNRTable({
         role="region"
         aria-label="PNR results table"
       >
-        <table className="table min-w-[1500px] bg-white">
+        <table className="table min-w-[2400px] bg-white">
           <thead className="relative z-[60]">
             <tr>
               <ThCheckboxHeader
@@ -664,6 +1227,128 @@ export default function PNRTable({
                 )}
               </ThWithFilter>
 
+              {/* Brand */}
+              <ThWithFilter
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Brand
+                    <FilterToggleButton
+                      open={filterOpen.brand}
+                      active={isFilterActive.brand}
+                      onClick={() => toggleFilterUI("brand")}
+                      label="Brand"
+                    />
+                  </span>
+                }
+                widthClass="w-[180px]"
+                sortKey="brand"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                {filterOpen.brand && (
+                  <div className="mt-1">
+                    <input
+                      className="input h-8 text-xs w-full"
+                      placeholder="Filter brand…"
+                      value={colFilters.brand}
+                      onChange={(e) => updateFilter("brand", e.target.value)}
+                    />
+                  </div>
+                )}
+              </ThWithFilter>
+
+              {/* GDS */}
+              <ThWithFilter
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    GDS
+                    <FilterToggleButton
+                      open={filterOpen.gds}
+                      active={isFilterActive.gds}
+                      onClick={() => toggleFilterUI("gds")}
+                      label="GDS"
+                    />
+                  </span>
+                }
+                widthClass="w-[120px]"
+                sortKey="gds"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                {filterOpen.gds && (
+                  <div className="mt-1">
+                    <input
+                      className="input h-8 text-xs w-full"
+                      placeholder="Filter GDS…"
+                      value={colFilters.gds}
+                      onChange={(e) => updateFilter("gds", e.target.value)}
+                    />
+                  </div>
+                )}
+              </ThWithFilter>
+
+              {/* Store PCC */}
+              <ThWithFilter
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Store PCC
+                    <FilterToggleButton
+                      open={filterOpen.pcc}
+                      active={isFilterActive.pcc}
+                      onClick={() => toggleFilterUI("pcc")}
+                      label="Store PCC"
+                    />
+                  </span>
+                }
+                widthClass="w-[130px]"
+                sortKey="pcc"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                {filterOpen.pcc && (
+                  <div className="mt-1">
+                    <input
+                      className="input h-8 text-xs w-full"
+                      placeholder="Filter PCC…"
+                      value={colFilters.pcc}
+                      onChange={(e) => updateFilter("pcc", e.target.value)}
+                    />
+                  </div>
+                )}
+              </ThWithFilter>
+
+              {/* Document Type */}
+              <ThWithFilter
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Document Type
+                    <FilterToggleButton
+                      open={filterOpen.documentType}
+                      active={isFilterActive.documentType}
+                      onClick={() => toggleFilterUI("documentType")}
+                      label="Document Type"
+                    />
+                  </span>
+                }
+                widthClass="w-[150px]"
+                sortKey="documentType"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                {filterOpen.documentType && (
+                  <div className="mt-1">
+                    <input
+                      className="input h-8 text-xs w-full"
+                      placeholder="Filter document type…"
+                      value={colFilters.documentType}
+                      onChange={(e) =>
+                        updateFilter("documentType", e.target.value)
+                      }
+                    />
+                  </div>
+                )}
+              </ThWithFilter>
+
               {/* Status */}
               <ThWithFilter
                 label={
@@ -696,6 +1381,81 @@ export default function PNRTable({
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+              </ThWithFilter>
+
+              {/* Passenger Names */}
+              <ThWithFilter
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Passenger Names
+                    <FilterToggleButton
+                      open={filterOpen.passengerNames}
+                      active={isFilterActive.passengerNames}
+                      onClick={() => toggleFilterUI("passengerNames")}
+                      label="Passenger Names"
+                    />
+                  </span>
+                }
+                widthClass="w-[260px]"
+                sortKey="passengerNames"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                {filterOpen.passengerNames && (
+                  <div className="mt-1">
+                    <input
+                      className="input h-8 text-xs w-full"
+                      placeholder="Filter passenger…"
+                      value={colFilters.passengerNames}
+                      onChange={(e) =>
+                        updateFilter("passengerNames", e.target.value)
+                      }
+                    />
+                  </div>
+                )}
+              </ThWithFilter>
+
+              {/* Departure Date */}
+              <ThWithFilter
+                label={
+                  <span className="inline-flex items-center gap-1">
+                    Departure Date
+                    <FilterToggleButton
+                      open={filterOpen.departureDate}
+                      active={isFilterActive.departureDate}
+                      onClick={() => toggleFilterUI("departureDate")}
+                      label="Departure Date"
+                    />
+                  </span>
+                }
+                widthClass="w-[170px]"
+                nowrap
+                sortKey="departureDate"
+                sort={sort}
+                onSort={toggleSort}
+              >
+                {filterOpen.departureDate && (
+                  <div className="mt-1 flex gap-1">
+                    <input
+                      type="date"
+                      className="input h-8 text-xs"
+                      value={colFilters.departureDateFrom}
+                      onChange={(e) =>
+                        updateFilter("departureDateFrom", e.target.value)
+                      }
+                      aria-label="Departure date from"
+                    />
+                    <input
+                      type="date"
+                      className="input h-8 text-xs"
+                      value={colFilters.departureDateTo}
+                      onChange={(e) =>
+                        updateFilter("departureDateTo", e.target.value)
+                      }
+                      aria-label="Departure date to"
+                    />
                   </div>
                 )}
               </ThWithFilter>
@@ -927,32 +1687,68 @@ export default function PNRTable({
                     )}
                   </td>
 
+                  {/* PNR */}
                   <td className="w-[140px] font-mono font-semibold text-brand-red whitespace-nowrap border-r border-black/10">
                     {row.pnr}
                   </td>
 
+                  {/* Brand */}
+                  <td className="w-[180px] text-black/80 whitespace-nowrap truncate">
+                    {row.brand || "-"}
+                  </td>
+
+                  {/* GDS */}
+                  <td className="w-[120px] text-black/80 whitespace-nowrap">
+                    {row.gds || "-"}
+                  </td>
+
+                  {/* Store PCC */}
+                  <td className="w-[130px] text-black/80 whitespace-nowrap">
+                    {row.pcc || "-"}
+                  </td>
+
+                  {/* Document Type */}
+                  <td className="w-[150px] text-black/80 whitespace-nowrap">
+                    {row.documentType || "-"}
+                  </td>
+
+                  {/* Status */}
                   <td className="w-[130px]">
                     <button
                       type="button"
                       className="inline-flex items-center"
                       title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
                       onClick={(e) => e.stopPropagation()}
-                      aria-label={`Status: ${row.status}. Stage: ${
-                        row.stage ? String(row.stage) : "—"
-                      }`}
+                      aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
                     >
                       <StatusBadge status={row.status} />
                     </button>
                   </td>
 
+                  {/* Passenger Names */}
+                  <td
+                    className="w-[260px] text-black/80 truncate"
+                    title={row.passengerNames || ""}
+                  >
+                    {row.passengerNames || "-"}
+                  </td>
+
+                  {/* Departure Date */}
+                  <td className="w-[170px] text-black/80 whitespace-nowrap">
+                    {row.departureDate ? toYYYYMMDD(row.departureDate) : "-"}
+                  </td>
+
+                  {/* Last Updated */}
                   <td className="w-[190px] text-black/80 whitespace-nowrap">
                     {row.lastUpdated ? formatDate(row.lastUpdated) : "-"}
                   </td>
 
+                  {/* Queue Arrival */}
                   <td className="w-[190px] text-black/80 whitespace-nowrap">
                     {row.queueArrival ? formatDate(row.queueArrival) : "-"}
                   </td>
 
+                  {/* TTL */}
                   <td className="w-[220px] text-black/80 whitespace-nowrap">
                     <button
                       type="button"
@@ -968,6 +1764,7 @@ export default function PNRTable({
                     </button>
                   </td>
 
+                  {/* Error Details */}
                   <td className="w-[420px] text-black/80">
                     <p>
                       {row.status === "error" ? (
@@ -1002,10 +1799,12 @@ export default function PNRTable({
                     </p>
                   </td>
 
+                  {/* Assigned */}
                   <td className="w-[240px] text-black/80 truncate">
                     {String(row.assigned ?? "").trim() || "-"}
                   </td>
 
+                  {/* Action */}
                   <td className="w-[220px] text-black/80">
                     {row.action ?? "NA"}
                   </td>
@@ -1015,7 +1814,7 @@ export default function PNRTable({
 
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={9} className="text-center py-6 text-black/60">
+                <td colSpan={15} className="text-center py-6 text-black/60">
                   {apiLoading ? "Loading..." : "No matches"}
                 </td>
               </tr>
@@ -1048,7 +1847,7 @@ export default function PNRTable({
 
         <div className="text-sm text-black/70">
           Showing <span className="font-medium">{from}</span>–{" "}
-          <span className="font-medium">{to}</span> of{" "}
+          <span className="font-medium">{to}</span>{" "}
           <span className="font-medium">{totalRecords}</span> entries • Page{" "}
           <span className="font-medium">{clampedPage}</span> of{" "}
           <span className="font-medium">{totalPages}</span>
@@ -1098,11 +1897,14 @@ export default function PNRTable({
         onConfirm={async ({ mode, selectedAssigneeIds, distribution }) => {
           try {
             if (assigning) return;
+
             const selectedPNRsArr = Array.from(selectedPNRs);
+
             if (!selectedPNRsArr.length) {
               showToast("No rows selected", { type: "info" });
               return;
             }
+
             if (!selectedAssigneeIds?.length) {
               showToast("Choose at least one assignee", { type: "info" });
               return;
@@ -1119,7 +1921,6 @@ export default function PNRTable({
                   ),
                 };
 
-            // Group by assignee and call onAssign
             const byAssignee = selectedPNRsArr.reduce((acc, pnr, idx) => {
               const assigneeId = dist.order[idx];
               const originalIndex = pnrToOriginalIndex.get(pnr);
@@ -1131,20 +1932,24 @@ export default function PNRTable({
 
             for (const [assigneeId, items] of Object.entries(byAssignee)) {
               if (!items.length) continue;
+
               const assignee = assigneeOptions.find(
                 (a) => String(a.id) === String(assigneeId),
               ) || {
                 id: assigneeId,
                 name: String(assigneeId),
               };
-              await Promise.resolve(onAssign?.({ assignee, items }));
+
+              await assignPnrsToAssignee(assignee, items);
             }
 
             const totalAssigned = selectedPNRsArr.length;
+
             const who =
               mode === "all"
                 ? `evenly to all ${assigneeOptions.length} ticketers`
                 : `to ${selectedAssigneeIds.length} selected ticketer(s)`;
+
             showToast(`${totalAssigned} PNR(s) assigned ${who}`, {
               type: "success",
             });
@@ -1173,27 +1978,50 @@ export default function PNRTable({
         }
         onSave={async () => {
           if (!ttlModal.pnr || ttlModal.originalIndex == null) return;
+
           if (!ttlModal.dateStr) {
             showToast("Choose a date first", { type: "info" });
             return;
           }
+
           try {
             setTtlModal((m) => ({ ...m, saving: true }));
+
+            const ttlUtc = ttlInputToUtcIso(ttlModal.dateStr);
+            if (!ttlUtc) {
+              showToast("Invalid TTL date", { type: "error" });
+              setTtlModal((m) => ({ ...m, saving: false }));
+              return;
+            }
+
+            // Call the new Set TLL endpoint
+            await patchTtlPnr(ttlModal.pnr, ttlUtc);
+
+            // Backward compatibility: still notify parent if provided
             const payload = {
               pnr: ttlModal.pnr,
               originalIndex: ttlModal.originalIndex,
               ttl: ttlModal.dateStr,
+              ttlUtc,
             };
 
-            await Promise.resolve(onUpdateTTL?.(payload));
+            try {
+              await Promise.resolve(onUpdateTTL?.(payload));
+            } catch (cbErr) {
+              // Do not fail the operation if parent callback throws
+              console.warn("onUpdateTTL callback failed:", cbErr);
+            }
 
             setTtlLocalMap((prev) => {
               const next = new Map(prev);
-              next.set(ttlModal.pnr, ttlModal.dateStr);
+              next.set(ttlModal.pnr, ttlUtc);
               return next;
             });
 
-            showToast(`TTL saved for ${ttlModal.pnr}`, { type: "success" });
+            // Refresh list silently to keep row data in sync (without resetting UI state)
+            fetchPnrList?.({ silent: true, reason: "ttl-updated" });
+
+            showToast(`TLL updated for ${ttlModal.pnr}`, { type: "success" });
             closeTTLModal();
           } catch (e) {
             console.error("Save TTL failed:", e);
