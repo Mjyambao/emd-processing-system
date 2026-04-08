@@ -441,11 +441,25 @@ export default function PNRTable({
 
   const effectiveRows = apiRows;
 
+  const filteredRows = useMemo(() => {
+    // --- MY QUEUE STRICT RULE ---
+    if (assignedToOverride && loggedInUserName) {
+      return effectiveRows.filter(
+        (r) =>
+          r.assigned === loggedInUserName &&
+          (r.status === "error" || r.status === "human"),
+      );
+    }
+
+    // --- ALL QUEUE (NO EXTRA FILTERING) ---
+    return effectiveRows;
+  }, [effectiveRows, assignedToOverride, loggedInUserName]);
+
   const statusOptions = useMemo(() => {
-    const set = new Set(effectiveRows.map((r) => r.status).filter(Boolean));
+    const set = new Set(filteredRows.map((r) => r.status).filter(Boolean));
     const opts = Array.from(set);
     return opts.length ? opts : ["processed", "processing", "error", "human"];
-  }, [effectiveRows]);
+  }, [filteredRows]);
 
   const assigneeOptions = assignees.length
     ? assignees
@@ -464,9 +478,9 @@ export default function PNRTable({
   /**
    * --------
    *  Polling
-   * -------_
+   * --------
    */
-  const POLL_INTERVAL_MS = 60_000; //miliseconds (1 mins)
+  const POLL_INTERVAL_MS = 120_000; //miliseconds (2 mins)
 
   // Latest snapshots for diffing
   const apiRowsRef = useRef([]);
@@ -881,7 +895,7 @@ export default function PNRTable({
   const totalPages = Math.max(1, apiMeta.totalPages || 1);
   const clampedPage = Math.min(page, totalPages);
 
-  const pageRows = effectiveRows;
+  const pageRows = filteredRows;
   // If polling adds rows but the backend meta lags, ensure the footer still reflects the latest count.
   const displayedMax = (clampedPage - 1) * pageSize + (pageRows?.length || 0);
   const totalRecords = Math.max(totalRecordsRaw || 0, displayedMax);

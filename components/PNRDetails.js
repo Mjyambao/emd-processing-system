@@ -311,6 +311,12 @@ function buildBuildAeUrl(pnrId) {
   const path = `/api/v1/pnrs/${id}/build-ae`;
   return API_BASE ? `${API_BASE}${path}` : path;
 }
+// Process PNR API
+function buildProcessPnrUrl(pnrId) {
+  const id = encodeURIComponent(pnrId ?? "");
+  const path = `/api/v1/pnrs/${id}/process`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
 
 async function postBuildAE(pnrId, payload, { signal } = {}) {
   const url = buildBuildAeUrl(pnrId);
@@ -332,6 +338,32 @@ async function postBuildAE(pnrId, payload, { signal } = {}) {
     throw err;
   }
 
+  const txt = await res.text().catch(() => "");
+  try {
+    return txt ? JSON.parse(txt) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function postProcessPNR(pnrId, payload, { signal } = {}) {
+  const url = buildProcessPnrUrl(pnrId);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload ?? {}),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const err = new Error(
+      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
   const txt = await res.text().catch(() => "");
   try {
     return txt ? JSON.parse(txt) : {};
@@ -909,7 +941,7 @@ export default function PNRDetails({
           });
         } else {
           const common = {
-            pnr: selected.pnr,
+            pnr: pnrId,
             bookingId: "1SXXX1A2B3C4D",
             isTicketed: true,
             agencyIata: "99119911",
@@ -1168,20 +1200,43 @@ export default function PNRDetails({
   async function processPNR() {
     if (!allEmdsBuilt) return;
 
+    const pnrId = selected?.pnr ?? pnrDetails?.pnr;
+    if (!pnrId) {
+      const msg = "Cannot process PNR: missing PNR Id";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+
     setIsProcessSubmitting(true);
     try {
-      // retain existing simulated latency
-      await new Promise((r) => setTimeout(r, 700));
+      // Call API: /api/v1/pnrs/{pnrId}/process
+      // Keep payload empty for now (endpoint contract may not require a body).
+      await postProcessPNR(pnrId, {});
 
+      // Update local UI status immediately on success
+      setPnrDetails((prev) => {
+        if (!prev) return prev;
+        const next = deepClone(prev);
+        next.status = "Processing";
+        if (Array.isArray(next.passengers)) {
+          next.passengers = next.passengers.map((p) => ({
+            ...p,
+            status: "Processing",
+          }));
+        }
+        return next;
+      });
+
+      // retain existing callback behavior
       callbacks.processPNR({
-        pnr: selected.pnr,
+        pnr: pnrId,
         passengers: pnrDetails.passengers,
       });
 
       const first = pnrDetails.passengers?.[0]?.emds?.[0];
       if (first && onApprove) {
         onApprove({
-          pnr: selected.pnr,
+          pnr: pnrId,
           rfic: first.rfic,
           rfisc: first.rfisc,
           emdDesc: first.emdDesc,
@@ -1190,8 +1245,8 @@ export default function PNRDetails({
 
       showToast({
         variant: "success",
-        ariaLabel: `PNR ${selected.pnr} processed`,
-        title: `PNR ${selected.pnr} processed`,
+        ariaLabel: `PNR ${pnrId} processed`,
+        title: `PNR ${pnrId} processed`,
       });
     } finally {
       setIsProcessSubmitting(false);
@@ -1375,7 +1430,7 @@ export default function PNRDetails({
         </div>
       </div>
 
-      {/* Error Details panel */}
+      {/* Error Details panel
       {showErrorPanel && (
         <FadeIn className="mt-3">
           <div className="p-2 rounded border border-red-200 bg-red-50 text-[13px]">
@@ -1388,7 +1443,7 @@ export default function PNRDetails({
             </div>
           </div>
         </FadeIn>
-      )}
+      )} */}
 
       {/* Body */}
       {isDetailsLoading ? (
@@ -2059,7 +2114,7 @@ export default function PNRDetails({
                                               </button>
                                             </div>
 
-                                            {emd.adm.submitted && (
+                                            {/* {emd.adm.submitted && (
                                               <div className="text-green-700 text-[12px]">
                                                 <i className="fa-regular fa-circle-check mr-1"></i>
                                                 Feedback submitted (Is ADM:{" "}
@@ -2069,7 +2124,7 @@ export default function PNRDetails({
                                                   : ""}
                                                 )
                                               </div>
-                                            )}
+                                            )} */}
                                           </div>
                                         </div>
                                       </FadeIn>

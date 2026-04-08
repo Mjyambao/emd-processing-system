@@ -261,7 +261,7 @@ export default function Dashboard() {
             >
               <i className="fa-solid fa-layer-group mr-1"></i>
               All Queue{" "}
-              <span className="ml-1 text-black/50">({allCounts.total})</span>
+              {/* <span className="ml-1 text-black/50">({allCounts.total})</span> */}
             </button>
 
             <button
@@ -278,7 +278,7 @@ export default function Dashboard() {
             >
               <i className="fa-solid fa-user-check mr-1"></i>
               My Queues{" "}
-              <span className="ml-1 text-black/50">({myCounts.total})</span>
+              {/* <span className="ml-1 text-black/50">({myCounts.total})</span> */}
             </button>
 
             <button
@@ -384,7 +384,7 @@ export default function Dashboard() {
             />
 
             <PNRDetails
-						  loggedInUserName={loggedInName}
+              loggedInUserName={loggedInName}
               selected={selected}
               onApprove={({ pnr }) => {
                 setRows((list) =>
