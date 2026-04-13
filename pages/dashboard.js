@@ -13,7 +13,7 @@ import ReportsModule from "../components/ReportsModule";
 import AIAgentsDockPortal from "../components/AIAgentsDockPortal";
 
 // Utils
-import { initialPnrs, refreshStatuses } from "../lib/sampleData";
+import { refreshStatuses } from "../lib/sampleData";
 import { generateReportSampleData } from "../lib/reportSampleData";
 import { requireAuth } from "../lib/auth";
 
@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState(TABS.ALL);
 
   // All Queue (legacy local sample state kept for other UI behaviors)
-  const [allRows, setAllRows] = useState(initialPnrs);
+  const [allRows, setAllRows] = useState([]);
   const [allSearch, setAllSearch] = useState("");
   const [allSelected, setAllSelected] = useState(null);
   const [allRefreshing, setAllRefreshing] = useState(false);
@@ -40,30 +40,7 @@ export default function Dashboard() {
   );
 
   // My Queue (legacy local sample state kept for other UI behaviors)
-  const [myRows, setMyRows] = useState([
-    {
-      pnr: "MY987B",
-      passenger: "James Doe",
-      status: "human",
-      action: "Review SSR vs seat",
-      stage: "EMD Mask Checking",
-      error: "",
-      assigned: "Boden Woolstencroft",
-      lastUpdated: "03/02/2026 09:05:19",
-      queueArrival: "03/02/2026 08:43:19",
-    },
-    {
-      pnr: "MY777C",
-      passenger: "Clara Smith",
-      status: "error",
-      action: "Retry deal match",
-      stage: "Deal Matching",
-      error: "No applicable deal table found",
-      assigned: "Boden Woolstencroft",
-      lastUpdated: "03/02/2026 09:05:19",
-      queueArrival: "03/02/2026 08:43:19",
-    },
-  ]);
+  const [myRows, setMyRows] = useState([]);
   const [mySearch, setMySearch] = useState("");
   const [mySelected, setMySelected] = useState(null);
   const [myRefreshing, setMyRefreshing] = useState(false);
