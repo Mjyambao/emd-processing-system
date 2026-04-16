@@ -1145,9 +1145,10 @@ export default function PNRDetails({
     const requestedBy = loggedInUserId || "";
 
     setIsBuildSubmitting(true);
+
     try {
       const payload = {
-        correlation_id: "3567b47f-9e3f-48df-8409-79f78b36250d",
+        correlation_id: selected?.correlationId || "",
         emd_item_id: emdItemId,
         rfic: emd?.rfic || "",
         rfisc: emd?.rfisc || "",
