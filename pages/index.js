@@ -4,7 +4,7 @@ import { VALID_USER } from "../lib/auth";
 // import { login } from "@/api/userApi";
 
 export default function Login() {
-  const [email, setEmail] = useState("guestUser@accenture.com");
+  const [email, setEmail] = useState("guestuser@accenture.com");
   const [password, setPassword] = useState("1234");
   const [error, setError] = useState("");
   const router = useRouter();
@@ -51,7 +51,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="guestUser@accenture.com"
+              placeholder="guestuser@accenture.com"
             />
           </div>
           <div>
@@ -73,7 +73,7 @@ export default function Login() {
           </button>
         </form>
 
-        {/* <p className="mt-4 text-xs text-black/50">Use <span className="font-mono">guestUser@accenture.com / 1234</span></p> */}
+        {/* <p className="mt-4 text-xs text-black/50">Use <span className="font-mono">guestuser@accenture.com / 1234</span></p> */}
       </div>
     </main>
   );
