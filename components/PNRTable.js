@@ -464,16 +464,12 @@ export default function PNRTable({
   const assigneeOptions = assignees.length
     ? assignees
     : [
-        { id: "u1", name: "Susan Wan Chen" },
-        { id: "u2", name: "Boden Woolstencroft" },
+        { id: "u1", name: "Ticketer 1" },
+        { id: "u2", name: "Guest User" },
         { id: "u3", name: "Matt Quiin" },
       ];
 
-  const FILTER_ASSIGNEES = [
-    "Susan Wan Chen",
-    "Boden Woolstencroft",
-    "Matt Quiin",
-  ];
+  const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Matt Quiin"];
 
   /**
    * --------
@@ -687,7 +683,7 @@ export default function PNRTable({
       queueArrivalTo,
       ttlFrom,
       ttlTo,
-      // sort: sortParam,
+      sort: sortParam,
     };
   };
 
@@ -1828,8 +1824,8 @@ export default function PNRTable({
 
             {pageRows.length === 0 && (
               <tr>
-                <td colSpan={15} className="text-center py-6 text-black/60">
-                  {apiLoading ? "Loading..." : "No matches"}
+                <td colSpan={15} className="text-left py-6 text-black/60">
+                  {apiLoading ? "Loading..." : "No available data."}
                 </td>
               </tr>
             )}

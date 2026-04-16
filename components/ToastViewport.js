@@ -20,11 +20,11 @@ function ToastViewport({ toasts, onDismiss }) {
         >
           <span className="mt-[2px]">
             {t.type === "error" ? (
-              <i class="fa-regular fa-circle-xmark"></i>
+              <i className="fa-regular fa-circle-xmark"></i>
             ) : t.type === "info" ? (
-              <i class="fa-solid fa-circle-info"></i>
+              <i className="fa-solid fa-circle-info"></i>
             ) : (
-              <i class="fa-solid fa-circle-check"></i>
+              <i className="fa-solid fa-circle-check"></i>
             )}
           </span>
           <div className="flex-1">{t.message}</div>

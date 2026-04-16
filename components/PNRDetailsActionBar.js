@@ -10,10 +10,7 @@ export default function PNRDetailsActionBar({
   const [open, setOpen] = useState(false);
   const [oasisOpen, setOasisOpen] = useState(false);
 
-  const names = useMemo(
-    () => ["Susan Wan Chen", "Boden Woolstencroft", "Matt Quiin"],
-    [],
-  );
+  const names = useMemo(() => ["Ticketer 1", "Guest User", "Matt Quiin"], []);
 
   return (
     <div>

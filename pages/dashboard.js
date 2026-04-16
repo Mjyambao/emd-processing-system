@@ -199,6 +199,7 @@ export default function Dashboard() {
       ? JSON.parse(localStorage.getItem("session") || "{}")
       : {};
   const loggedInName = session?.name || session?.user?.name || "";
+  const loggedInUserId = session?.userId || session?.user?.name || "";
 
   return (
     <div className="min-h-screen">
@@ -341,9 +342,9 @@ export default function Dashboard() {
               killingSet={killing}
               retryingSet={retrying}
               assignees={[
-                { id: "t-01", name: "Susan Wan Chen" },
-                { id: "t-02", name: "Boden Woolstencroft" },
-                { id: "t-03", name: "Matt Quinn" },
+                { id: "t-01", name: "Ticketer 1" },
+                { id: "t-02", name: "Guest User" },
+                { id: "t-03", name: "Ticketer 2" },
               ]}
               onAssign={({ assignee, items }) => {
                 console.log("Assign to:", assignee, "Items:", items);
@@ -361,7 +362,7 @@ export default function Dashboard() {
             />
 
             <PNRDetails
-              loggedInUserName={loggedInName}
+              loggedInUserId={loggedInUserId}
               selected={selected}
               onApprove={({ pnr }) => {
                 setRows((list) =>

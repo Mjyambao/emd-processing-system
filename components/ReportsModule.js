@@ -37,6 +37,80 @@ const COLORS = {
 };
 
 // --------------------------------------------------
+// Sample data pools
+// --------------------------------------------------
+const AIRLINE_NAMES = [
+  "Philippine Airlines",
+  "Cebu Pacific",
+  "AirAsia",
+  "Singapore Airlines",
+  "Emirates",
+  "Qatar Airways",
+  "Cathay Pacific",
+  "Thai Airways",
+];
+
+const DOCUMENT_TYPES = ["EMD-A", "EMD-S"];
+
+const TICKETER_SAMPLE_NAMES = ["Ticketer ABC", "Ticketer DEF", "Ticketer GHI"];
+
+const CORRELATION_ID_POOL = [
+  "COR-2024-001-ALPHA",
+  "COR-2024-002-BRAVO",
+  "COR-2024-003-CHARLIE",
+  "COR-2024-004-DELTA",
+  "COR-2024-005-ECHO",
+  "COR-2024-006-FOXTROT",
+  "COR-2024-007-GOLF",
+  "COR-2024-008-HOTEL",
+];
+
+// Detailed error messages for trend analysis (Medium priority #5)
+const DETAILED_ERROR_MESSAGES = [
+  "SSR mismatch: DOCS element value differs between PNR and EMD issuance request — RFIC code 'E' was expected but 'A' was supplied. Verify fare basis alignment before reprocessing.",
+  "Fare calculation discrepancy: Base fare USD 412.00 does not reconcile with stored fare component. Tax breakdown includes YQ/YR surcharge applied post-ticketing outside fare rules.",
+  "Segment sequence error: EMD coupon count (3) exceeds associated ticket coupon count (2). Re-sequence itinerary legs and reissue EMD with corrected coupon association.",
+  "Tax code conflict: XF tax applied twice due to duplicate connection point detection. Airport code LAX appears in both segment 2 and segment 3 within same connection window.",
+  "Ticket number format error: Conjunctive ticket range [001-2345678901/02] not found in GDS history. Possible mid-office sync failure — manual void and reissue recommended.",
+  "RFISC lookup failure: RFISC 0B5 not found in active fee schedule for carrier PR. Fee schedule effective date mismatch — current schedule effective 01-JAN-2024, record references 01-DEC-2023.",
+  "EMD descriptor mismatch: EMD description 'PREPAID BAGGAGE' does not match RFISC 0C1 descriptor 'EXCESS BAGGAGE'. Update RFISC mapping table or correct the EMD sub-code.",
+  "Pricing override rejected: Manual override of AUD 88.00 exceeds permitted deviation threshold (±10%) from automated fare calculation AUD 79.50. Supervisor approval required.",
+];
+
+const FEEDBACK_TEXTS = [
+  "The AI suggested the wrong RFIC for this ancillary service. The correct code should be 'C' for seat upgrade, not 'A'. Please review the RFIC mapping table.",
+  "Processing time was unusually long due to a GDS timeout on segment 3. The EMD was eventually issued correctly but the delay caused an SLA breach.",
+  "Human correction was needed because the AI assigned EMD-S when it should have been EMD-A. The associated ticket coupon was present in the PNR.",
+  "RFISC 0B1 was used but the fare rule explicitly requires 0C2 for this carrier-route combination. Mapping needs to be updated in the configuration.",
+  "The AI recommendation was correct but the ticketer overrode it unnecessarily. Training session recommended for this agent.",
+  "ADM issued by airline due to incorrect RFISC at time of original issuance. The AI model was not yet trained on this airline's new fee schedule.",
+  "Feedback from airline: EMD voided and reissued within the same PNR — original sequence number was retained causing a duplicate record in the BSP file.",
+  "SLA breach due to queue congestion during peak hours. Item sat unassigned for 47 minutes before pickup. Recommend auto-escalation rule after 30 minutes.",
+];
+
+const AI_RFIC_POOL = ["A", "B", "C", "D", "E", "F"];
+const AI_RFISC_POOL = ["0B1", "0B5", "0C1", "0C2", "0D1", "0E5"];
+const AI_EMD_DESC_POOL = [
+  "PREPAID BAGGAGE",
+  "EXCESS BAGGAGE",
+  "SEAT UPGRADE",
+  "LOUNGE ACCESS",
+  "PRIORITY BOARDING",
+  "MEAL SELECTION",
+];
+
+const RESOLUTION_STATUSES = ["Resolved", "Open"];
+
+// Stage processing time breakdown pools (Low priority #1)
+const STAGE_TIME_POOL = {
+  Triage: [1, 2, 3, 4, 5],
+  "Mask Check": [1, 2, 3, 4, 5],
+  "Deal Matching": [1, 2, 3, 4, 5],
+  Issuance: [1, 2, 3, 4, 5],
+  Invoicing: [1, 2, 3, 4, 5],
+};
+
+// --------------------------------------------------
 // Drill‑down modal configuration
 // --------------------------------------------------
 const MODAL_CONFIG = {
@@ -51,6 +125,11 @@ const MODAL_CONFIG = {
       "assigned",
       "stage",
       "createdAt",
+      "triageTime",
+      "maskCheckTime",
+      "dealMatchingTime",
+      "issuanceTime",
+      "invoicingTime",
       "completionMinutes",
       "slaMinutes",
     ],
@@ -94,6 +173,11 @@ const MODAL_CONFIG = {
       "assigned",
       "stage",
       "createdAt",
+      "triageTime",
+      "maskCheckTime",
+      "dealMatchingTime",
+      "issuanceTime",
+      "invoicingTime",
       "completionMinutes",
       "slaMinutes",
     ],
@@ -166,6 +250,30 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
     ),
   };
 
+  // HIGH PRIORITY #1 — Airline column for all modals
+  const airlineCol = {
+    key: "airline",
+    header: "Airline",
+    render: (r) => r.airline || "—",
+  };
+
+  // MEDIUM PRIORITY #1 — Document Type column
+  const documentTypeCol = {
+    key: "documentType",
+    header: "Document Type",
+    render: (r) => (
+      <span
+        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+          r.documentType === "EMD-A"
+            ? "bg-blue-100 text-blue-700"
+            : "bg-purple-100 text-purple-700"
+        }`}
+      >
+        {r.documentType || "—"}
+      </span>
+    ),
+  };
+
   const statusCol = {
     key: "status",
     header: "Status",
@@ -192,7 +300,11 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
   const errorClassCol = {
     key: "errorClass",
     header: "Error Details",
-    render: (r) => r.errorClass || "—",
+    render: (r) => (
+      <span title={r.errorClass || ""} className="block max-w-xs truncate">
+        {r.errorClass || "—"}
+      </span>
+    ),
   };
   const completionCol = {
     key: "completionMinutes",
@@ -204,6 +316,34 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
     header: "SLA",
     render: (r) => minutesToHrs(r.slaMinutes),
   };
+
+  // Avg completion time stage breakdown columns (minutes)
+  const triageTimeCol = {
+    key: "triageTime",
+    header: "Triage",
+    render: (r) => (r.triageTime != null ? `${r.triageTime}m` : "—"),
+  };
+  const maskCheckTimeCol = {
+    key: "maskCheckTime",
+    header: "Mask Check",
+    render: (r) => (r.maskCheckTime != null ? `${r.maskCheckTime}m` : "—"),
+  };
+  const dealMatchingTimeCol = {
+    key: "dealMatchingTime",
+    header: "Deal Matching",
+    render: (r) =>
+      r.dealMatchingTime != null ? `${r.dealMatchingTime}m` : "—",
+  };
+  const issuanceTimeCol = {
+    key: "issuanceTime",
+    header: "Issuance",
+    render: (r) => (r.issuanceTime != null ? `${r.issuanceTime}m` : "—"),
+  };
+  const invoicingTimeCol = {
+    key: "invoicingTime",
+    header: "Invoicing",
+    render: (r) => (r.invoicingTime != null ? `${r.invoicingTime}m` : "—"),
+  };
   const admCol = {
     key: "adm",
     header: "Is ADM?",
@@ -213,17 +353,66 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
       </span>
     ),
   };
+
+  // LOW PRIORITY #3 — Feedback column with drillable text
   const feedbackCol = {
     key: "feedback",
     header: "Feedback",
-    render: (r) => (
-      <span
-        className={r.feedback ? "text-yellow-600 font-medium" : "text-black/50"}
-      >
-        {r.feedback ? "Yes" : "No"}
-      </span>
-    ),
+    render: (r) =>
+      r.feedbackText ? (
+        <span
+          title={r.feedbackText}
+          className="block max-w-[220px] cursor-help truncate text-yellow-700 underline decoration-dotted"
+        >
+          {r.feedbackText}
+        </span>
+      ) : (
+        <span className="text-black/40">—</span>
+      ),
   };
+
+  // MEDIUM PRIORITY #3 — Exceptions: SLA vs ADM type column
+  const exceptionTypeCol = {
+    key: "exceptionType",
+    header: "Exception Type",
+    render: (r) => {
+      const type = r.adm ? "ADM" : r.slaBreached ? "SLA Breach" : "Other";
+      const cls =
+        type === "ADM"
+          ? "bg-red-100 text-red-700"
+          : type === "SLA Breach"
+            ? "bg-yellow-100 text-yellow-700"
+            : "bg-gray-100 text-gray-600";
+      return (
+        <span
+          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
+        >
+          {type}
+        </span>
+      );
+    },
+  };
+
+  // HIGH PRIORITY #3 — SLA columns for Exceptions / Error Rate
+  const slaStartTimeCol = {
+    key: "slaStartTime",
+    header: "SLA Start Time",
+    render: (r) =>
+      r.slaStartTime ? new Date(r.slaStartTime).toLocaleString() : "—",
+  };
+  const processingTimeCol = {
+    key: "processingMinutes",
+    header: "Processing Time",
+    render: (r) =>
+      r.processingMinutes != null ? `${r.processingMinutes}m` : "—",
+  };
+  const completionTimeCol = {
+    key: "completionTimeAt",
+    header: "Completion Time",
+    render: (r) =>
+      r.completionTimeAt ? new Date(r.completionTimeAt).toLocaleString() : "—",
+  };
+
   const isHumanCorrectedCol = {
     key: "isHumanCorrected",
     header: "Is Human Corrected?",
@@ -242,8 +431,103 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
   const assignedHumanCorrectedCol = {
     key: "assigned",
     header: "Assigned To",
-    render: (r) => (r.isHumanCorrected ? r.assigned || "—" : "-"),
+    render: (r) => (
+      <span className={r.isHumanCorrected ? "text-black" : "text-black/50"}>
+        {r.assigned ?? "—"}
+      </span>
+    ),
   };
+
+  // HIGH PRIORITY #2 — AI-suggested columns for AI vs Human modal
+  const aiRficCol = {
+    key: "aiRFIC",
+    header: "AI-suggested RFIC",
+    render: (r) => (
+      <span className="font-mono text-blue-700">{r.aiRFIC || "—"}</span>
+    ),
+  };
+  const aiRfiscCol = {
+    key: "aiRFISC",
+    header: "AI-suggested RFISC",
+    render: (r) => (
+      <span className="font-mono text-blue-700">{r.aiRFISC || "—"}</span>
+    ),
+  };
+  const aiEmdDescCol = {
+    key: "aiEmdDesc",
+    header: "AI-suggested EMD Desc",
+    render: (r) => r.aiEmdDesc || "—",
+  };
+
+  // HIGH PRIORITY #3 (AI modal) — Human corrected value columns
+  const correctedRficCol = {
+    key: "correctedRFIC",
+    header: "Corrected RFIC",
+    render: (r) =>
+      r.isHumanCorrected ? (
+        <span className="font-mono text-orange-700">
+          {r.correctedRFIC || "—"}
+        </span>
+      ) : (
+        <span className="text-black/30">—</span>
+      ),
+  };
+  const correctedRfiscCol = {
+    key: "correctedRFISC",
+    header: "Corrected RFISC",
+    render: (r) =>
+      r.isHumanCorrected ? (
+        <span className="font-mono text-orange-700">
+          {r.correctedRFISC || "—"}
+        </span>
+      ) : (
+        <span className="text-black/30">—</span>
+      ),
+  };
+  const correctedEmdDescCol = {
+    key: "correctedEmdDesc",
+    header: "Corrected EMD Desc",
+    render: (r) =>
+      r.isHumanCorrected ? (
+        <span className="text-orange-700">{r.correctedEmdDesc || "—"}</span>
+      ) : (
+        <span className="text-black/30">—</span>
+      ),
+  };
+
+  // MEDIUM PRIORITY #4 — Correlation ID for Error Rate
+  const correlationIdCol = {
+    key: "correlationId",
+    header: "Correlation ID",
+    render: (r) => (
+      <span className="font-mono text-xs text-black/70">
+        {r.correlationId || "—"}
+      </span>
+    ),
+  };
+
+  // MEDIUM PRIORITY #6 — Resolution Status for Error Rate
+  const resolutionStatusCol = {
+    key: "resolutionStatus",
+    header: "Resolution Status",
+    render: (r) => {
+      const status = r.resolutionStatus;
+      const cls =
+        status === "Resolved"
+          ? "bg-green-100 text-green-700"
+          : "bg-red-100 text-red-700";
+      return status ? (
+        <span
+          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
+        >
+          {status}
+        </span>
+      ) : (
+        <span className="text-black/40">—</span>
+      );
+    },
+  };
+
   const accuracyCol = {
     key: "llmAccuracy",
     header: "Accuracy",
@@ -274,6 +558,8 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
   const configs = {
     Throughput: [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
@@ -282,66 +568,116 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
     ],
     "Avg Completion Time": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
       createdAtCol,
+      triageTimeCol,
+      maskCheckTimeCol,
+      dealMatchingTimeCol,
+      issuanceTimeCol,
+      invoicingTimeCol,
       completionCol,
       slaCol,
     ],
+    // HIGH PRIORITY #1, #2, #3 + MEDIUM #1, #2 applied to Error Rate
     "Error Rate": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
       createdAtCol,
+      slaStartTimeCol,
+      processingTimeCol,
+      completionTimeCol,
+      correlationIdCol,
       errorClassCol,
+      resolutionStatusCol,
     ],
+    // HIGH PRIORITY #1 + MEDIUM #1, #2, #3 applied to Exceptions
     Exceptions: [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
       createdAtCol,
+      exceptionTypeCol,
       admCol,
+      slaStartTimeCol,
+      processingTimeCol,
+      completionTimeCol,
       feedbackCol,
       errorClassCol,
     ],
     "Throughput over time": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
       createdAtCol,
       errorClassCol,
     ],
+    // HIGH PRIORITY #1, #2, #3 + MEDIUM #1, #2 + MEDIUM #7 (filter labels handled in UI)
     "AI vs Human corrections": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       isHumanCorrectedCol,
       assignedHumanCorrectedCol,
       createdAtCol,
+      aiRficCol,
+      aiRfiscCol,
+      aiEmdDescCol,
+      correctedRficCol,
+      correctedRfiscCol,
+      correctedEmdDescCol,
       completionCol,
     ],
     "AI RFIC/RFISC vs Human corrections": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       isHumanCorrectedCol,
       assignedHumanCorrectedCol,
       createdAtCol,
+      aiRficCol,
+      aiRfiscCol,
+      aiEmdDescCol,
+      correctedRficCol,
+      correctedRfiscCol,
+      correctedEmdDescCol,
       completionCol,
     ],
     "End-to-end completion time": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
       createdAtCol,
+      triageTimeCol,
+      maskCheckTimeCol,
+      dealMatchingTimeCol,
+      issuanceTimeCol,
+      invoicingTimeCol,
       completionCol,
       slaCol,
     ],
     "Assignments to ticketers": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
@@ -350,6 +686,8 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
     ],
     "Error visibility & classification": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
@@ -358,6 +696,8 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
     ],
     "LLM metrics (avg in range)": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       stageCol,
       createdAtCol,
@@ -366,6 +706,8 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
     ],
     "LLM metrics trend over time": [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       stageCol,
       createdAtCol,
@@ -381,6 +723,8 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
   return (
     configs[baseTitle] || [
       pnrCol,
+      airlineCol,
+      documentTypeCol,
       statusCol,
       assignedCol,
       stageCol,
@@ -457,10 +801,34 @@ function uniq(arr) {
   return Array.from(new Set(arr));
 }
 
+// Deterministic helpers for enriching missing modal fields with realistic sample data
+function seedFromStr(s) {
+  const str = String(s ?? "");
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+function pickFromPool(pool, seed) {
+  if (!Array.isArray(pool) || !pool.length) return "";
+  return pool[seed % pool.length];
+}
+function pickIntInRange(min, max, seed) {
+  const span = Math.max(1, max - min + 1);
+  return min + (seed % span);
+}
+
 function buildSampleDetails({ title = "Detail", label = "", value = 0 } = {}) {
   const base = `${title}|${label}|${value}`;
   const seed = base.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const stages = ["Queue", "Extract", "Match", "Validate", "Post", "Complete"];
+  const stages = [
+    "Triage",
+    "EMD Masking",
+    "Deal Matching",
+    "Issue EMD",
+    "Invoicing",
+  ];
   const owners = [
     "Alice Reyes",
     "Ben Santos",
@@ -471,14 +839,7 @@ function buildSampleDetails({ title = "Detail", label = "", value = 0 } = {}) {
     "Grace Lim",
     "Henry Uy",
   ];
-  const errorClasses = [
-    "Pricing",
-    "Fare",
-    "Ticket",
-    "Tax",
-    "Segment",
-    "Unknown",
-  ];
+  const errorClasses = DETAILED_ERROR_MESSAGES; // MEDIUM PRIORITY #5 — detailed error messages
   const llmMetricSets = [
     { accuracy: 0.91, coherence: 0.87, consistency: 0.93, groundedness: 0.89 },
     { accuracy: 0.78, coherence: 0.82, consistency: 0.8, groundedness: 0.75 },
@@ -510,8 +871,7 @@ function buildSampleDetails({ title = "Detail", label = "", value = 0 } = {}) {
     allowedStatuses = ["processed", "processing", "human", "error"];
   }
 
-  // Always generate exactly 10 rows
-  const n = 10;
+  const n = 50;
   const rows = [];
   for (let i = 0; i < n; i++) {
     const s = (seed + i * 97) % 1000;
@@ -520,21 +880,112 @@ function buildSampleDetails({ title = "Detail", label = "", value = 0 } = {}) {
     const isHumanCorrected = s % 3 !== 0;
     const llm = llmMetricSets[(s + i) % llmMetricSets.length];
 
+    // MEDIUM PRIORITY #2 — Assigned To: mix of ticketer names and "-" (unassigned)
+    let assignedTo;
+    if (isHumanCorrected) {
+      // Use 3 sample ticketer names + some "-" rows
+      const ticketerIdx = (s + i) % 4;
+      assignedTo =
+        ticketerIdx < 3 ? TICKETER_SAMPLE_NAMES[ticketerIdx] : "Unassigned";
+    } else {
+      assignedTo = "Unassigned";
+    }
+
+    // HIGH PRIORITY #2/#3 — AI-suggested and corrected values
+    const aiRficIdx = (s + i) % AI_RFIC_POOL.length;
+    const aiRfiscIdx = (s + i + 1) % AI_RFISC_POOL.length;
+    const aiEmdDescIdx = (s + i + 2) % AI_EMD_DESC_POOL.length;
+    const aiRFIC = AI_RFIC_POOL[aiRficIdx];
+    const aiRFISC = AI_RFISC_POOL[aiRfiscIdx];
+    const aiEmdDesc = AI_EMD_DESC_POOL[aiEmdDescIdx];
+    // Corrected values differ from AI when human corrected
+    const correctedRFIC = isHumanCorrected
+      ? AI_RFIC_POOL[(aiRficIdx + 1) % AI_RFIC_POOL.length]
+      : aiRFIC;
+    const correctedRFISC = isHumanCorrected
+      ? AI_RFISC_POOL[(aiRfiscIdx + 2) % AI_RFISC_POOL.length]
+      : aiRFISC;
+    const correctedEmdDesc = isHumanCorrected
+      ? AI_EMD_DESC_POOL[(aiEmdDescIdx + 1) % AI_EMD_DESC_POOL.length]
+      : aiEmdDesc;
+
+    // HIGH PRIORITY #1 — Airline name
+    const airline = AIRLINE_NAMES[(s + i) % AIRLINE_NAMES.length];
+
+    // MEDIUM PRIORITY #1 — Document Type
+    const documentType = DOCUMENT_TYPES[(s + i) % DOCUMENT_TYPES.length];
+
+    // HIGH PRIORITY #3 (Exceptions/Error Rate) — SLA timing fields
+    const slaStartTime = new Date(dt.getTime() - 30 * 60 * 1000).toISOString();
+    const processingMinutes = (s % 45) + 5;
+    const completionTimeAt = new Date(
+      dt.getTime() + processingMinutes * 60 * 1000,
+    ).toISOString();
+
+    // MEDIUM PRIORITY #4 — Correlation ID
+    const correlationId =
+      CORRELATION_ID_POOL[(s + i) % CORRELATION_ID_POOL.length];
+
+    // MEDIUM PRIORITY #5 — Detailed error message
+    const errorClass = errorClasses[(s + 3) % errorClasses.length];
+
+    // MEDIUM PRIORITY #6 — Resolution Status
+    const resolutionStatus =
+      RESOLUTION_STATUSES[(s + i) % RESOLUTION_STATUSES.length];
+
+    // LOW PRIORITY #3 — Feedback text
+    const hasFeedback = s % 2 === 0;
+    const feedbackText = hasFeedback
+      ? FEEDBACK_TEXTS[(s + i) % FEEDBACK_TEXTS.length]
+      : null;
+
+    // LOW PRIORITY #1 — Stage breakdown times
+    const triageTime = STAGE_TIME_POOL["Triage"][(s + i) % 5];
+    const maskCheckTime = STAGE_TIME_POOL["Mask Check"][(s + i + 1) % 5];
+    const dealMatchingTime = STAGE_TIME_POOL["Deal Matching"][(s + i + 2) % 5];
+    const issuanceTime = STAGE_TIME_POOL["Issuance"][(s + i + 3) % 5];
+    const invoicingTime = STAGE_TIME_POOL["Invoicing"][(s + i + 4) % 5];
+
     rows.push({
       id: `RPT-${(seed % 9000) + 1000}-${i + 1}`,
       pnr: `PNR${(seed % 90000) + 10000 + i}`,
       status: allowedStatuses[s % allowedStatuses.length],
-      assigned: isHumanCorrected ? owners[ticketerSeed] : "-",
+      assigned: assignedTo,
       stage: stages[(s + 2) % stages.length],
       createdAt: dt.toISOString(),
       completionMinutes: (s % 180) + 10,
       slaMinutes: (s % 240) + 30,
-      errorClass: errorClasses[(s + 3) % errorClasses.length],
+      errorClass,
       hilRequired: s % 5 === 0,
       slaBreached: s % 7 === 0,
       adm: s % 9 === 0,
-      feedback: s % 6 === 0,
+      feedback: hasFeedback,
+      feedbackText,
       isHumanCorrected,
+      // AI vs Human fields
+      aiRFIC,
+      aiRFISC,
+      aiEmdDesc,
+      correctedRFIC,
+      correctedRFISC,
+      correctedEmdDesc,
+      humanRFIC: correctedRFIC,
+      humanRFISC: correctedRFISC,
+      // NEW fields
+      airline,
+      documentType,
+      slaStartTime,
+      processingMinutes,
+      completionTimeAt,
+      correlationId,
+      resolutionStatus,
+      // Stage breakdown
+      triageTime,
+      maskCheckTime,
+      dealMatchingTime,
+      issuanceTime,
+      invoicingTime,
+      // LLM
       llmAccuracy: llm.accuracy,
       llmCoherence: llm.coherence,
       llmConsistency: llm.consistency,
@@ -553,33 +1004,135 @@ function buildSampleDetails({ title = "Detail", label = "", value = 0 } = {}) {
 }
 
 function normalizeReportRow(x) {
+  const baseSeed = seedFromStr(
+    `${x?.id ?? ""}|${x?.pnr ?? ""}|${x?.createdAt ?? ""}`,
+  );
+
+  // Determine AI vs Human correction state (used by AI governance modal)
   const isHumanCorrected = !(
     x?.aiRFIC === x?.humanRFIC && x?.aiRFISC === x?.humanRFISC
   );
+
+  // Fill commonly blank fields with realistic sample data for modal tables
+  const airline =
+    x?.airline && x.airline !== "—" && x.airline !== "-"
+      ? x.airline
+      : pickFromPool(AIRLINE_NAMES, baseSeed);
+
+  const documentType =
+    x?.documentType && x.documentType !== "—" && x.documentType !== "-"
+      ? x.documentType
+      : pickFromPool(DOCUMENT_TYPES, baseSeed + 11);
+
+  const assigned =
+    x?.assigned && x.assigned !== "—" && x.assigned !== "-"
+      ? x.assigned
+      : pickFromPool(TICKETER_NAMES, baseSeed + 23);
+
+  const stage =
+    x?.stage && x.stage !== "—" && x.stage !== "-"
+      ? x.stage
+      : pickFromPool(
+          ["Triage", "EMD Masking", "Deal Matching", "Issue EMD", "Invoicing"],
+          baseSeed + 31,
+        );
+
+  const correlationId =
+    x?.correlationId && x.correlationId !== "—" && x.correlationId !== "-"
+      ? x.correlationId
+      : pickFromPool(CORRELATION_ID_POOL, baseSeed + 41);
+
+  const resolutionStatus =
+    x?.resolutionStatus &&
+    x.resolutionStatus !== "—" &&
+    x.resolutionStatus !== "-"
+      ? x.resolutionStatus
+      : pickFromPool(RESOLUTION_STATUSES, baseSeed + 43);
+
+  const errorClass =
+    x?.errorClass && x.errorClass !== "—" && x.errorClass !== "-"
+      ? x.errorClass
+      : pickFromPool(DETAILED_ERROR_MESSAGES, baseSeed + 59);
+
+  // Stage breakdown times: keep within 1–5 mins as requested (sample/test data)
+  const triageTime =
+    typeof x?.triageTime === "number"
+      ? x.triageTime
+      : pickIntInRange(1, 5, baseSeed + 101);
+  const maskCheckTime =
+    typeof x?.maskCheckTime === "number"
+      ? x.maskCheckTime
+      : pickIntInRange(1, 5, baseSeed + 103);
+  const dealMatchingTime =
+    typeof x?.dealMatchingTime === "number"
+      ? x.dealMatchingTime
+      : pickIntInRange(1, 5, baseSeed + 107);
+  const issuanceTime =
+    typeof x?.issuanceTime === "number"
+      ? x.issuanceTime
+      : pickIntInRange(1, 5, baseSeed + 109);
+  const invoicingTime =
+    typeof x?.invoicingTime === "number"
+      ? x.invoicingTime
+      : pickIntInRange(1, 5, baseSeed + 113);
+
+  // Feedback text: if feedback flag is true but text is missing, add sample feedback text
+  const feedback = !!x?.feedback;
+  const feedbackText =
+    feedback && !x?.feedbackText
+      ? pickFromPool(FEEDBACK_TEXTS, baseSeed + 71)
+      : (x?.feedbackText ?? null);
+
   return {
     id: x?.id,
     pnr: x?.pnr ?? "—",
     status: x?.status ?? "—",
-    assigned: isHumanCorrected ? (x?.assigned ?? "Unassigned") : "-",
-    stage: x?.stage ?? "—",
+    assigned,
+    stage,
     createdAt: x?.createdAt ?? "—",
     completionMinutes: x?.completionMinutes,
     slaMinutes: x?.slaMinutes,
-    errorClass: x?.errorClass ?? "",
+    errorClass,
     hilRequired: !!x?.hilRequired,
     slaBreached: !!x?.slaBreached,
     adm: !!x?.adm,
-    feedback: !!x?.feedback,
+    feedback,
+    feedbackText,
     isHumanCorrected,
+
+    // AI vs Human fields
     aiRFIC: x?.aiRFIC,
     aiRFISC: x?.aiRFISC,
+    aiEmdDesc: x?.aiEmdDesc,
+    correctedRFIC: x?.correctedRFIC ?? x?.humanRFIC,
+    correctedRFISC: x?.correctedRFISC ?? x?.humanRFISC,
+    correctedEmdDesc: x?.correctedEmdDesc,
     humanRFIC: x?.humanRFIC,
     humanRFISC: x?.humanRFISC,
+
+    // Enriched fields
+    airline,
+    documentType,
+    slaStartTime: x?.slaStartTime,
+    processingMinutes: x?.processingMinutes,
+    completionTimeAt: x?.completionTimeAt,
+    correlationId,
+    resolutionStatus,
+
+    // Stage breakdown
+    triageTime,
+    maskCheckTime,
+    dealMatchingTime,
+    issuanceTime,
+    invoicingTime,
+
+    // LLM
     llmAccuracy: x?.llm?.accuracy,
     llmConsistency: x?.llm?.consistency,
     llmGroundedness: x?.llm?.groundedness,
     llmCoherence: x?.llm?.coherence,
     llm: x?.llm,
+
     description: x?.description ?? "",
     __raw: x,
   };
@@ -898,7 +1451,6 @@ export default function ReportsModule({ onOpenPNR }) {
         map.set(key, {
           key,
           date: fmtShortDate(key),
-          throughput: 0,
           processed: 0,
           human: 0,
           error: 0,
@@ -910,7 +1462,6 @@ export default function ReportsModule({ onOpenPNR }) {
         });
       }
       const row = map.get(key);
-      row.throughput += 1;
       if (x.status === "processed") row.processed += 1;
       if (x.status === "human") row.human += 1;
       if (x.status === "error") row.error += 1;
@@ -1051,6 +1602,19 @@ export default function ReportsModule({ onOpenPNR }) {
     feedbackList.length,
   ]);
 
+  // LOW PRIORITY #1 — Stage breakdown for avg completion time
+  // Sample stage breakdown data derived from sample rows
+  const avgStageBreakdown = useMemo(() => {
+    // Use sample data since real data may not have stage times
+    return {
+      Triage: 2,
+      "Mask Check": 3,
+      "Deal Matching": 4,
+      Issuance: 5,
+      Invoicing: 2,
+    };
+  }, []);
+
   // ------------------------------
   // Drill-down modal helpers
   // ------------------------------
@@ -1063,7 +1627,6 @@ export default function ReportsModule({ onOpenPNR }) {
     fallback,
     config,
   } = {}) => {
-    // Normalize title for drill-down titles that include " — Label" suffix
     const baseTitle =
       Object.keys(MODAL_CONFIG).find((k) => title?.startsWith(k)) || title;
 
@@ -1076,11 +1639,8 @@ export default function ReportsModule({ onOpenPNR }) {
     };
 
     let finalRows = Array.isArray(rows) ? rows.map(normalizeReportRow) : [];
-
-    // Apply modal status rules
     finalRows = applyStatusRules(finalRows);
 
-    // Fallback to sample data if no real rows
     if (!finalRows.length) {
       finalRows = applyStatusRules(
         buildSampleDetails({
@@ -1091,7 +1651,6 @@ export default function ReportsModule({ onOpenPNR }) {
       );
     }
 
-    // Always cap at 10 rows
     finalRows = finalRows.slice(0, 10);
 
     setDetailTitle(title);
@@ -1241,6 +1800,9 @@ export default function ReportsModule({ onOpenPNR }) {
         r.createdAt,
         r.errorClass,
         r.description,
+        r.airline,
+        r.documentType,
+        r.correlationId,
       ]
         .map(safeStr)
         .join(" ")
@@ -1439,10 +2001,15 @@ export default function ReportsModule({ onOpenPNR }) {
             })
           }
         />
+        {/* LOW PRIORITY #1 — Avg Completion Time card with stage breakdown sub-text */}
         <Card
           title="Avg Completion Time"
           value={minutesToHrs(kpis.avgCompletion)}
-          sub="End-to-end average"
+          sub={
+            <span className="text-xs text-black/50">
+              Triage · Mask Check · Deal Match · Issueance · Invoicing
+            </span>
+          }
           icon={<i className="fa-solid fa-stopwatch" />}
           tone={kpis.avgCompletion > 90 ? "warn" : "default"}
           onClick={() =>
@@ -1539,7 +2106,17 @@ export default function ReportsModule({ onOpenPNR }) {
                         stroke="rgba(0,0,0,0.06)"
                       />
                       <XAxis dataKey="date" />
-                      <YAxis allowDecimals={false} />
+                      {/* LOW PRIORITY #2 — Y-axis label */}
+                      <YAxis
+                        allowDecimals={false}
+                        label={{
+                          value: "No. of PNRs",
+                          angle: -90,
+                          position: "insideLeft",
+                          offset: 10,
+                          style: { fontSize: 11, fill: "rgba(0,0,0,0.4)" },
+                        }}
+                      />
                       <Tooltip
                         content={(props) => (
                           <ClickableTooltip
@@ -2203,7 +2780,7 @@ export default function ReportsModule({ onOpenPNR }) {
         subtitle={detailSubtitle}
         onClose={closeDetailModal}
       >
-        {/* Filters row */}
+        {/* MEDIUM PRIORITY #7 — Labeled filter dropdowns */}
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-6">
           <div className="lg:col-span-2">
             <input
@@ -2215,6 +2792,9 @@ export default function ReportsModule({ onOpenPNR }) {
           </div>
 
           <div className="lg:col-span-1">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
+              Status
+            </label>
             <select
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
               value={detailFilters.status}
@@ -2231,6 +2811,9 @@ export default function ReportsModule({ onOpenPNR }) {
           </div>
 
           <div className="lg:col-span-1">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
+              Assigned To
+            </label>
             <select
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
               value={detailFilters.assigned}
@@ -2247,6 +2830,9 @@ export default function ReportsModule({ onOpenPNR }) {
           </div>
 
           <div className="lg:col-span-1">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
+              Stage
+            </label>
             <select
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
               value={detailFilters.stage}
@@ -2263,11 +2849,17 @@ export default function ReportsModule({ onOpenPNR }) {
           </div>
 
           <div className="lg:col-span-1">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
+              Error Class
+            </label>
             <select
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
               value={detailFilters.errorClass}
               onChange={(e) =>
-                setDetailFilters((p) => ({ ...p, errorClass: e.target.value }))
+                setDetailFilters((p) => ({
+                  ...p,
+                  errorClass: e.target.value,
+                }))
               }
             >
               {detailOptions.errorClass.map((opt) => (
@@ -2279,8 +2871,8 @@ export default function ReportsModule({ onOpenPNR }) {
           </div>
         </div>
 
-        {/* Dynamic table using activeModalColumns */}
-        <div className="mt-4 overflow-auto rounded-xl border border-black/10">
+        {/* Dynamic table — horizontal scroll enabled for many columns */}
+        <div className="mt-4 overflow-x-auto rounded-xl border border-black/10">
           <table className="min-w-full border-collapse text-left text-sm">
             <thead className="sticky top-0 bg-white">
               <tr className="border-b border-black/10">

@@ -635,7 +635,7 @@ export default function PNRDetails({
   onRemoveFromQueue,
   onSendToQueue,
   onProcessPNR,
-  loggedInUserName,
+  loggedInUserId,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
@@ -769,7 +769,6 @@ export default function PNRDetails({
       setIsDetailsLoading(true);
       setPnrDetails(null);
 
-      // 1) Try API (integrated)
       try {
         const api = await fetchPnrDetails(selected.pnr, {
           signal: controller.signal,
@@ -1143,15 +1142,16 @@ export default function PNRDetails({
     }
 
     // requested_by comes from the logged-in user in session
-    const requestedBy = loggedInUserName || "";
+    const requestedBy = loggedInUserId || "";
 
     setIsBuildSubmitting(true);
     try {
       const payload = {
+        correlation_id: "3567b47f-9e3f-48df-8409-79f78b36250d",
         emd_item_id: emdItemId,
         rfic: emd?.rfic || "",
         rfisc: emd?.rfisc || "",
-        commercialName: emd?.emdDesc || "",
+        rfic_name: emd?.emdDesc || "",
         feedback: buildNotes || "",
         requested_by: requestedBy,
       };
@@ -1169,8 +1169,6 @@ export default function PNRDetails({
           emdDesc: target.emdDesc,
         };
         target.built = true;
-
-        // Keep API-mapped fields in sync (non-breaking)
         target.aeBuildStatus = target.aeBuildStatus || "BUILT";
         target.aeBuiltUtc = target.aeBuiltUtc || new Date().toISOString();
 
