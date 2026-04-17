@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from "react";
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
+
 function nowTs() {
   return Date.now();
 }
+
 function formatTime(ts) {
   try {
     return new Date(ts).toLocaleTimeString([], {
@@ -16,9 +18,11 @@ function formatTime(ts) {
     return "";
   }
 }
+
 function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
+
 function newId(prefix = "m") {
   return (
     crypto.randomUUID?.() ??
@@ -43,6 +47,7 @@ function loadHistory(agentId) {
     return null;
   }
 }
+
 function saveHistory(agentId, messages) {
   if (typeof window === "undefined") return;
   try {
@@ -54,6 +59,7 @@ function saveHistory(agentId, messages) {
     // ignore storage quota or private mode errors
   }
 }
+
 function clearHistory(agentId) {
   if (typeof window === "undefined") return;
   try {
@@ -75,6 +81,7 @@ function buildDefaultMessages(agentId) {
       },
     ];
   }
+
   return [
     {
       id: newId("w"),
@@ -104,193 +111,81 @@ const SAMPLE_PROMPTS = {
 };
 
 /**
- * Future-ready stub.
- * Replace this with a real fetch() later.
+ * Sends a message to the chat API.
  *
- * Expected return shape:
- * { text: string, meta?: object }
+ * API: POST /api/v1/chat/message
+ * Request body:
+ *  {
+ *    agent_type: "processing" | "admin",
+ *    message: string,
+ *    session_id: string,
+ *    user_id: string,
+ *    correlation_id: string,
+ *    extra_arguments: object
+ *  }
+ *
+ * Expected response:
+ *  { success: boolean, message: string, agent_type: string, session_id: string, correlation_id: string, data?: object }
  */
 async function sendMessageToAgent({ agentId, messages, userText, context }) {
-  // Simulate latency
-  await new Promise((r) => setTimeout(r, 750));
+  const agentType = agentId === "admin" ? "admin" : "processing";
 
-  // Ticketing-domain intent detection (for realistic stub)
-  const intent = {
-    dealMatch:
-      /(deal|match|matching|fare|rule|table|tariff|ancillary|commercial)/i.test(
-        userText,
-      ),
-    ssr: /(ssr|osi|seat|wchr|spml|rqst|rq|hk|tk|hl|kk)/i.test(userText),
-    emd: /(emd|rfic|rfisc|coupon|issuance|reissue|exchange|void|refund|etkt|e-ticket)/i.test(
-      userText,
-    ),
-    queue: /(queue|workbasket|assigned|ticketer|ownership|arrival)/i.test(
-      userText,
-    ),
-    error:
-      /(error|failed|failure|exception|timeout|retry|cannot|missing|invalid|no applicable)/i.test(
-        userText,
-      ),
-    admin:
-      /(role|access|permission|cors|deploy|pipeline|azure|env|config|monitor|log|telemetry)/i.test(
-        userText,
-      ),
-    report: /(report|sla|kpi|throughput|trend|metric|governance|audit)/i.test(
-      userText,
-    ),
+  const payload = {
+    agent_type: agentType,
+    message: userText,
+    session_id: "", // blank for now
+    user_id: "1",
+    correlation_id: "", // blank for now
+    extra_arguments: {
+      additionalProp1: {},
+      // Keep this flexible for future enhancements without breaking the current UI.
+      // The backend can safely ignore these fields if not needed.
+      context: context ?? {},
+      // Provide a small, recent window of messages to support better answers (optional).
+      // If your backend doesn't need it, it can ignore it.
+      recent_messages: Array.isArray(messages) ? messages.slice(-12) : [],
+    },
   };
 
-  const selectedPnr = context?.selectedPnr?.pnr;
-  const selectedStage = context?.selectedPnr?.stage;
-  const selectedStatus = context?.selectedPnr?.status;
-  const selectedError = context?.selectedPnr?.error;
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-  const commonFooter = [
-    "If you want, I can format this as a handover note for a ticketer (symptom → checks → action).",
-    "Share the stage + error string and I’ll narrow it down to the most likely root cause.",
-    "If you paste SSR + intended RFIC/RFISC, I can propose the likely validation gap and next step.",
-  ];
+  const res = await fetch(`${API_BASE}/api/v1/chat/message`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
 
-  if (agentId === "processing") {
-    const opener = pick([
-      "Explainer mode (ticketing workflow):",
-      "Queue triage breakdown (explainer mode):",
-      "EMD/SSR alignment walkthrough:",
-      "Processing diagnosis (explainer mode):",
-    ]);
-
-    const blocks = [];
-    blocks.push(opener);
-
-    if (selectedPnr) {
-      blocks.push(
-        `\n**Context (from your selection):** PNR **${selectedPnr}**${
-          selectedStage ? ` • Stage: **${selectedStage}**` : ""
-        }${selectedStatus ? ` • Status: **${selectedStatus}**` : ""}${
-          selectedError ? ` • Error: **${selectedError}**` : ""
-        }`,
-      );
-    }
-
-    blocks.push(
-      "\n**What’s happening conceptually:**\n" +
-        "Most EMD processing blockers come from a mismatch between **PNR intent** (SSR/OSI/seat/ancillary request) and **issuance requirements** (RFIC/RFISC mapping + rule/deal selection + coupon logic + segment association).",
-    );
-
-    const checks = [];
-    if (intent.queue) {
-      checks.push(
-        "- **Queue/ownership:** Confirm the PNR is in the correct workbasket and not blocked by ownership/assignment rules.",
-      );
-    }
-    if (intent.ssr) {
-      checks.push(
-        "- **SSR consistency:** Validate SSR code, status (HK/TK/etc.), and segment linkage (correct flight segment).",
-      );
-    }
-    if (intent.emd) {
-      checks.push(
-        "- **RFIC/RFISC mapping:** Ensure RFIC/RFISC is valid for the ancillary and matches your mapping/catalog entry.",
-      );
-      checks.push(
-        "- **Coupon rules:** Validate whether the ancillary is per-segment vs per-itinerary; confirm expected coupon count.",
-      );
-    }
-    if (intent.dealMatch) {
-      checks.push(
-        "- **Deal/rule selection:** Validate carrier, RBD/cabin, route, fare family/corporate ID, and effective date windows.",
-      );
-      checks.push(
-        "- **Fallback logic:** If no exact rule matches, ensure there’s a controlled fallback (broad match → narrow match) rather than hard fail.",
-      );
-    }
-    if (intent.error) {
-      checks.push(
-        "- **Error class:** Decide if this is **data-driven** (mapping missing) vs **transient/system** (timeout/dependency). That determines Retry vs Human.",
-      );
-    }
-
-    const checkList =
-      checks.length > 0
-        ? checks
-        : [
-            "- Confirm **stage** and last successful checkpoint.",
-            "- Validate SSR ↔ RFIC/RFISC ↔ deal/rule alignment.",
-            "- If ambiguous, route to **Human** with a short reason.",
-          ];
-
-    blocks.push(`\n**Fast checks:**\n${checkList.join("\n")}`);
-
-    blocks.push(
-      "\n**Recommended next action:**\n" +
-        "1) Pinpoint the failing stage (Deal Matching / EMD Mask Checking / Issuance).\n" +
-        "2) Validate minimum set: SSR + segment linkage → RFIC/RFISC mapping → applicable rule.\n" +
-        "3) If inputs are consistent: retry; if not: route to Human with what’s missing.\n",
-    );
-
-    blocks.push(`\n**Next:** ${pick(commonFooter)}`);
-    return { text: blocks.join("\n"), meta: { stub: true } };
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
   }
 
-  // Admin agent
-  const opener = pick([
-    "Admin/ops view (explainer mode):",
-    "Operational breakdown:",
-    "Config + observability checklist:",
-    "Troubleshooting runbook view:",
-  ]);
-
-  const blocks = [];
-  blocks.push(opener);
-
-  if (intent.report) {
-    blocks.push(
-      "\n**Reporting angle:**\n" +
-        "To keep KPIs consistent, ensure status transitions are standardized (Processing → Error/Human → Processed) and timestamps are reliable (queueArrival, lastUpdated, completionTime).",
-    );
-    blocks.push(
-      "\n**What to lock in now (API-ready contract):**\n" +
-        "- Stable status enum + stage names\n" +
-        "- Error taxonomy (deal-matching, validation, issuance, dependency)\n" +
-        "- Governance fields (human touch rate, override rate, suggestion acceptance — future)\n",
-    );
-    blocks.push(
-      "\n**Recommended next action:**\n" +
-        "Define a reporting JSON contract now so the UI stays stable when the backend arrives.",
-    );
-  } else if (intent.admin) {
-    blocks.push(
-      "\n**Ops angle:**\n" +
-        "Most admin issues fall into environment config, session/auth, CORS/network boundaries, or runtime/deployment.",
-    );
-    blocks.push(
-      "\n**Fast checks:**\n" +
-        "- Env vars: correct base URLs + feature flags\n" +
-        "- Session/auth: token lifecycle and expiry handling\n" +
-        "- CORS: OPTIONS preflight allowed methods/headers\n" +
-        "- Logs: correlation IDs and stage context captured\n",
-    );
-    blocks.push(
-      "\n**Recommended next action:**\n" +
-        "Introduce a standard error envelope (code, message, correlationId, stage) to make future AI guidance accurate.",
-    );
-  } else {
-    blocks.push(
-      "\n**How I can help as Admin Agent:**\n" +
-        "- Define ops runbooks for common processing failures\n" +
-        "- Recommend deployment guardrails\n" +
-        "- Shape future AI API contract (messages + context + metadata)\n",
-    );
+  if (!res.ok) {
+    const msg =
+      json?.data?.message ||
+      `Request failed (${res.status}${res.statusText ? ` ${res.statusText}` : ""}).`;
+    throw new Error(msg);
   }
 
-  if (context?.activeTab) {
-    blocks.push(
-      `\n**Context (from UI):** activeTab = **${String(context.activeTab)}**`,
-    );
+  if (!json?.success) {
+    throw new Error(json?.data?.message || "Request failed.");
   }
 
-  blocks.push(`\n**Next:** ${pick(commonFooter)}`);
-  return { text: blocks.join("\n"), meta: { stub: true } };
+  return {
+    text: json?.data?.message ?? "",
+    meta: {
+      api: true,
+      agent_type: json?.agent_type,
+      session_id: json?.session_id,
+      correlation_id: json?.correlation_id,
+      data: json?.data,
+    },
+  };
 }
 
 function BubbleButton({ title, iconClass, accentClass, onClick }) {
@@ -338,8 +233,8 @@ function ConfirmModal({
     function onKeyDown(e) {
       if (e.key === "Escape") onCancel?.();
     }
-    window.addEventListener("keydown", onKeyDown);
 
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       clearTimeout(t);
       window.removeEventListener("keydown", onKeyDown);
@@ -385,6 +280,7 @@ function ConfirmModal({
             >
               {cancelText}
             </button>
+
             <button
               ref={confirmBtnRef}
               type="button"
@@ -418,17 +314,21 @@ function ChatPanel({
   getAdminContext,
 }) {
   const agentId = activeAgent;
+
   const agentName =
     agentId === "processing" ? "Processing Agent" : "Admin Agent";
+
   const agentIconClass =
     agentId === "processing"
       ? "fa-solid fa-diagram-project"
       : "fa-solid fa-user-tie";
+
   const accentClass =
     agentId === "processing" ? "bg-emerald-600" : "bg-indigo-600";
 
   const messages = histories[agentId] ?? [];
   const input = inputs[agentId] ?? "";
+
   const [sending, setSending] = useState(false);
   const scrollRef = useRef(null);
 
@@ -446,7 +346,7 @@ function ChatPanel({
   // Word-by-word tokenizer preserving whitespace/newlines (word + trailing whitespace)
   function tokenizeWordsWithWhitespace(text) {
     const parts = text?.match(/\S+\s*/g);
-    return parts && parts.length ? parts : [text ?? ""];
+    return parts && parts.length ? parts : [text ?? ""]; // fallback
   }
 
   // Typewriter animation
@@ -524,7 +424,7 @@ function ChatPanel({
   }
 
   function onKeyDown(e) {
-    //  Multiline supported: Shift+Enter inserts newline; Enter sends
+    // Multiline supported: Shift+Enter inserts newline; Enter sends
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -627,7 +527,7 @@ function ChatPanel({
     }
   }
 
-  //  Show quick prompts when chat is fresh (only welcome msg or empty)
+  // Show quick prompts when chat is fresh (only welcome msg or empty)
   const showPromptChips = (messages ?? []).length <= 1;
 
   // Render prompt chips BELOW the initial message (not above)
@@ -696,6 +596,7 @@ function ChatPanel({
           >
             <i className="fa-solid fa-diagram-project mr-1"></i> Processing
           </button>
+
           <button
             type="button"
             onClick={() => setActiveAgent("admin")}
@@ -760,6 +661,7 @@ function ChatPanel({
             onKeyDown={onKeyDown}
             aria-label={`Message ${agentName}`}
           />
+
           <button
             type="button"
             onClick={send}
@@ -779,6 +681,7 @@ function ChatPanel({
             )}
           </button>
         </div>
+
         <div className="mt-1 text-[11px] text-black/40">
           Enter to send • Shift+Enter for newline
         </div>
@@ -831,12 +734,13 @@ export default function AIAgentsDock({
     processing: [],
     admin: [],
   });
+
   const [inputs, setInputs] = useState({
     processing: "",
     admin: "",
   });
 
-  //  Modal state for "Clear chat" confirmation
+  // Modal state for "Clear chat" confirmation
   const [clearModalOpen, setClearModalOpen] = useState(false);
   const [pendingClearAgent, setPendingClearAgent] = useState(null);
 
@@ -844,7 +748,6 @@ export default function AIAgentsDock({
   useEffect(() => {
     const p = loadHistory("processing");
     const a = loadHistory("admin");
-
     setHistories({
       processing: p && p.length ? p : buildDefaultMessages("processing"),
       admin: a && a.length ? a : buildDefaultMessages("admin"),
@@ -862,28 +765,24 @@ export default function AIAgentsDock({
     if (typeof onOpenChange === "function") onOpenChange(panelOpen);
   }, [panelOpen, onOpenChange]);
 
-  //  Open modal instead of window.confirm (retains behavior, just new UI)
+  // Open modal instead of window.confirm (retains behavior, just new UI)
   function requestClearActiveChat() {
     setPendingClearAgent(activeAgent);
     setClearModalOpen(true);
   }
 
-  //  Perform the actual clear after confirmation
+  // Perform the actual clear after confirmation
   function confirmClearChat() {
     const agentId = pendingClearAgent ?? activeAgent;
-
     clearHistory(agentId);
-
     setHistories((prev) => ({
       ...prev,
       [agentId]: buildDefaultMessages(agentId),
     }));
-
     setInputs((prev) => ({
       ...prev,
       [agentId]: "",
     }));
-
     setClearModalOpen(false);
     setPendingClearAgent(null);
   }
@@ -903,7 +802,7 @@ export default function AIAgentsDock({
       className="fixed bottom-4 right-4 z-[9999] flex flex-col items-end gap-2"
       aria-label="AI Agents dock"
     >
-      {/*  Confirmation modal for clear chat */}
+      {/* Confirmation modal for clear chat */}
       <ConfirmModal
         open={clearModalOpen}
         title={`Clear ${pendingLabel} chat history?`}
@@ -943,6 +842,7 @@ export default function AIAgentsDock({
               setPanelOpen(true);
             }}
           />
+
           <BubbleButton
             title="Admin Agent"
             iconClass="fa-solid fa-user-tie"
@@ -967,6 +867,7 @@ export default function AIAgentsDock({
             )}
             onClick={() => setActiveAgent("processing")}
           />
+
           <BubbleButton
             title="Switch to Admin Agent"
             iconClass="fa-solid fa-user-tie"

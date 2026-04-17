@@ -1955,8 +1955,11 @@ export default function PNRDetails({
                                                     ?.source_article ? (
                                                     <a
                                                       href={
-                                                        emd.aiSuggestions
-                                                          .source_article
+                                                        emd?.aiSuggestions
+                                                          ?.source_article_url
+                                                          ? emd?.aiSuggestions
+                                                              ?.source_article_url
+                                                          : "#"
                                                       }
                                                       target="_blank"
                                                       rel="noreferrer"
