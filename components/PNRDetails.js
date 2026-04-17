@@ -213,11 +213,6 @@ function coerceAiSuggestions(value) {
 
 // Extract LLM metrics (accuracy, consistency, coherence, groundedness) from API shapes.
 function coerceLlmMetrics(value) {
-  // Accept a variety of shapes:
-  // - { metrics: { accuracy, consistency, coherence, groundedness } }
-  // - { llmMetrics: { ... } }
-  // - { accuracy, consistency, coherence, groundedness }
-  // - [{ metrics: {...}}] (pick first)
   const pickNum = (v) => {
     if (v == null) return null;
     if (typeof v === "number" && !Number.isNaN(v)) return v;
@@ -251,11 +246,6 @@ function coerceLlmMetrics(value) {
 
 // Extract knowledge sources / ground-truth citations from API shapes.
 function coerceKnowledgeSources(value) {
-  // Accept a variety of shapes:
-  // - { citations: [{ title, url }] }
-  // - { knowledgeSources: [...] }
-  // - { sources: [...] }
-  // - array of strings/objects
   const normalizeUrl = (u) => {
     const s = normalize(u);
     return s ? s : null;
@@ -287,6 +277,7 @@ function coerceKnowledgeSources(value) {
     return true;
   });
 }
+
 // -------------------------
 // API mapping
 // -------------------------
@@ -311,6 +302,7 @@ function buildBuildAeUrl(pnrId) {
   const path = `/api/v1/pnrs/${id}/build-ae`;
   return API_BASE ? `${API_BASE}${path}` : path;
 }
+
 // Process PNR API
 function buildProcessPnrUrl(pnrId) {
   const id = encodeURIComponent(pnrId ?? "");
@@ -402,7 +394,6 @@ async function patchEmdFeedback(emdId, payload, { signal } = {}) {
     throw err;
   }
 
-  // Some PATCH endpoints may return empty responses
   const txt = await res.text().catch(() => "");
   try {
     return txt ? JSON.parse(txt) : {};
@@ -440,7 +431,6 @@ function mapApiToPnrDetails(pnrApi) {
     header?.bookingCreatedUtc || header?.bookingCreated || header?.createdUtc;
 
   const common = {
-    // existing UI fields
     pnr: pnrId,
     bookingId: header?.bookingId,
     isTicketed: header?.isTicketed,
@@ -454,8 +444,6 @@ function mapApiToPnrDetails(pnrApi) {
     documentType: header?.documentType || "EMD",
     brand: header?.brandCode || "—",
     gds: header?.gds || "—",
-
-    // keep extra fields from API (non-breaking)
     status: pnrApi?.status,
     stage: pnrApi?.stage,
     actionRequired: pnrApi?.actionRequired,
@@ -488,11 +476,7 @@ function mapApiToPnrDetails(pnrApi) {
     const emds = emdItems.map((item) => {
       const aeStatus = safeUpper(item?.aeBuildStatus);
 
-      // Editable only if PNR is HUMAN_INPUT_REQUIRED and AE Build Status is PENDING
-      // (exact requirement) — keep computed editable flag for existing logic.
       const editable = aeStatus === "PENDING";
-
-      // Consider anything not PENDING as already built (non-editable path)
       const built = aeStatus && aeStatus !== "PENDING";
 
       const totalAmount = item?.totalAmount ?? item?.subtotalAmount;
@@ -531,8 +515,6 @@ function mapApiToPnrDetails(pnrApi) {
           feedback: item?.feedback ?? "",
           submitted: item?.isAdm != null || item?.feedback != null,
         },
-
-        // keep API fields (non-breaking)
         emdItemId: item?.emdItemId,
         ancillaryItemId: item?.ancillaryItemId,
         commercialName: item?.commercialName,
@@ -562,7 +544,6 @@ function mapApiToPnrDetails(pnrApi) {
         otherInfo: item?.otherInfo,
       };
 
-      // If it is editable (PENDING), treat it as not built
       if (editable) emd.built = false;
 
       return emd;
@@ -586,8 +567,6 @@ function mapApiToPnrDetails(pnrApi) {
       seat,
       ssrCode: "—",
       emds,
-
-      // keep passenger API fields (non-breaking)
       passengerId: pax?.passengerId,
       travelerIndex: pax?.travelerIndex,
       givenName: pax?.givenName,
@@ -664,6 +643,9 @@ export default function PNRDetails({
   const [viewError, setViewError] = useState("");
   const [viewJson, setViewJson] = useState(null);
 
+  // Error Details modal
+  const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
+
   // Accordion open passenger index
   const [openPassengerIndex, setOpenPassengerIndex] = useState(-1);
 
@@ -698,7 +680,6 @@ export default function PNRDetails({
     return id;
   };
 
-  // Backward-compatible wrapper so you don't need to update all call sites
   const showToast = ({
     variant = "info",
     ariaLabel = "",
@@ -752,7 +733,7 @@ export default function PNRDetails({
   const showErrorPanel = isError && !!normalize(errorDetailsText);
 
   // -------------------------
-  // Load details (API first, fall back to existing mock behavior)
+  // Load details
   // -------------------------
   useEffect(() => {
     let active = true;
@@ -765,7 +746,6 @@ export default function PNRDetails({
         return;
       }
 
-      // Show loading state while switching PNRs
       setIsDetailsLoading(true);
       setPnrDetails(null);
 
@@ -776,7 +756,6 @@ export default function PNRDetails({
         if (!active) return;
         const mapped = mapApiToPnrDetails(api);
 
-        // Enforce editability rule exactly: only when PNR is HUMAN_INPUT_REQUIRED and emd.aeBuildStatus === PENDING
         const statusComp = statusToComparable(
           mapped?.status ?? selected?.status,
         );
@@ -788,7 +767,6 @@ export default function PNRDetails({
               const aeStatus = safeUpper(emd?.aeBuildStatus);
               emd.editable = isHuman && aeStatus === "PENDING";
               emd.built = emd.editable ? false : true;
-              // Preserve baseline values from initial load
               if (!emd.baseline)
                 emd.baseline = {
                   rfic: emd.rfic,
@@ -803,11 +781,10 @@ export default function PNRDetails({
         setIsDetailsLoading(false);
         return;
       } catch (e) {
-        // fall back to existing mock behavior (retain)
         console.warn("PNR details API load failed; falling back to mock.", e);
       }
 
-      // 2) Existing mock behavior
+      // Fallback mock behavior
       try {
         if (selected.pnr === "GLEBNY") {
           const res = await fetch("/data/sabre-booking.json", {
@@ -940,7 +917,7 @@ export default function PNRDetails({
           });
         } else {
           const common = {
-            pnr: pnrId,
+            pnr: selected.pnr,
             bookingId: "1SXXX1A2B3C4D",
             isTicketed: true,
             agencyIata: "99119911",
@@ -1047,7 +1024,7 @@ export default function PNRDetails({
     };
   }, [selected]);
 
-  // Auto-expand the passenger that needs attention (Human Input Required)
+  // Auto-expand the passenger that needs attention
   useEffect(() => {
     if (!pnrDetails?.passengers) return;
 
@@ -1121,7 +1098,6 @@ export default function PNRDetails({
     const passenger = pnrDetails?.passengers?.[passengerIndex];
     const emd = passenger?.emds?.[emdIndex];
 
-    // Required identifiers for the Build AE endpoint
     const emdItemId = emd?.emdItemId || emd?.ancillaryItemId || null;
     const passengerId = passenger?.passengerId || null;
 
@@ -1141,7 +1117,6 @@ export default function PNRDetails({
       return;
     }
 
-    // requested_by comes from the logged-in user in session
     const requestedBy = loggedInUserId || "";
 
     setIsBuildSubmitting(true);
@@ -1159,7 +1134,6 @@ export default function PNRDetails({
 
       await postBuildAE(pnrId, payload);
 
-      // Update UI state (retain existing behavior)
       setPnrDetails((prev) => {
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emds[emdIndex];
@@ -1208,11 +1182,8 @@ export default function PNRDetails({
 
     setIsProcessSubmitting(true);
     try {
-      // Call API: /api/v1/pnrs/{pnrId}/process
-      // Keep payload empty for now (endpoint contract may not require a body).
       await postProcessPNR(pnrId, {});
 
-      // Update local UI status immediately on success
       setPnrDetails((prev) => {
         if (!prev) return prev;
         const next = deepClone(prev);
@@ -1226,7 +1197,6 @@ export default function PNRDetails({
         return next;
       });
 
-      // retain existing callback behavior
       callbacks.processPNR({
         pnr: pnrId,
         passengers: pnrDetails.passengers,
@@ -1301,7 +1271,6 @@ export default function PNRDetails({
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emds[emdIndex];
         target.adm.submitted = true;
-        // Keep API-mapped fields in sync (non-breaking)
         target.isAdm = payload.isAdm;
         target.feedback = payload.feedback;
         return next;
@@ -1327,7 +1296,6 @@ export default function PNRDetails({
     setIsAdmConfirmOpen(false);
   }
 
-  // View PNR modal logic
   async function openViewPNR() {
     setViewError("");
     setViewJson(null);
@@ -1335,14 +1303,12 @@ export default function PNRDetails({
     setIsViewModalOpen(true);
 
     try {
-      // Prefer API snapshot if available
       if (selected?.pnr) {
         const json = await fetchPnrDetails(selected.pnr);
         setViewJson(json);
         return;
       }
 
-      // fallback (retain existing)
       const res = await fetch("/data/sabre-booking.json");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
@@ -1356,715 +1322,752 @@ export default function PNRDetails({
     }
   }
 
+  function openErrorDetails() {
+    if (!normalize(errorDetailsText)) return;
+    setIsErrorModalOpen(true);
+  }
+
+  function closeErrorDetails() {
+    setIsErrorModalOpen(false);
+  }
+
   if (!selected) return null;
 
   return (
-    <div className="pnr-details compact card mt-3 p-3 mb-6">
-      {/* ToastViewport (replaces Toasts) */}
-      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+    <>
+      <div className="pnr-details compact card mt-3 p-3 mb-6">
+        {/* ToastViewport */}
+        <ToastViewport toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <h3 className="font-semibold text-lg flex items-center gap-2 flex-wrap">
-          <span>
-            <i className="fa-solid fa-ticket text-brand-red"></i> PNR Details •{" "}
-            <span className="text-brand-red">{selected.pnr}</span>
-          </span>
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <h3 className="font-semibold text-lg flex items-center gap-2 flex-wrap">
+            <span>
+              <i className="fa-solid fa-ticket text-brand-red"></i> PNR Details
+              • <span className="text-brand-red">{selected.pnr}</span>
+            </span>
 
-          {/* View PNR JSON */}
-          <button
-            className="btn btn-outline h-8 px-3 text-xs"
-            type="button"
-            onClick={openViewPNR}
-            title="View raw PNR JSON snapshot"
-          >
-            <i className="fa-regular fa-eye mr-1"></i>
-            View PNR
-          </button>
-        </h3>
+            {/* View PNR JSON */}
+            <button
+              className="btn btn-outline h-8 px-3 text-xs"
+              type="button"
+              onClick={openViewPNR}
+              title="View raw PNR JSON snapshot"
+            >
+              <i className="fa-regular fa-eye mr-1"></i>
+              View PNR
+            </button>
+          </h3>
 
-        {/* Right side: Current Status + Action Bar / Inputs Needed */}
-        <div className="text-[13px] text-black/60 flex flex-col items-end gap-2 w-full md:w-auto">
-          <div>
-            <span className="mr-2">Current Status: </span>
-            <StatusBadge status={selected.status} />
-
-            {isError ? (
-              <FadeIn as="div" className="mt-2">
-                <PNRDetailsActionBar
-                  errorDetails={selected.error}
-                  onRetry={() => callbacks.retry(selected.pnr)}
-                  onRemoveFromQueue={() => requestRemoveFromQueue()}
-                  onSendToQueue={({
-                    queueType,
-                    assigneeName,
-                    pnr = selected.pnr,
-                  }) => callbacks.sendToQueue({ pnr, queueType, assigneeName })}
-                />
-              </FadeIn>
-            ) : (
-              ""
-            )}
-          </div>
-
-          {/* Human Input Required: Inputs Needed */}
-          {isHumanRequired && inputsNeeded.length > 0 && (
-            <FadeIn as="div" className="w-full text-left">
-              <div className="text-black/80 mb-1">Inputs Needed:</div>
-              <ul className="list-disc pl-5 md:pl-0">
-                {inputsNeeded.map((item, idx) => (
-                  <FadeIn
-                    as="li"
-                    key={item.key}
-                    delay={70 * idx}
-                    className="text-black/70"
-                  >
-                    <span className="font-medium">{item.passenger}</span> —{" "}
-                    {item.label}
-                  </FadeIn>
-                ))}
-              </ul>
-            </FadeIn>
-          )}
-        </div>
-      </div>
-
-      {/* Error Details panel
-      {showErrorPanel && (
-        <FadeIn className="mt-3">
-          <div className="p-2 rounded border border-red-200 bg-red-50 text-[13px]">
-            <div className="font-semibold text-red-700 mb-1">
-              <i className="fa-solid fa-triangle-exclamation mr-1"></i> Error
-              Details
-            </div>
-            <div className="text-red-800/90 whitespace-pre-wrap">
-              {errorDetailsText}
-            </div>
-          </div>
-        </FadeIn>
-      )} */}
-
-      {/* Body */}
-      {isDetailsLoading ? (
-        <div className="flex items-center gap-2 text-black/70">
-          <Spinner size="sm" /> Loading details…
-        </div>
-      ) : pnrDetails ? (
-        <div className="mt-4 space-y-4 text-[13px]">
-          {/* PNR & Booking */}
-          <section>
-            <h4 className="section-title text-[15px]">
-              <i className="fa-solid fa-clipboard-list text-brand-red"></i> PNR
-              & Booking
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-paperclip text-black/60"></i> PNR
-                  </>
-                }
-                v={pnrDetails.pnr || "-"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-file-invoice text-black/60"></i>{" "}
-                    Booking ID
-                  </>
-                }
-                v={pnrDetails.bookingId || "—"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-ticket text-black/60"></i>{" "}
-                    Document Type
-                  </>
-                }
-                v={pnrDetails.documentType || "EMD"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-regular fa-clock text-black/60"></i> Date
-                    Created
-                  </>
-                }
-                v={formatDate(pnrDetails.created) || "—"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-building text-black/60"></i>{" "}
-                    Agency IATA
-                  </>
-                }
-                v={pnrDetails.agencyIata || "—"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-key text-black/60"></i> PCC
-                  </>
-                }
-                v={pnrDetails.pcc || "—"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-regular fa-envelope text-black/60"></i> GDS
-                  </>
-                }
-                v={pnrDetails.gds || "SABRE"}
-              />
-              <Field
-                k={
-                  <>
-                    <i className="fa-solid fa-phone text-black/60"></i> Brand
-                  </>
-                }
-                v={pnrDetails.brand || "—"}
-              />
-            </div>
-          </section>
-
-          {/* Passengers, Flight & EMDs */}
-          <section>
-            <h4 className="section-title text-[15px]">
-              <i className="fa-solid fa-people-group text-brand-red"></i>{" "}
-              Passengers, Flight & EMDs
-            </h4>
-
-            <div className="space-y-3">
-              {pnrDetails.passengers.map((passenger, passengerIndex) => {
-                const needsAttention =
-                  isHumanRequired &&
-                  (passenger.emds || []).some(
-                    (emd) => emd.editable && !emd.built,
-                  );
-                const isOpen = openPassengerIndex === passengerIndex;
-
-                return (
-                  <div
-                    key={`pax-${passengerIndex}`}
-                    className={`rounded border ${needsAttention ? "ring-attn" : "border-black/10"} bg-white`}
-                  >
-                    {/* Accordion Header */}
+          {/* Right side: Current Status + Action Bar / Inputs Needed */}
+          <div className="text-[13px] text-black/60 flex flex-col items-end gap-2 w-full md:w-auto">
+            <div>
+              <span className="mr-2">Current Status: </span>
+              <StatusBadge status={selected.status} />
+              {isError ? (
+                <>
+                  <FadeIn as="div" className="mt-2">
                     <button
                       type="button"
-                      onClick={() =>
-                        setOpenPassengerIndex(isOpen ? -1 : passengerIndex)
-                      }
-                      className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
-                        needsAttention ? "bg-red-50" : "bg-black/[0.02]"
-                      } hover:bg-black/[0.04] active:scale-[0.995]`}
+                      className="btn h-6 px-2 text-xs shrink-0 t-30"
+                      title="View full error details"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openErrorDetails();
+                      }}
+                      data-stop-collapse
                     >
-                      <div className="font-semibold text-[14px]">
-                        {passenger.name} •{" "}
-                        <span className="text-black/70">
-                          Ticket {passenger.ticketNo}
-                        </span>
-                      </div>
-                      <i
-                        className={`fa-solid ${
-                          isOpen ? "fa-chevron-up" : "fa-chevron-down"
-                        } text-black/50 transition-transform duration-200`}
-                      ></i>
+                      <i className="fa-solid fa-circle-info"></i>
                     </button>
+                    <PNRDetailsActionBar
+                      errorDetails={selected.error}
+                      onRetry={() => callbacks.retry(selected.pnr)}
+                      onRemoveFromQueue={() => requestRemoveFromQueue()}
+                      onSendToQueue={({
+                        queueType,
+                        assigneeName,
+                        pnr = selected.pnr,
+                      }) =>
+                        callbacks.sendToQueue({ pnr, queueType, assigneeName })
+                      }
+                    />
+                  </FadeIn>
+                </>
+              ) : null}
+            </div>
 
-                    {/* Accordion Body */}
-                    <Collapse open={isOpen}>
-                      <div
-                        className={`p-2 ${needsAttention ? "pulse-focus-once" : ""}`}
-                        onPointerDownCapture={stopIfInteractive}
-                        onMouseDownCapture={stopIfInteractive}
-                        onClickCapture={stopIfInteractive}
+            {/* Human Input Required: Inputs Needed */}
+            {isHumanRequired && inputsNeeded.length > 0 && (
+              <FadeIn as="div" className="w-full text-left">
+                <div className="text-black/80 mb-1">Inputs Needed:</div>
+                <ul className="list-disc pl-5 md:pl-0">
+                  {inputsNeeded.map((item, idx) => (
+                    <FadeIn
+                      as="li"
+                      key={item.key}
+                      delay={70 * idx}
+                      className="text-black/70"
+                    >
+                      <span className="font-medium">{item.passenger}</span> —{" "}
+                      {item.label}
+                    </FadeIn>
+                  ))}
+                </ul>
+              </FadeIn>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        {isDetailsLoading ? (
+          <div className="flex items-center gap-2 text-black/70">
+            <Spinner size="sm" /> Loading details…
+          </div>
+        ) : pnrDetails ? (
+          <div className="mt-4 space-y-4 text-[13px]">
+            {/* PNR & Booking */}
+            <section>
+              <h4 className="section-title text-[15px]">
+                <i className="fa-solid fa-clipboard-list text-brand-red"></i>{" "}
+                PNR & Booking
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                <Field
+                  k={
+                    <>
+                      <i className="fa-solid fa-paperclip text-black/60"></i>{" "}
+                      PNR
+                    </>
+                  }
+                  v={pnrDetails.pnr || "-"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-solid fa-file-invoice text-black/60"></i>{" "}
+                      Booking ID
+                    </>
+                  }
+                  v={pnrDetails.bookingId || "—"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-solid fa-ticket text-black/60"></i>{" "}
+                      Document Type
+                    </>
+                  }
+                  v={pnrDetails.documentType || "EMD"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-regular fa-clock text-black/60"></i> Date
+                      Created
+                    </>
+                  }
+                  v={formatDate(pnrDetails.created) || "—"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-solid fa-building text-black/60"></i>{" "}
+                      Agency IATA
+                    </>
+                  }
+                  v={pnrDetails.agencyIata || "—"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-solid fa-key text-black/60"></i> PCC
+                    </>
+                  }
+                  v={pnrDetails.pcc || "—"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-regular fa-envelope text-black/60"></i>{" "}
+                      GDS
+                    </>
+                  }
+                  v={pnrDetails.gds || "SABRE"}
+                />
+                <Field
+                  k={
+                    <>
+                      <i className="fa-solid fa-phone text-black/60"></i> Brand
+                    </>
+                  }
+                  v={pnrDetails.brand || "—"}
+                />
+              </div>
+            </section>
+
+            {/* Passengers, Flight & EMDs */}
+            <section>
+              <h4 className="section-title text-[15px]">
+                <i className="fa-solid fa-people-group text-brand-red"></i>{" "}
+                Passengers, Flight & EMDs
+              </h4>
+
+              <div className="space-y-3">
+                {pnrDetails.passengers.map((passenger, passengerIndex) => {
+                  const needsAttention =
+                    isHumanRequired &&
+                    (passenger.emds || []).some(
+                      (emd) => emd.editable && !emd.built,
+                    );
+                  const isOpen = openPassengerIndex === passengerIndex;
+
+                  return (
+                    <div
+                      key={`pax-${passengerIndex}`}
+                      className={`rounded border ${needsAttention ? "ring-attn" : "border-black/10"} bg-white`}
+                    >
+                      {/* Accordion Header */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenPassengerIndex(isOpen ? -1 : passengerIndex)
+                        }
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
+                          needsAttention ? "bg-red-50" : "bg-black/[0.02]"
+                        } hover:bg-black/[0.04] active:scale-[0.995]`}
                       >
-                        {/* Traveler & Flight */}
-                        <FadeIn className="mb-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-regular fa-user text-black/60"></i>{" "}
-                                  Passenger
-                                </>
-                              }
-                              v={passenger.travelerName || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-plane text-black/60"></i>{" "}
-                                  Flight No.
-                                </>
-                              }
-                              v={passenger.flightNo || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-tag text-black/60"></i>{" "}
-                                  Operating
-                                </>
-                              }
-                              v={passenger.operating || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-location-dot text-black/60"></i>{" "}
-                                  Route
-                                </>
-                              }
-                              v={passenger.route || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-plane-departure text-black/60"></i>{" "}
-                                  Departure
-                                </>
-                              }
-                              v={formatDate(passenger.dep) || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-plane-arrival text-black/60"></i>{" "}
-                                  Arrival
-                                </>
-                              }
-                              v={formatDate(passenger.arr) || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-chair text-black/60"></i>{" "}
-                                  Seat
-                                </>
-                              }
-                              v={passenger.seat || "—"}
-                            />
-                            <Field
-                              k={
-                                <>
-                                  <i className="fa-solid fa-hashtag text-black/60"></i>{" "}
-                                  Ticket No.
-                                </>
-                              }
-                              v={passenger.ticketNo || "—"}
-                            />
-                          </div>
-                        </FadeIn>
+                        <div className="font-semibold text-[14px]">
+                          {passenger.name} •{" "}
+                          <span className="text-black/70">
+                            Ticket {passenger.ticketNo}
+                          </span>
+                        </div>
+                        <i
+                          className={`fa-solid ${
+                            isOpen ? "fa-chevron-up" : "fa-chevron-down"
+                          } text-black/50 transition-transform duration-200`}
+                        ></i>
+                      </button>
 
-                        {/* EMDs */}
-                        <div className="space-y-2">
-                          {(passenger.emds || []).map((emd, emdIndex) => {
-                            const canEdit =
-                              isHumanRequired && emd.editable && !emd.built;
+                      {/* Accordion Body */}
+                      <Collapse open={isOpen}>
+                        <div
+                          className={`p-2 ${needsAttention ? "pulse-focus-once" : ""}`}
+                          onPointerDownCapture={stopIfInteractive}
+                          onMouseDownCapture={stopIfInteractive}
+                          onClickCapture={stopIfInteractive}
+                        >
+                          {/* Traveler & Flight */}
+                          <FadeIn className="mb-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-regular fa-user text-black/60"></i>{" "}
+                                    Passenger
+                                  </>
+                                }
+                                v={passenger.travelerName || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-plane text-black/60"></i>{" "}
+                                    Flight No.
+                                  </>
+                                }
+                                v={passenger.flightNo || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-tag text-black/60"></i>{" "}
+                                    Operating
+                                  </>
+                                }
+                                v={passenger.operating || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-location-dot text-black/60"></i>{" "}
+                                    Route
+                                  </>
+                                }
+                                v={passenger.route || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-plane-departure text-black/60"></i>{" "}
+                                    Departure
+                                  </>
+                                }
+                                v={formatDate(passenger.dep) || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-plane-arrival text-black/60"></i>{" "}
+                                    Arrival
+                                  </>
+                                }
+                                v={formatDate(passenger.arr) || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-chair text-black/60"></i>{" "}
+                                    Seat
+                                  </>
+                                }
+                                v={passenger.seat || "—"}
+                              />
+                              <Field
+                                k={
+                                  <>
+                                    <i className="fa-solid fa-hashtag text-black/60"></i>{" "}
+                                    Ticket No.
+                                  </>
+                                }
+                                v={passenger.ticketNo || "—"}
+                              />
+                            </div>
+                          </FadeIn>
 
-                            return (
-                              <FadeIn
-                                key={`emd-${passengerIndex}-${emdIndex}`}
-                                delay={100 * emdIndex}
-                              >
-                                <div className="rounded border border-black/10">
-                                  <div className="px-3 py-2 bg-black/[0.02] flex items-center justify-between">
-                                    <div className="font-medium text-[13px]">
-                                      <i className="fa-solid fa-passport text-brand-red mr-1"></i>
-                                      EMD {emdIndex + 1} • {emd.emdNo}
+                          {/* EMDs */}
+                          <div className="space-y-2">
+                            {(passenger.emds || []).map((emd, emdIndex) => {
+                              const canEdit =
+                                isHumanRequired && emd.editable && !emd.built;
+
+                              return (
+                                <FadeIn
+                                  key={`emd-${passengerIndex}-${emdIndex}`}
+                                  delay={100 * emdIndex}
+                                >
+                                  <div className="rounded border border-black/10">
+                                    <div className="px-3 py-2 bg-black/[0.02] flex items-center justify-between">
+                                      <div className="font-medium text-[13px]">
+                                        <i className="fa-solid fa-passport text-brand-red mr-1"></i>
+                                        EMD {emdIndex + 1} • {emd.emdNo}
+                                      </div>
+
+                                      {!canEdit ? (
+                                        <span className="text-[12px] text-black/60">
+                                          Status: {emd.emdStatus || "—"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[12px] text-red-600 font-medium">
+                                          Needs AE item to proceed
+                                        </span>
+                                      )}
                                     </div>
 
-                                    {!canEdit ? (
-                                      <span className="text-[12px] text-black/60">
-                                        Status: {emd.emdStatus || "—"}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[12px] text-red-600 font-medium">
-                                        Needs AE item to proceed
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="p-2">
-                                    {/* Top row meta */}
-                                    <FadeIn>
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
-                                        <Field
-                                          k={
-                                            <>
-                                              <i className="fa-regular fa-circle-dot text-black/60"></i>{" "}
-                                              EMD Status
-                                            </>
-                                          }
-                                          v={emd.emdStatus || "—"}
-                                        />
-                                        <Field
-                                          k={
-                                            <>
-                                              <i className="fa-solid fa-dollar-sign text-black/60"></i>{" "}
-                                              EMD Total
-                                            </>
-                                          }
-                                          v={emd.emdTotal || "—"}
-                                        />
-                                        <Field
-                                          k={
-                                            <>
-                                              <i className="fa-solid fa-puzzle-piece text-black/60"></i>{" "}
-                                              SSR
-                                            </>
-                                          }
-                                          v={passenger.ssrCode || "—"}
-                                        />
-                                        <Field
-                                          k={
-                                            <>
-                                              <i className="fa-regular fa-note-sticky text-black/60"></i>{" "}
-                                              Other Info
-                                            </>
-                                          }
-                                          v={pnrDetails.otherInfo || "—"}
-                                        />
-                                      </div>
-                                    </FadeIn>
-
-                                    {/* Editable fields */}
-                                    <FadeIn delay={60}>
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                        {/* RFIC */}
-                                        <div
-                                          className={`rounded p-2 border transition-colors ${
-                                            canEdit
-                                              ? "border-red-400 bg-red-50"
-                                              : "border-black/10 bg-black/[0.03]"
-                                          }`}
-                                        >
-                                          <div className="text-black/60 text-[12px]">
-                                            RFIC
-                                          </div>
-                                          {canEdit ? (
-                                            <input
-                                              className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
-                                              value={emd.rfic || ""}
-                                              onChange={(ev) =>
-                                                handleFieldChange(
-                                                  passengerIndex,
-                                                  emdIndex,
-                                                  "rfic",
-                                                  ev.target.value,
-                                                )
-                                              }
-                                            />
-                                          ) : (
-                                            <div className="mt-1 font-medium">
-                                              {emd.rfic || "—"}
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* RFISC */}
-                                        <div
-                                          className={`rounded p-2 border transition-colors ${
-                                            canEdit
-                                              ? "border-red-400 bg-red-50"
-                                              : "border-black/10 bg-black/[0.03]"
-                                          }`}
-                                        >
-                                          <div className="text-black/60 text-[12px]">
-                                            RFISC
-                                          </div>
-                                          {canEdit ? (
-                                            <input
-                                              className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
-                                              value={emd.rfisc || ""}
-                                              onChange={(ev) =>
-                                                handleFieldChange(
-                                                  passengerIndex,
-                                                  emdIndex,
-                                                  "rfisc",
-                                                  ev.target.value,
-                                                )
-                                              }
-                                            />
-                                          ) : (
-                                            <div className="mt-1 font-medium">
-                                              {emd.rfisc || "—"}
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* EMD Desc */}
-                                        <div
-                                          className={`rounded p-2 border transition-colors ${
-                                            canEdit
-                                              ? "border-red-400 bg-red-50"
-                                              : "border-black/10 bg-black/[0.03]"
-                                          }`}
-                                        >
-                                          <div className="text-black/60 text-[12px]">
-                                            EMD Desc
-                                          </div>
-                                          {canEdit ? (
-                                            <input
-                                              className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
-                                              value={emd.emdDesc || ""}
-                                              onChange={(ev) =>
-                                                handleFieldChange(
-                                                  passengerIndex,
-                                                  emdIndex,
-                                                  "emdDesc",
-                                                  ev.target.value,
-                                                )
-                                              }
-                                            />
-                                          ) : (
-                                            <div className="mt-1 font-medium">
-                                              {emd.emdDesc || "—"}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </FadeIn>
-
-                                    {/* Notes / Suggestions section (Human Input Required only) */}
-                                    {isHumanRequired && (
-                                      <div className="mt-2">
-                                        <div
-                                          className={`rounded p-2 border ${
-                                            canEdit
-                                              ? "border-red-200 bg-red-50/60"
-                                              : "border-black/10 bg-black/[0.03]"
-                                          }`}
-                                        >
-                                          {(() => {
-                                            const aiRaw = emd.aiSuggestions;
-                                            const aiList =
-                                              coerceAiSuggestions(aiRaw);
-                                            const metrics =
-                                              coerceLlmMetrics(aiRaw);
-                                            const sources =
-                                              coerceKnowledgeSources(aiRaw);
-
-                                            const formatMetric = (v) => {
-                                              if (v == null) return "—";
-                                              const num = Number(v);
-                                              if (!Number.isFinite(num))
-                                                return "—";
-                                              if (num >= 0 && num <= 1)
-                                                return `${Math.round(num * 100)}%`;
-                                              return `${Math.round(num * 100) / 100}`;
-                                            };
-
-                                            return (
+                                    <div className="p-2">
+                                      {/* Top row meta */}
+                                      <FadeIn>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
+                                          <Field
+                                            k={
                                               <>
-                                                {metrics && (
-                                                  <div>
-                                                    <div className="text-[12px] text-black/60 font-medium mb-1">
-                                                      LLM Metrics
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1">
-                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
-                                                        Accuracy:{" "}
-                                                        <span className="font-medium">
-                                                          {formatMetric(
-                                                            metrics.accuracy,
-                                                          )}
-                                                        </span>
-                                                      </span>
-                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
-                                                        Consistency:{" "}
-                                                        <span className="font-medium">
-                                                          {formatMetric(
-                                                            metrics.consistency,
-                                                          )}
-                                                        </span>
-                                                      </span>
-                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
-                                                        Coherence:{" "}
-                                                        <span className="font-medium">
-                                                          {formatMetric(
-                                                            metrics.coherence,
-                                                          )}
-                                                        </span>
-                                                      </span>
-                                                      <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
-                                                        Groundedness:{" "}
-                                                        <span className="font-medium">
-                                                          {formatMetric(
-                                                            metrics.groundedness,
-                                                          )}
-                                                        </span>
-                                                      </span>
-                                                    </div>
-                                                  </div>
-                                                )}
-
-                                                <div className="text-[12px] text-black/60 flex items-center gap-2 mt-2">
-                                                  <i className="fa-solid fa-circle-info text-black/50"></i>
-                                                  Notes / Suggestions
-                                                </div>
-
-                                                <ul className="mt-2 list-disc pl-5 space-y-1 text-[12px] text-black/80">
-                                                  {aiList.length
-                                                    ? aiList.map(
-                                                        (textVal, i) => (
-                                                          <li
-                                                            key={`emd-ai-${passengerIndex}-${emdIndex}-${i}`}
-                                                            className="text-black/80"
-                                                          >
-                                                            {textVal}
-                                                          </li>
-                                                        ),
-                                                      )
-                                                    : buildEmdSuggestions({
-                                                        rfic: emd.rfic,
-                                                        rfisc: emd.rfisc,
-                                                        emdDesc: emd.emdDesc,
-                                                      }).map((item, i) => {
-                                                        const danger =
-                                                          item.variant ===
-                                                          "warn";
-                                                        const ok =
-                                                          item.variant === "ok";
-                                                        return (
-                                                          <li
-                                                            key={`emd-suggest-${passengerIndex}-${emdIndex}-${i}`}
-                                                            className={
-                                                              danger
-                                                                ? "text-red-700"
-                                                                : ok
-                                                                  ? "text-green-800"
-                                                                  : "text-black/80"
-                                                            }
-                                                          >
-                                                            {item.text}
-                                                          </li>
-                                                        );
-                                                      })}
-                                                </ul>
-
-                                                <div className="mt-3">
-                                                  <div className="text-[12px] text-black/60 font-medium mb-1">
-                                                    Knowledge source
-                                                  </div>
-                                                  {emd?.aiSuggestions
-                                                    ?.source_article ? (
-                                                    <a
-                                                      href={
-                                                        emd?.aiSuggestions
-                                                          ?.source_article_url
-                                                          ? emd?.aiSuggestions
-                                                              ?.source_article_url
-                                                          : "#"
-                                                      }
-                                                      target="_blank"
-                                                      rel="noreferrer"
-                                                      className="text-brand-red underline underline-offset-2 hover:opacity-80"
-                                                    >
-                                                      {
-                                                        emd.aiSuggestions
-                                                          .source_article
-                                                      }
-                                                    </a>
-                                                  ) : (
-                                                    <div className="text-[12px] text-black/60">
-                                                      -
-                                                    </div>
-                                                  )}
-                                                </div>
+                                                <i className="fa-regular fa-circle-dot text-black/60"></i>{" "}
+                                                EMD Status
                                               </>
-                                            );
-                                          })()}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Build AE per EMD */}
-                                    {canEdit && (
-                                      <FadeIn delay={100}>
-                                        <div className="mt-2">
-                                          <button
-                                            className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150"
-                                            title="Build AE with current values for this EMD"
-                                            onClick={() =>
-                                              openBuildFor(
-                                                passengerIndex,
-                                                emdIndex,
-                                              )
                                             }
-                                          >
-                                            <i className="fa-regular fa-paper-plane mr-1"></i>{" "}
-                                            Build AE
-                                          </button>
+                                            v={emd.emdStatus || "—"}
+                                          />
+                                          <Field
+                                            k={
+                                              <>
+                                                <i className="fa-solid fa-dollar-sign text-black/60"></i>{" "}
+                                                EMD Total
+                                              </>
+                                            }
+                                            v={emd.emdTotal || "—"}
+                                          />
+                                          <Field
+                                            k={
+                                              <>
+                                                <i className="fa-solid fa-puzzle-piece text-black/60"></i>{" "}
+                                                SSR
+                                              </>
+                                            }
+                                            v={passenger.ssrCode || "—"}
+                                          />
+                                          <Field
+                                            k={
+                                              <>
+                                                <i className="fa-regular fa-note-sticky text-black/60"></i>{" "}
+                                                Other Info
+                                              </>
+                                            }
+                                            v={pnrDetails.otherInfo || "—"}
+                                          />
                                         </div>
                                       </FadeIn>
-                                    )}
 
-                                    {/* Processed: ADM area per EMD */}
-                                    {isProcessed && (
-                                      <FadeIn delay={80}>
-                                        <div className="mt-2 border border-black/10 rounded p-2 bg-black/[0.03]">
-                                          <div className="flex flex-col gap-2">
-                                            <div
-                                              data-stop-collapse
-                                              className="flex items-center gap-4"
-                                            >
-                                              <div className="text-[13px] font-medium">
-                                                Is this an ADM?
+                                      {/* Editable fields */}
+                                      <FadeIn delay={60}>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {/* RFIC */}
+                                          <div
+                                            className={`rounded p-2 border transition-colors ${
+                                              canEdit
+                                                ? "border-red-400 bg-red-50"
+                                                : "border-black/10 bg-black/[0.03]"
+                                            }`}
+                                          >
+                                            <div className="text-black/60 text-[12px]">
+                                              RFIC
+                                            </div>
+                                            {canEdit ? (
+                                              <input
+                                                className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
+                                                value={emd.rfic || ""}
+                                                onChange={(ev) =>
+                                                  handleFieldChange(
+                                                    passengerIndex,
+                                                    emdIndex,
+                                                    "rfic",
+                                                    ev.target.value,
+                                                  )
+                                                }
+                                              />
+                                            ) : (
+                                              <div className="mt-1 font-medium">
+                                                {emd.rfic || "—"}
                                               </div>
+                                            )}
+                                          </div>
 
-                                              <label
-                                                className="inline-flex items-center gap-1 text-[13px]"
-                                                onPointerDown={(e) =>
-                                                  e.stopPropagation()
+                                          {/* RFISC */}
+                                          <div
+                                            className={`rounded p-2 border transition-colors ${
+                                              canEdit
+                                                ? "border-red-400 bg-red-50"
+                                                : "border-black/10 bg-black/[0.03]"
+                                            }`}
+                                          >
+                                            <div className="text-black/60 text-[12px]">
+                                              RFISC
+                                            </div>
+                                            {canEdit ? (
+                                              <input
+                                                className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
+                                                value={emd.rfisc || ""}
+                                                onChange={(ev) =>
+                                                  handleFieldChange(
+                                                    passengerIndex,
+                                                    emdIndex,
+                                                    "rfisc",
+                                                    ev.target.value,
+                                                  )
                                                 }
-                                                onMouseDown={(e) =>
-                                                  e.stopPropagation()
+                                              />
+                                            ) : (
+                                              <div className="mt-1 font-medium">
+                                                {emd.rfisc || "—"}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* EMD Desc */}
+                                          <div
+                                            className={`rounded p-2 border transition-colors ${
+                                              canEdit
+                                                ? "border-red-400 bg-red-50"
+                                                : "border-black/10 bg-black/[0.03]"
+                                            }`}
+                                          >
+                                            <div className="text-black/60 text-[12px]">
+                                              EMD Desc
+                                            </div>
+                                            {canEdit ? (
+                                              <input
+                                                className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
+                                                value={emd.emdDesc || ""}
+                                                onChange={(ev) =>
+                                                  handleFieldChange(
+                                                    passengerIndex,
+                                                    emdIndex,
+                                                    "emdDesc",
+                                                    ev.target.value,
+                                                  )
                                                 }
-                                                onClick={(e) =>
-                                                  e.stopPropagation()
-                                                }
+                                              />
+                                            ) : (
+                                              <div className="mt-1 font-medium">
+                                                {emd.emdDesc || "—"}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </FadeIn>
+
+                                      {/* Notes / Suggestions (Human Input Required only) */}
+                                      {isHumanRequired && (
+                                        <div className="mt-2">
+                                          <div
+                                            className={`rounded p-2 border ${
+                                              canEdit
+                                                ? "border-red-200 bg-red-50/60"
+                                                : "border-black/10 bg-black/[0.03]"
+                                            }`}
+                                          >
+                                            {(() => {
+                                              const aiRaw = emd.aiSuggestions;
+                                              const aiList =
+                                                coerceAiSuggestions(aiRaw);
+                                              const metrics =
+                                                coerceLlmMetrics(aiRaw);
+                                              const sources =
+                                                coerceKnowledgeSources(aiRaw);
+
+                                              const formatMetric = (v) => {
+                                                if (v == null) return "—";
+                                                const num = Number(v);
+                                                if (!Number.isFinite(num))
+                                                  return "—";
+                                                if (num >= 0 && num <= 1)
+                                                  return `${Math.round(num * 100)}%`;
+                                                return `${Math.round(num * 100) / 100}`;
+                                              };
+
+                                              return (
+                                                <>
+                                                  {metrics && (
+                                                    <div>
+                                                      <div className="text-[12px] text-black/60 font-medium mb-1">
+                                                        LLM Metrics
+                                                      </div>
+                                                      <div className="flex flex-wrap gap-1">
+                                                        <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          Accuracy:{" "}
+                                                          <span className="font-medium">
+                                                            {formatMetric(
+                                                              metrics.accuracy,
+                                                            )}
+                                                          </span>
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          Consistency:{" "}
+                                                          <span className="font-medium">
+                                                            {formatMetric(
+                                                              metrics.consistency,
+                                                            )}
+                                                          </span>
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          Coherence:{" "}
+                                                          <span className="font-medium">
+                                                            {formatMetric(
+                                                              metrics.coherence,
+                                                            )}
+                                                          </span>
+                                                        </span>
+                                                        <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          Groundedness:{" "}
+                                                          <span className="font-medium">
+                                                            {formatMetric(
+                                                              metrics.groundedness,
+                                                            )}
+                                                          </span>
+                                                        </span>
+                                                      </div>
+                                                    </div>
+                                                  )}
+
+                                                  <div className="text-[12px] text-black/60 flex items-center gap-2 mt-2">
+                                                    <i className="fa-solid fa-circle-info text-black/50"></i>
+                                                    Notes / Suggestions
+                                                  </div>
+
+                                                  <ul className="mt-2 list-disc pl-5 space-y-1 text-[12px] text-black/80">
+                                                    {aiList.length
+                                                      ? aiList.map(
+                                                          (textVal, i) => (
+                                                            <li
+                                                              key={`emd-ai-${passengerIndex}-${emdIndex}-${i}`}
+                                                              className="text-black/80"
+                                                            >
+                                                              {textVal}
+                                                            </li>
+                                                          ),
+                                                        )
+                                                      : buildEmdSuggestions({
+                                                          rfic: emd.rfic,
+                                                          rfisc: emd.rfisc,
+                                                          emdDesc: emd.emdDesc,
+                                                        }).map((item, i) => {
+                                                          const danger =
+                                                            item.variant ===
+                                                            "warn";
+                                                          const ok =
+                                                            item.variant ===
+                                                            "ok";
+                                                          return (
+                                                            <li
+                                                              key={`emd-suggest-${passengerIndex}-${emdIndex}-${i}`}
+                                                              className={
+                                                                danger
+                                                                  ? "text-red-700"
+                                                                  : ok
+                                                                    ? "text-green-800"
+                                                                    : "text-black/80"
+                                                              }
+                                                            >
+                                                              {item.text}
+                                                            </li>
+                                                          );
+                                                        })}
+                                                  </ul>
+
+                                                  <div className="mt-3">
+                                                    <div className="text-[12px] text-black/60 font-medium mb-1">
+                                                      Knowledge source
+                                                    </div>
+                                                    {emd?.aiSuggestions
+                                                      ?.source_article ? (
+                                                      <a
+                                                        href={
+                                                          emd?.aiSuggestions
+                                                            ?.source_article_url
+                                                            ? emd?.aiSuggestions
+                                                                ?.source_article_url
+                                                            : "#"
+                                                        }
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="text-brand-red underline underline-offset-2 hover:opacity-80"
+                                                      >
+                                                        {
+                                                          emd.aiSuggestions
+                                                            .source_article
+                                                        }
+                                                      </a>
+                                                    ) : (
+                                                      <div className="text-[12px] text-black/60">
+                                                        -
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </>
+                                              );
+                                            })()}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Build AE per EMD */}
+                                      {canEdit && (
+                                        <FadeIn delay={100}>
+                                          <div className="mt-2">
+                                            <button
+                                              className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150"
+                                              title="Build AE with current values for this EMD"
+                                              onClick={() =>
+                                                openBuildFor(
+                                                  passengerIndex,
+                                                  emdIndex,
+                                                )
+                                              }
+                                            >
+                                              <i className="fa-regular fa-paper-plane mr-1"></i>{" "}
+                                              Build AE
+                                            </button>
+                                          </div>
+                                        </FadeIn>
+                                      )}
+
+                                      {/* Processed: ADM area per EMD */}
+                                      {isProcessed && (
+                                        <FadeIn delay={80}>
+                                          <div
+                                            data-stop-collapse
+                                            className="mt-2 border border-black/10 rounded p-2 bg-black/[0.03]"
+                                          >
+                                            <div className="flex flex-col gap-2">
+                                              <div
+                                                data-stop-collapse
+                                                className="flex items-center gap-4"
                                               >
-                                                <input
-                                                  type="radio"
-                                                  name={`adm-${passengerIndex}-${emdIndex}`}
-                                                  className="h-4 w-4"
-                                                  checked={
-                                                    emd.adm.isAdm === false
+                                                <div className="text-[13px] font-medium">
+                                                  Is this an ADM?
+                                                </div>
+
+                                                <label
+                                                  className="inline-flex items-center gap-1 text-[13px]"
+                                                  onPointerDown={(e) =>
+                                                    e.stopPropagation()
+                                                  }
+                                                  onMouseDown={(e) =>
+                                                    e.stopPropagation()
                                                   }
                                                   onClick={(e) =>
                                                     e.stopPropagation()
                                                   }
-                                                  onChange={(e) => {
-                                                    setPnrDetails((prev) => {
-                                                      const next =
-                                                        deepClone(prev);
-                                                      next.passengers[
-                                                        passengerIndex
-                                                      ].emds[
-                                                        emdIndex
-                                                      ].adm.isAdm = false;
-                                                      return next;
-                                                    });
-                                                    e.stopPropagation();
-                                                  }}
-                                                />
-                                                <span>No</span>
-                                              </label>
+                                                >
+                                                  <input
+                                                    type="radio"
+                                                    name={`adm-${passengerIndex}-${emdIndex}`}
+                                                    className="h-4 w-4"
+                                                    checked={
+                                                      emd.adm.isAdm === false
+                                                    }
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                    onChange={(e) => {
+                                                      setPnrDetails((prev) => {
+                                                        const next =
+                                                          deepClone(prev);
+                                                        next.passengers[
+                                                          passengerIndex
+                                                        ].emds[
+                                                          emdIndex
+                                                        ].adm.isAdm = false;
+                                                        return next;
+                                                      });
+                                                      e.stopPropagation();
+                                                    }}
+                                                  />
+                                                  <span>No</span>
+                                                </label>
 
-                                              <label className="inline-flex items-center gap-1 text-[13px]">
+                                                <label className="inline-flex items-center gap-1 text-[13px]">
+                                                  <input
+                                                    type="radio"
+                                                    name={`adm-${passengerIndex}-${emdIndex}`}
+                                                    className="h-4 w-4"
+                                                    checked={
+                                                      emd.adm.isAdm === true
+                                                    }
+                                                    onChange={() =>
+                                                      setPnrDetails((prev) => {
+                                                        const next =
+                                                          deepClone(prev);
+                                                        next.passengers[
+                                                          passengerIndex
+                                                        ].emds[
+                                                          emdIndex
+                                                        ].adm.isAdm = true;
+                                                        return next;
+                                                      })
+                                                    }
+                                                  />
+                                                  <span>Yes</span>
+                                                </label>
+                                              </div>
+
+                                              <div className="flex items-center gap-2">
                                                 <input
-                                                  type="radio"
-                                                  name={`adm-${passengerIndex}-${emdIndex}`}
-                                                  className="h-4 w-4"
-                                                  checked={
-                                                    emd.adm.isAdm === true
-                                                  }
-                                                  onChange={() =>
+                                                  type="text"
+                                                  className="input h-8 px-2 flex-1"
+                                                  placeholder="Optional feedback"
+                                                  value={emd.adm.feedback || ""}
+                                                  onChange={(ev) =>
                                                     setPnrDetails((prev) => {
                                                       const next =
                                                         deepClone(prev);
@@ -2072,293 +2075,294 @@ export default function PNRDetails({
                                                         passengerIndex
                                                       ].emds[
                                                         emdIndex
-                                                      ].adm.isAdm = true;
+                                                      ].adm.feedback =
+                                                        ev.target.value;
                                                       return next;
                                                     })
                                                   }
                                                 />
-                                                <span>Yes</span>
-                                              </label>
-                                            </div>
 
-                                            <div className="flex items-center gap-2">
-                                              <input
-                                                type="text"
-                                                className="input h-8 px-2 flex-1"
-                                                placeholder="Optional feedback"
-                                                value={emd.adm.feedback || ""}
-                                                onChange={(ev) =>
-                                                  setPnrDetails((prev) => {
-                                                    const next =
-                                                      deepClone(prev);
-                                                    next.passengers[
-                                                      passengerIndex
-                                                    ].emds[
-                                                      emdIndex
-                                                    ].adm.feedback =
-                                                      ev.target.value;
-                                                    return next;
-                                                  })
-                                                }
-                                              />
-
-                                              <button
-                                                className="btn btn-success h-8 px-3 disabled:opacity-40"
-                                                onClick={() =>
-                                                  openAdmConfirm(
-                                                    passengerIndex,
-                                                    emdIndex,
-                                                  )
-                                                }
-                                                title="Submit Feedback"
-                                              >
-                                                Submit Feedback
-                                              </button>
-                                            </div>
-
-                                            {/* {emd.adm.submitted && (
-                                              <div className="text-green-700 text-[12px]">
-                                                <i className="fa-regular fa-circle-check mr-1"></i>
-                                                Feedback submitted (Is ADM:{" "}
-                                                {emd.adm.isAdm ? "Yes" : "No"}
-                                                {emd.adm.feedback
-                                                  ? `, Note: ${emd.adm.feedback}`
-                                                  : ""}
-                                                )
+                                                <button
+                                                  className="btn btn-success h-8 px-3 disabled:opacity-40"
+                                                  onClick={() =>
+                                                    openAdmConfirm(
+                                                      passengerIndex,
+                                                      emdIndex,
+                                                    )
+                                                  }
+                                                  title="Submit Feedback"
+                                                >
+                                                  Submit Feedback
+                                                </button>
                                               </div>
-                                            )} */}
+                                            </div>
                                           </div>
-                                        </div>
-                                      </FadeIn>
-                                    )}
+                                        </FadeIn>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              </FadeIn>
-                            );
-                          })}
+                                </FadeIn>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    </Collapse>
-                  </div>
-                );
-              })}
-            </div>
+                      </Collapse>
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* Human: Process PNR at end */}
-            {isHumanRequired && (
-              <FadeIn className="flex w-full justify-center mt-3">
-                <button
-                  className="btn btn-primary h-9 w-full md:w-1/2 lg:w-1/3 justify-center disabled:opacity-40 active:scale-[0.985] transition-transform"
-                  title={
-                    allEmdsBuilt
-                      ? "Process this PNR"
-                      : "Build AE for all EMDs to enable"
-                  }
-                  disabled={!allEmdsBuilt || isProcessSubmitting}
-                  onClick={processPNR}
-                >
-                  {isProcessSubmitting ? (
-                    <Spinner size="sm" />
-                  ) : (
-                    <>Process PNR</>
-                  )}
-                </button>
-              </FadeIn>
-            )}
-          </section>
-        </div>
-      ) : (
-        <p className="text-black/70">No details to display.</p>
-      )}
-      {/* Build AE Modal (per EMD) */}
-      {isBuildModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
-            onClick={() => setIsBuildModalOpen(false)}
-            style={{
-              animation: "fadeInUp 200ms ease-out forwards",
-              transform: "none",
-            }}
-          ></div>
-          <div
-            className="relative bg-white w-[95%] max-w-lg rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
-            style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
-          >
-            <h5 className="text-lg font-semibold mb-3">Confirm Build AE</h5>
-
-            <div className="text-sm">
-              <div className="font-medium mb-1">Changed Fields</div>
-              {buildChanges.length === 0 ? (
-                <div className="text-black/70">
-                  No edits detected (RFIC, RFISC, EMD Desc are unchanged).
-                </div>
-              ) : (
-                <ul className="list-disc pl-5 space-y-1">
-                  {buildChanges.map((change) => (
-                    <li key={change.field}>
-                      <span className="font-medium">{change.field}:</span>{" "}
-                      <span className="text-black/60 line-through">
-                        {change.from}
-                      </span>{" "}
-                      <i className="fa-solid fa-arrow-right mx-1 text-black/40"></i>
-                      <span>{change.to}</span>
-                    </li>
-                  ))}
-                </ul>
+              {/* Human: Process PNR */}
+              {isHumanRequired && (
+                <FadeIn className="flex w-full justify-center mt-3">
+                  <button
+                    className="btn btn-primary h-9 w-full md:w-1/2 lg:w-1/3 justify-center disabled:opacity-40 active:scale-[0.985] transition-transform"
+                    title={
+                      allEmdsBuilt
+                        ? "Process this PNR"
+                        : "Build AE for all EMDs to enable"
+                    }
+                    disabled={!allEmdsBuilt || isProcessSubmitting}
+                    onClick={processPNR}
+                  >
+                    {isProcessSubmitting ? (
+                      <Spinner size="sm" />
+                    ) : (
+                      <>Process PNR</>
+                    )}
+                  </button>
+                </FadeIn>
               )}
-            </div>
+            </section>
+          </div>
+        ) : (
+          <p className="text-black/70">No details to display.</p>
+        )}
 
-            <div className="mt-3">
-              <label className="block text-sm font-medium mb-1">
-                Optional feedback
-              </label>
-              <textarea
-                className="input w-full h-20"
-                placeholder="Add notes for this build (optional)"
-                value={buildNotes}
-                onChange={(e) => setBuildNotes(e.target.value)}
-              />
-            </div>
+        {/* Build AE Modal */}
+        {isBuildModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
+              onClick={() => setIsBuildModalOpen(false)}
+              style={{
+                animation: "fadeInUp 200ms ease-out forwards",
+                transform: "none",
+              }}
+            ></div>
+            <div
+              className="relative bg-white w-[95%] max-w-lg rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
+              style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
+            >
+              <h5 className="text-lg font-semibold mb-3">Confirm Build AE</h5>
 
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setIsBuildModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={confirmBuildAE}
-                disabled={isBuildSubmitting}
-                title="Confirm Build"
-              >
-                {isBuildSubmitting ? <Spinner size="sm" /> : "Confirm Build"}
-              </button>
+              <div className="text-sm">
+                <div className="font-medium mb-1">Changed Fields</div>
+                {buildChanges.length === 0 ? (
+                  <div className="text-black/70">
+                    No edits detected (RFIC, RFISC, EMD Desc are unchanged).
+                  </div>
+                ) : (
+                  <ul className="list-disc pl-5 space-y-1">
+                    {buildChanges.map((change) => (
+                      <li key={change.field}>
+                        <span className="font-medium">{change.field}:</span>{" "}
+                        <span className="text-black/60 line-through">
+                          {change.from}
+                        </span>{" "}
+                        <i className="fa-solid fa-arrow-right mx-1 text-black/40"></i>
+                        <span>{change.to}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="mt-3">
+                <label className="block text-sm font-medium mb-1">
+                  Optional feedback
+                </label>
+                <textarea
+                  className="input w-full h-20"
+                  placeholder="Add notes for this build (optional)"
+                  value={buildNotes}
+                  onChange={(e) => setBuildNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setIsBuildModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-success"
+                  onClick={confirmBuildAE}
+                  disabled={isBuildSubmitting}
+                  title="Confirm Build"
+                >
+                  {isBuildSubmitting ? <Spinner size="sm" /> : "Confirm Build"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ADM Submit Confirmation */}
-      {isAdmConfirmOpen && (
+        {/* ADM Submit Confirmation */}
+        {isAdmConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
+              onClick={cancelSubmitADM}
+              style={{
+                animation: "fadeInUp 200ms ease-out forwards",
+                transform: "none",
+              }}
+            ></div>
+            <div
+              className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
+              style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
+            >
+              <h5 className="text-lg font-semibold mb-3">Submit Feedback</h5>
+              <div className="text-sm text-black/70">
+                Are you sure you want to submit this ADM feedback?
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button className="btn btn-secondary" onClick={cancelSubmitADM}>
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-success"
+                  onClick={confirmSubmitADM}
+                  disabled={isAdmSubmitting}
+                >
+                  {isAdmSubmitting ? <Spinner size="sm" /> : "Submit"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Remove from Queue Confirmation */}
+        {isRemoveConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
+              onClick={cancelRemoveFromQueue}
+              style={{
+                animation: "fadeInUp 200ms ease-out forwards",
+                transform: "none",
+              }}
+            ></div>
+            <div
+              className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
+              style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
+            >
+              <h5 className="text-lg font-semibold mb-3">Remove from Queue</h5>
+              <div className="text-sm text-black/70">
+                Remove PNR <span className="font-medium">{selected.pnr}</span>{" "}
+                from the list?
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  className="btn btn-secondary"
+                  onClick={cancelRemoveFromQueue}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-danger"
+                  onClick={confirmRemoveFromQueue}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View PNR JSON Modal */}
+        {isViewModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
+              onClick={() => setIsViewModalOpen(false)}
+              style={{
+                animation: "fadeInUp 200ms ease-out forwards",
+                transform: "none",
+              }}
+            ></div>
+            <div
+              className="relative bg-white w-[95%] max-w-4xl rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
+              style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
+            >
+              <div className="flex items-center justify-between">
+                <h5 className="text-lg font-semibold">PNR Snapshot</h5>
+                <button
+                  className="btn btn-secondary h-8 px-3 text-xs"
+                  onClick={() => setIsViewModalOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-3">
+                {isViewLoading ? (
+                  <div className="flex items-center gap-2 text-black/70">
+                    <Spinner size="sm" /> Loading snapshot…
+                  </div>
+                ) : viewError ? (
+                  <div className="text-red-600">{viewError}</div>
+                ) : viewJson ? (
+                  <pre className="bg-black/5 p-2 rounded max-h-[70vh] overflow-auto text-xs leading-relaxed">
+                    {JSON.stringify(viewJson, null, 2)}
+                  </pre>
+                ) : (
+                  <div className="text-black/60">No data to display.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Expanded Error Details Modal — rendered outside main div via Fragment */}
+      {isErrorModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
-            onClick={cancelSubmitADM}
+            onClick={closeErrorDetails}
             style={{
               animation: "fadeInUp 200ms ease-out forwards",
               transform: "none",
             }}
           ></div>
           <div
-            className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
+            className="relative bg-white w-[95%] max-w-2xl rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
             style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
           >
-            <h5 className="text-lg font-semibold mb-3">Submit Feedback</h5>
-            <div className="text-sm text-black/70">
-              Are you sure you want to submit this ADM feedback?
-            </div>
-
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button className="btn btn-secondary" onClick={cancelSubmitADM}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={confirmSubmitADM}
-                disabled={isAdmSubmitting}
-              >
-                {isAdmSubmitting ? <Spinner size="sm" /> : "Submit"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Remove from Queue Confirmation */}
-      {isRemoveConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
-            onClick={cancelRemoveFromQueue}
-            style={{
-              animation: "fadeInUp 200ms ease-out forwards",
-              transform: "none",
-            }}
-          ></div>
-          <div
-            className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
-            style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
-          >
-            <h5 className="text-lg font-semibold mb-3">Remove from Queue</h5>
-            <div className="text-sm text-black/70">
-              Remove PNR <span className="font-medium">{selected.pnr}</span>{" "}
-              from the list?
-            </div>
-
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                className="btn btn-secondary"
-                onClick={cancelRemoveFromQueue}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger"
-                onClick={confirmRemoveFromQueue}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* View PNR JSON Modal */}
-      {isViewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
-            onClick={() => setIsViewModalOpen(false)}
-            style={{
-              animation: "fadeInUp 200ms ease-out forwards",
-              transform: "none",
-            }}
-          ></div>
-          <div
-            className="relative bg-white w-[95%] max-w-4xl rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
-            style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
-          >
-            <div className="flex items-center justify-between">
-              <h5 className="text-lg font-semibold">PNR Snapshot</h5>
+            <div className="flex items-center justify-between gap-2">
+              <h5 className="text-lg font-semibold">Detailed Error</h5>
               <button
                 className="btn btn-secondary h-8 px-3 text-xs"
-                onClick={() => setIsViewModalOpen(false)}
+                onClick={closeErrorDetails}
+                type="button"
               >
                 Close
               </button>
             </div>
-
             <div className="mt-3">
-              {isViewLoading ? (
-                <div className="flex items-center gap-2 text-black/70">
-                  <Spinner size="sm" /> Loading snapshot…
-                </div>
-              ) : viewError ? (
-                <div className="text-red-600">{viewError}</div>
-              ) : viewJson ? (
-                <pre className="bg-black/5 p-2 rounded max-h-[70vh] overflow-auto text-xs leading-relaxed">
-                  {JSON.stringify(viewJson, null, 2)}
-                </pre>
-              ) : (
-                <div className="text-black/60">No data to display.</div>
-              )}
+              <pre className="bg-red-50 border border-red-200 p-3 rounded max-h-[60vh] overflow-auto text-xs leading-relaxed whitespace-pre-wrap break-words">
+                {errorDetailsText || "—"}
+              </pre>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -1856,8 +1856,10 @@ export default function PNRTable({
         </div>
 
         <div className="text-sm text-black/70">
-          Showing <span className="font-medium">{from}</span>–{" "}
-          <span className="font-medium">{to}</span>{" "}
+          Showing <span className="font-medium">{from}</span>
+          {" - "}
+          <span className="font-medium">{to}</span>
+          {" • "}
           <span className="font-medium">{totalRecords}</span> entries • Page{" "}
           <span className="font-medium">{clampedPage}</span> of{" "}
           <span className="font-medium">{totalPages}</span>
