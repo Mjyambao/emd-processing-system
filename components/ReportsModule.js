@@ -314,7 +314,7 @@ function getModalColumnDefs(modalTitle, onOpenPNR) {
   const slaCol = {
     key: "slaMinutes",
     header: "SLA",
-    render: (r) => minutesToHrs(r.documentType === "EMD-A" ? 4 : 5),
+    render: (r) => minutesToHrs(r.documentType === "EMD-A" ? 3 : 5),
   };
 
   // Avg completion time stage breakdown columns (minutes)
@@ -2704,7 +2704,7 @@ export default function ReportsModule({ onOpenPNR }) {
                     key: "sla",
                     header: "SLA",
                     render: (r) =>
-                      minutesToHrs(r.documentType === "EMD-A" ? 4 : 5),
+                      minutesToHrs(r.documentType === "EMD-A" ? 3 : 5),
                   },
                   {
                     key: "completion",
