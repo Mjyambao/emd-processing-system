@@ -107,11 +107,12 @@ const AIRLINE_CODE_LOOKUP_URL =
   "https://www.iata.org/en/publications/directories/code-search/";
 
 /** Very lightweight heuristics (safe + helpful, without hardcoding airline-specific mappings) */
-function buildEmdSuggestions({ rfic, rfisc, emdDesc }) {
+function buildEmdSuggestions({ rfic, rfisc, emdDesc, reason }) {
   const list = [];
   const rficVal = normalize(rfic);
   const rfiscVal = normalize(rfisc);
   const descVal = normalize(emdDesc);
+  const reasonVal = normalize(reason);
 
   // Basic format checks
   if (!rficVal) {
@@ -164,7 +165,7 @@ function buildEmdSuggestions({ rfic, rfisc, emdDesc }) {
   // Consistency suggestion
   list.push({
     variant: "info",
-    text: "Tip: Keep RFIC/RFISC aligned with the EMD Desc wording to avoid mismatched subcodes.",
+    text: `Reasoning: ${reasonVal}`,
   });
 
   return list;
@@ -226,7 +227,7 @@ function coerceLlmMetrics(value) {
     if (!obj || typeof obj !== "object") return null;
     const m = obj.metrics || obj.llmMetrics || obj;
     const out = {
-      accuracy: pickNum(m.confidence),
+      accuracy: pickNum(m.accuracy),
       consistency: pickNum(m.consistency),
       coherence: pickNum(m.coherence),
       groundedness: pickNum(m.groundedness),
@@ -1900,6 +1901,9 @@ export default function PNRDetails({
                                                           rfic: emd.rfic,
                                                           rfisc: emd.rfisc,
                                                           emdDesc: emd.emdDesc,
+                                                          reason:
+                                                            emd.aiSuggestions
+                                                              ?.reasoning,
                                                         }).map((item, i) => {
                                                           const danger =
                                                             item.variant ===
@@ -1928,30 +1932,103 @@ export default function PNRDetails({
                                                     <div className="text-[12px] text-black/60 font-medium mb-1">
                                                       Knowledge source
                                                     </div>
-                                                    {emd?.aiSuggestions
-                                                      ?.source_article ? (
-                                                      <a
-                                                        href={
-                                                          emd?.aiSuggestions
-                                                            ?.source_article_url
-                                                            ? emd?.aiSuggestions
-                                                                ?.source_article_url
-                                                            : "#"
+
+                                                    {(() => {
+                                                      const ai =
+                                                        emd?.aiSuggestions;
+                                                      const ks =
+                                                        ai?.knowledge_source;
+
+                                                      const pickHref = (u) => {
+                                                        if (!u) return null;
+                                                        if (
+                                                          typeof u === "string"
+                                                        )
+                                                          return u;
+                                                        if (
+                                                          typeof u === "object"
+                                                        ) {
+                                                          return (
+                                                            u.url ||
+                                                            u.link ||
+                                                            u.href ||
+                                                            u.value ||
+                                                            u.uri ||
+                                                            null
+                                                          );
                                                         }
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="text-brand-red underline underline-offset-2 hover:opacity-80"
-                                                      >
-                                                        {
-                                                          emd.aiSuggestions
-                                                            .source_article
+                                                        return null;
+                                                      };
+
+                                                      // 1) Preferred: new array format
+                                                      if (
+                                                        Array.isArray(ks) &&
+                                                        ks.length > 0
+                                                      ) {
+                                                        const valid = ks
+                                                          .map((item) => {
+                                                            const label =
+                                                              item?.source_article;
+                                                            if (!label)
+                                                              return null;
+                                                            const href =
+                                                              pickHref(
+                                                                item?.source_article_url,
+                                                              );
+                                                            return {
+                                                              label:
+                                                                String(label),
+                                                              href,
+                                                            };
+                                                          })
+                                                          .filter(Boolean);
+
+                                                        if (
+                                                          valid.length === 0
+                                                        ) {
+                                                          return (
+                                                            <div className="text-[12px] text-black/60">
+                                                              -
+                                                            </div>
+                                                          );
                                                         }
-                                                      </a>
-                                                    ) : (
-                                                      <div className="text-[12px] text-black/60">
-                                                        -
-                                                      </div>
-                                                    )}
+
+                                                        return (
+                                                          <div className="flex flex-col gap-1">
+                                                            {valid.map(
+                                                              (src, idx2) =>
+                                                                src.href ? (
+                                                                  <a
+                                                                    key={`${src.label}-${idx2}`}
+                                                                    href={
+                                                                      src.href
+                                                                    }
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px]"
+                                                                  >
+                                                                    {src.label}
+                                                                  </a>
+                                                                ) : (
+                                                                  <div
+                                                                    key={`${src.label}-${idx2}`}
+                                                                    className="text-[12px] text-black/60"
+                                                                  >
+                                                                    {src.label}
+                                                                  </div>
+                                                                ),
+                                                            )}
+                                                          </div>
+                                                        );
+                                                      }
+
+                                                      // 3) Default: nothing
+                                                      return (
+                                                        <div className="text-[12px] text-black/60">
+                                                          -
+                                                        </div>
+                                                      );
+                                                    })()}
                                                   </div>
                                                 </>
                                               );
