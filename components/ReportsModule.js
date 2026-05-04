@@ -996,24 +996,9 @@ function PnrModal({
         <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl h-[80vh]">
           <div className="flex items-start justify-between gap-4 border-b border-black/10 p-4">
             <div className="min-w-0">
-              <div className="truncate text-base font-semibold text-black">
-                PNR Details — {display(selectedPnr)}
-              </div>
-              <div className="mt-1 text-sm text-black/60">
-                Click outside to close
-              </div>
+              <div className="truncate text-base font-semibold text-black"></div>
             </div>
             <div className="flex items-center gap-2">
-              {onOpenDashboard ? (
-                <button
-                  type="button"
-                  className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-black/70 hover:text-black"
-                  onClick={() => onOpenDashboard(selectedPnr)}
-                  title="Open in dashboard"
-                >
-                  Open in Dashboard
-                </button>
-              ) : null}
               <button
                 type="button"
                 className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-black/70 hover:text-black"
