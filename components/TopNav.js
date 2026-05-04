@@ -23,7 +23,7 @@ export default function TopNav({ onLogout }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-black/10 bg-white/80 backdrop-blur">
+    <header className="sticky top-0 z-[99999] border-b border-black/10 bg-white/80 backdrop-blur">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded bg-brand-red/90 backdrop-blur grid place-items-center text-white">

@@ -34,6 +34,7 @@ export default function PNRTable({
   // If provided, it overrides Assigned To filter & includeUnassigned logic.
   assignedToOverride,
   loggedInUserName,
+  loggedInUserId,
 }) {
   /**
    * -----------------------------
@@ -135,7 +136,7 @@ export default function PNRTable({
    * - queueName defaults to "-"
    * - userId defaults to 0
    */
-  const getAssignedBy = () => loggedInUserName || "System";
+  const getAssignedBy = () => loggedInUserId || "31";
 
   const makeCorrelationId = () => {
     try {
@@ -237,6 +238,8 @@ export default function PNRTable({
       case "ttl":
         return "ttl";
       case "error":
+        return "humanError";
+      case "errorDetailed":
         return "errorDetails";
       case "assigned":
         return "assignedTo";
@@ -258,7 +261,8 @@ export default function PNRTable({
     stage: item?.stage ?? "",
     queueArrival: item?.queueArrival ?? null,
     lastUpdated: item?.lastUpdated ?? null,
-    error: item?.errorDetails ?? "",
+    error: item?.humanError ?? "",
+    errorDetailed: item?.errorDetails ?? "",
     assigned: item?.assignedTo ?? "",
     action: item?.actionRequired ?? "",
 
@@ -466,10 +470,10 @@ export default function PNRTable({
     : [
         { id: "u1", name: "Ticketer 1" },
         { id: "u2", name: "Guest User" },
-        { id: "u3", name: "Matt Quiin" },
+        { id: "u3", name: "Ticketer 2" },
       ];
 
-  const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Matt Quiin"];
+  const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Ticketer 2"];
 
   /**
    * --------
@@ -1059,7 +1063,7 @@ export default function PNRTable({
         correlationId: row?.correlationId || makeCorrelationId(),
         oasisQueueId: row?.oasisQueueId || "testQueueID",
         queueName: "testQueueName",
-        userId: 1,
+        userId: assignedBy,
       };
 
       await patchAssignPnr(pnrId, payload);
@@ -1192,14 +1196,14 @@ export default function PNRTable({
       )}
 
       <div
-        className="relative overflow-x-auto scroll-smooth min-h-[300px] pb-4"
+        className="relative overflow-x-auto overflow-y-auto scroll-smooth max-h-[340px] pb-4"
         tabIndex={0}
         role="region"
         aria-label="PNR results table"
       >
         <table className="table min-w-[2400px] bg-white">
-          <thead className="relative z-[60]">
-            <tr>
+          <thead className="sticky top-0 z-[30] bg-white">
+            <tr className="bg-white">
               <ThCheckboxHeader
                 headerCbRef={headerCbRef}
                 pageAllSelected={pageAllSelected}
@@ -1657,11 +1661,11 @@ export default function PNRTable({
               </ThWithFilter>
 
               {/* Action Required (filter removed) */}
-              <th className="w-[220px] whitespace-nowrap">
+              {/* <th className="w-[220px] whitespace-nowrap">
                 <div className="px-3 py-2 font-semibold text-xs text-black/70">
                   Action Required
                 </div>
-              </th>
+              </th> */}
             </tr>
           </thead>
 
@@ -1778,34 +1782,18 @@ export default function PNRTable({
                   <td className="w-[420px] text-black/80">
                     <p>
                       {row.status === "error" ? (
-                        <Tooltip
-                          position="bottom"
-                          offset={8}
-                          content={
-                            <ul className="list-disc pl-4">
-                              <li className="text-[12px] mt-1">
-                                Error suggestions:
-                              </li>
-                              <li className="text-[12px] mt-1">
-                                Verify RFIC/RFISC mapping
-                              </li>
-                              <li className="text-[12px] mt-1">
-                                Fix missing or invalid tour/corporate code
-                              </li>
-                            </ul>
-                          }
+                        <button
+                          type="button"
+                          disabled
+                          title={row.errorDetailed}
+                          className="ml-1 mr-2 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                          aria-label="More info about this error"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <button
-                            type="button"
-                            className="ml-1 mr-2 inline-flex h-4 w-4 items-center justify-center rounded text-black/50 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red"
-                            aria-label="More info about this error"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <i className="fa-solid fa-circle-info text-[14px]" />
-                          </button>
-                        </Tooltip>
+                          <i className="fa-solid fa-circle-info text-[14px]" />
+                        </button>
                       ) : null}
-                      {row.error}
+                      {row.error ? row.error : "-"}
                     </p>
                   </td>
 
@@ -1815,9 +1803,9 @@ export default function PNRTable({
                   </td>
 
                   {/* Action */}
-                  <td className="w-[220px] text-black/80">
+                  {/* <td className="w-[220px] text-black/80">
                     {row.action ?? "NA"}
-                  </td>
+                  </td> */}
                 </tr>
               );
             })}

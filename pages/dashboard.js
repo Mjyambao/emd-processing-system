@@ -184,7 +184,7 @@ export default function Dashboard() {
   const statusFilter = activeTab === TABS.ALL ? allStatus : myStatus;
   const setStatus = activeTab === TABS.ALL ? setAllStatus : setMyStatus;
 
-  // ✅ chips use these counters (now synced to PNRTable’s current page rows)
+  // Chips counter
   const counters = activeTab === TABS.ALL ? allCounts : myCounts;
 
   function handleLogout() {
@@ -204,8 +204,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen">
       <TopNav onLogout={handleLogout} />
-
-      {/* ORIGINAL spacing preserved (no reserved padding for dock) */}
       <main className="mx-auto max-w-6xl p-4">
         {/* Header */}
         <div className="mb-3 flex items-center gap-2 text-sm text-black/70">
@@ -277,7 +275,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Chips (now counts based on the currently loaded page rows in PNRTable) */}
         {activeTab !== TABS.REPORTS ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Chip
@@ -359,6 +356,7 @@ export default function Dashboard() {
                 activeTab === TABS.MINE ? loggedInName : undefined
               }
               loggedInUserName={loggedInName}
+              loggedInUserId={loggedInUserId}
             />
 
             <PNRDetails

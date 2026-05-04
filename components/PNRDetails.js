@@ -89,8 +89,8 @@ function extractOtherInfoSabre(data) {
 function stopIfInteractive(e) {
   const el = e.target;
   if (
-    el.closest(
-      'input, select, textarea, a, [role="button"], [data-stop-collapse]',
+    el?.closest(
+      'input, select, textarea, button, a, [role="button"], [data-stop-collapse]',
     )
   ) {
     e.stopPropagation();
@@ -263,8 +263,7 @@ function coerceKnowledgeSources(value) {
     }
     return null;
   };
-  const root = value && typeof value === "object";
-  const arr = Array.isArray(root) ? root : [];
+  const arr = Array.isArray(value) ? value : [];
   const out = [];
   for (const v of arr) {
     const item = toItem(v.source_article);
@@ -428,21 +427,19 @@ function mapApiToPnrDetails(pnrApi) {
   });
 
   const pnrId = pnrApi?.pnrId || header?.pnrId;
-  const createdUtc =
-    header?.bookingCreatedUtc || header?.bookingCreated || header?.createdUtc;
 
   const common = {
     pnr: pnrId,
     bookingId: header?.bookingId,
     isTicketed: header?.isTicketed,
-    agencyIata: header?.agencyIataNumber,
-    pcc: header?.userWorkPcc || header?.displayPcc || header?.userHomePcc,
-    created: createdUtc,
+    agencyIata: header?.agencyIataNumber || "—",
+    pcc: header?.userWorkPcc || "—",
+    created: header?.bookingCreatedUtc,
     contactEmail: passengersRaw?.[0]?.primaryEmail || "—",
     contactPhone: passengersRaw?.[0]?.primaryPhoneNumber || "—",
     otherInfo: pickOtherInfoFromApi(pnrApi),
     errorDesc: pnrApi?.errorDetails || null,
-    documentType: header?.documentType || "EMD",
+    documentType: header?.documentType || "—",
     brand: header?.brandCode || "—",
     gds: header?.gds || "—",
     status: pnrApi?.status,
@@ -566,7 +563,6 @@ function mapApiToPnrDetails(pnrApi) {
       dep,
       arr,
       seat,
-      ssrCode: "—",
       emds,
       passengerId: pax?.passengerId,
       travelerIndex: pax?.travelerIndex,
@@ -767,7 +763,7 @@ export default function PNRDetails({
             (pax.emds || []).forEach((emd) => {
               const aeStatus = safeUpper(emd?.aeBuildStatus);
               emd.editable = isHuman && aeStatus === "PENDING";
-              emd.built = emd.editable ? false : true;
+              emd.built = emd?.aeBuildStatus === "PENDING" ? false : true;
               if (!emd.baseline)
                 emd.baseline = {
                   rfic: emd.rfic,
@@ -1025,20 +1021,19 @@ export default function PNRDetails({
     };
   }, [selected]);
 
-  // Auto-expand the passenger that needs attention
+  // Auto-expand the passenger that needs attention (Human Input Required only)
   useEffect(() => {
     if (!pnrDetails?.passengers) return;
 
-    if (!isHumanRequired) {
-      setOpenPassengerIndex(-1);
-      return;
-    }
+    // Only auto-open for Human Input Required; do NOT force-close while users interact
+    if (!isHumanRequired) return;
 
     const idx = pnrDetails.passengers.findIndex((passenger) =>
-      (passenger.emds || []).some((emd) => emd.editable && !emd.built),
+      (passenger.emdItems || []).some((emd) => emd.aeBuildStatus === "PENDING"),
     );
 
-    setOpenPassengerIndex(idx >= 0 ? idx : 0);
+    // If user already opened an accordion, don't override their selection
+    setOpenPassengerIndex((prev) => (prev >= 0 ? prev : idx >= 0 ? idx : 0));
   }, [pnrDetails, isHumanRequired]);
 
   const inputsNeeded = useMemo(() => {
@@ -1046,8 +1041,8 @@ export default function PNRDetails({
     const list = [];
 
     pnrDetails.passengers.forEach((passenger, passengerIndex) => {
-      (passenger.emds || []).forEach((emd, emdIndex) => {
-        if (emd.editable && !emd.built) {
+      (passenger.emdItems || []).forEach((emd, emdIndex) => {
+        if (emd.aeBuildStatus === "PENDING") {
           list.push({
             key: `${passengerIndex}-${emdIndex}`,
             passenger: passenger.name,
@@ -1065,7 +1060,7 @@ export default function PNRDetails({
   const allEmdsBuilt = useMemo(() => {
     if (!pnrDetails?.passengers?.length) return false;
     return pnrDetails.passengers.every((passenger) =>
-      (passenger.emds || []).every((emd) => !!emd.built),
+      (passenger.emdItems || []).every((emd) => !!emd.built),
     );
   }, [pnrDetails]);
 
@@ -1243,11 +1238,13 @@ export default function PNRDetails({
   }
 
   function openAdmConfirm(passengerIndex, emdIndex) {
+    console.log("OPEN");
     admTargetRef.current = { passengerIndex, emdIndex };
     setIsAdmConfirmOpen(true);
   }
 
-  async function confirmSubmitADM() {
+  const confirmSubmitADM = async () => {
+    console.log("Feedback");
     const { passengerIndex, emdIndex } = admTargetRef.current;
     if (passengerIndex < 0 || emdIndex < 0) return;
 
@@ -1259,11 +1256,15 @@ export default function PNRDetails({
       return;
     }
 
+    const updatedby = loggedInUserId || 31;
+
     setIsAdmSubmitting(true);
     try {
       const payload = {
         isAdm: Boolean(emd?.adm?.isAdm),
         feedback: emd?.adm?.feedback ?? "",
+        correlationId: selected?.correlationId,
+        updatedBy: updatedby,
       };
 
       await patchEmdFeedback(emdId, payload);
@@ -1271,7 +1272,15 @@ export default function PNRDetails({
       setPnrDetails((prev) => {
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emds[emdIndex];
+        target.adm = target.adm || {
+          isAdm: false,
+          feedback: "",
+          submitted: false,
+        };
         target.adm.submitted = true;
+        target.adm.isAdm = payload.isAdm;
+        target.adm.feedback = payload.feedback;
+        // mirror top-level fields
         target.isAdm = payload.isAdm;
         target.feedback = payload.feedback;
         return next;
@@ -1291,7 +1300,7 @@ export default function PNRDetails({
     } finally {
       setIsAdmSubmitting(false);
     }
-  }
+  };
 
   function cancelSubmitADM() {
     setIsAdmConfirmOpen(false);
@@ -1323,14 +1332,15 @@ export default function PNRDetails({
     }
   }
 
-  function openErrorDetails() {
-    if (!normalize(errorDetailsText)) return;
+  const openErrorDetails = () => {
+    console.log("Open");
     setIsErrorModalOpen(true);
-  }
+    if (!normalize(errorDetailsText)) return;
+  };
 
-  function closeErrorDetails() {
+  const closeErrorDetails = () => {
     setIsErrorModalOpen(false);
-  }
+  };
 
   if (!selected) return null;
 
@@ -1368,18 +1378,21 @@ export default function PNRDetails({
               {isError ? (
                 <>
                   <FadeIn as="div" className="mt-2">
-                    <button
-                      type="button"
-                      className="btn h-6 px-2 text-xs shrink-0 t-30"
-                      title="View full error details"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openErrorDetails();
-                      }}
-                      data-stop-collapse
-                    >
-                      <i className="fa-solid fa-circle-info"></i>
-                    </button>
+                    <div className="text-left mb-[-20px] ml-[-20px]">
+                      <button
+                        type="button"
+                        className="h-6"
+                        title="View full error details"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openErrorDetails();
+                        }}
+                        data-stop-collapse
+                      >
+                        <i className="fa-solid fa-circle-info"></i>
+                      </button>
+                    </div>
+
                     <PNRDetailsActionBar
                       errorDetails={selected.error}
                       onRetry={() => callbacks.retry(selected.pnr)}
@@ -1477,7 +1490,7 @@ export default function PNRDetails({
                       Agency IATA
                     </>
                   }
-                  v={pnrDetails.agencyIata || "—"}
+                  v={pnrDetails.agencyIataNumber || "—"}
                 />
                 <Field
                   k={
@@ -1494,7 +1507,7 @@ export default function PNRDetails({
                       GDS
                     </>
                   }
-                  v={pnrDetails.gds || "SABRE"}
+                  v={pnrDetails.gds || "—"}
                 />
                 <Field
                   k={
@@ -1502,7 +1515,7 @@ export default function PNRDetails({
                       <i className="fa-solid fa-phone text-black/60"></i> Brand
                     </>
                   }
-                  v={pnrDetails.brand || "—"}
+                  v={pnrDetails.brandCode || "—"}
                 />
               </div>
             </section>
@@ -1513,13 +1526,12 @@ export default function PNRDetails({
                 <i className="fa-solid fa-people-group text-brand-red"></i>{" "}
                 Passengers, Flight & EMDs
               </h4>
-
               <div className="space-y-3">
                 {pnrDetails.passengers.map((passenger, passengerIndex) => {
                   const needsAttention =
                     isHumanRequired &&
-                    (passenger.emds || []).some(
-                      (emd) => emd.editable && !emd.built,
+                    (passenger.emdItems || []).some(
+                      (emd) => emd.aeBuildStatus === "PENDING",
                     );
                   const isOpen = openPassengerIndex === passengerIndex;
 
@@ -1555,9 +1567,9 @@ export default function PNRDetails({
                       <Collapse open={isOpen}>
                         <div
                           className={`p-2 ${needsAttention ? "pulse-focus-once" : ""}`}
-                          onPointerDownCapture={stopIfInteractive}
-                          onMouseDownCapture={stopIfInteractive}
-                          onClickCapture={stopIfInteractive}
+                          onPointerDown={stopIfInteractive}
+                          onMouseDown={stopIfInteractive}
+                          onClick={stopIfInteractive}
                         >
                           {/* Traveler & Flight */}
                           <FadeIn className="mb-2">
@@ -1623,7 +1635,10 @@ export default function PNRDetails({
                                     Seat
                                   </>
                                 }
-                                v={passenger.seat || "—"}
+                                v={
+                                  passenger.passengerFlights[0].seatNumber ||
+                                  "—"
+                                }
                               />
                               <Field
                                 k={
@@ -1639,9 +1654,10 @@ export default function PNRDetails({
 
                           {/* EMDs */}
                           <div className="space-y-2">
-                            {(passenger.emds || []).map((emd, emdIndex) => {
+                            {(passenger.emdItems || []).map((emd, emdIndex) => {
                               const canEdit =
-                                isHumanRequired && emd.editable && !emd.built;
+                                isHumanRequired &&
+                                emd?.aeBuildStatus === "PENDING";
 
                               return (
                                 <FadeIn
@@ -1652,7 +1668,8 @@ export default function PNRDetails({
                                     <div className="px-3 py-2 bg-black/[0.02] flex items-center justify-between">
                                       <div className="font-medium text-[13px]">
                                         <i className="fa-solid fa-passport text-brand-red mr-1"></i>
-                                        EMD {emdIndex + 1} • {emd.emdNo}
+                                        {/* EMD {emdIndex + 1} • {emd.emdNo} */}
+                                        EMD - {emdIndex + 1}
                                       </div>
 
                                       {!canEdit ? (
@@ -1677,7 +1694,12 @@ export default function PNRDetails({
                                                 EMD Status
                                               </>
                                             }
-                                            v={emd.emdStatus || "—"}
+                                            v={
+                                              emd.emdStatusCode != null &&
+                                              emd.emdStatusName != null
+                                                ? `${emd.emdStatusCode} - ${emd.emdStatusName}`
+                                                : "—"
+                                            }
                                           />
                                           <Field
                                             k={
@@ -1686,7 +1708,7 @@ export default function PNRDetails({
                                                 EMD Total
                                               </>
                                             }
-                                            v={emd.emdTotal || "—"}
+                                            v={emd.totalAmount || "—"}
                                           />
                                           <Field
                                             k={
@@ -1695,7 +1717,7 @@ export default function PNRDetails({
                                                 SSR
                                               </>
                                             }
-                                            v={passenger.ssrCode || "—"}
+                                            v={emd.ssrCode || "—"}
                                           />
                                           <Field
                                             k={
@@ -2068,109 +2090,148 @@ export default function PNRDetails({
                                             <div className="flex flex-col gap-2">
                                               <div
                                                 data-stop-collapse
-                                                className="flex items-center gap-4"
+                                                className="flex flex-col gap-2"
                                               >
-                                                <div className="text-[13px] font-medium">
-                                                  Is this an ADM?
+                                                <div
+                                                  data-stop-collapse
+                                                  className="flex items-center gap-4"
+                                                >
+                                                  <div className="text-[13px] font-medium">
+                                                    Is this an ADM?
+                                                  </div>
+
+                                                  <label className="inline-flex items-center gap-1 text-[13px]">
+                                                    <input
+                                                      type="radio"
+                                                      name={`adm-${passengerIndex}-${emdIndex}`}
+                                                      className="h-4 w-4"
+                                                      checked={
+                                                        (emd?.adm?.isAdm ??
+                                                          false) === false
+                                                      }
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                      onChange={() => {
+                                                        setPnrDetails(
+                                                          (prev) => {
+                                                            const next =
+                                                              deepClone(prev);
+                                                            const target =
+                                                              next.passengers[
+                                                                passengerIndex
+                                                              ].emds[emdIndex];
+                                                            if (!target.adm) {
+                                                              target.adm = {
+                                                                isAdm: false,
+                                                                feedback: "",
+                                                                submitted: false,
+                                                              };
+                                                            }
+                                                            target.adm.isAdm = false;
+                                                            // mirror top-level fields used elsewhere
+                                                            target.isAdm = false;
+                                                            return next;
+                                                          },
+                                                        );
+                                                      }}
+                                                    />
+                                                    <span>No</span>
+                                                  </label>
+
+                                                  <label className="inline-flex items-center gap-1 text-[13px]">
+                                                    <input
+                                                      type="radio"
+                                                      name={`adm-${passengerIndex}-${emdIndex}`}
+                                                      className="h-4 w-4"
+                                                      checked={
+                                                        (emd?.adm?.isAdm ??
+                                                          false) === true
+                                                      }
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                      onChange={() => {
+                                                        setPnrDetails(
+                                                          (prev) => {
+                                                            const next =
+                                                              deepClone(prev);
+                                                            const target =
+                                                              next.passengers[
+                                                                passengerIndex
+                                                              ].emds[emdIndex];
+                                                            if (!target.adm) {
+                                                              target.adm = {
+                                                                isAdm: false,
+                                                                feedback: "",
+                                                                submitted: false,
+                                                              };
+                                                            }
+                                                            target.adm.isAdm = true;
+                                                            // mirror top-level fields used elsewhere
+                                                            target.isAdm = true;
+                                                            return next;
+                                                          },
+                                                        );
+                                                      }}
+                                                    />
+                                                    <span>Yes</span>
+                                                  </label>
                                                 </div>
 
-                                                <label
-                                                  className="inline-flex items-center gap-1 text-[13px]"
-                                                  onPointerDown={(e) =>
-                                                    e.stopPropagation()
-                                                  }
-                                                  onMouseDown={(e) =>
-                                                    e.stopPropagation()
-                                                  }
-                                                  onClick={(e) =>
-                                                    e.stopPropagation()
-                                                  }
-                                                >
+                                                <div className="flex items-center gap-2">
                                                   <input
-                                                    type="radio"
-                                                    name={`adm-${passengerIndex}-${emdIndex}`}
-                                                    className="h-4 w-4"
-                                                    checked={
-                                                      emd.adm.isAdm === false
+                                                    type="text"
+                                                    className="input h-8 px-2 flex-1"
+                                                    placeholder="Optional feedback"
+                                                    value={
+                                                      emd?.adm?.feedback ?? ""
                                                     }
-                                                    onClick={(e) =>
-                                                      e.stopPropagation()
-                                                    }
-                                                    onChange={(e) => {
+                                                    onChange={(ev) =>
                                                       setPnrDetails((prev) => {
                                                         const next =
                                                           deepClone(prev);
-                                                        next.passengers[
-                                                          passengerIndex
-                                                        ].emds[
-                                                          emdIndex
-                                                        ].adm.isAdm = false;
-                                                        return next;
-                                                      });
-                                                      e.stopPropagation();
-                                                    }}
-                                                  />
-                                                  <span>No</span>
-                                                </label>
-
-                                                <label className="inline-flex items-center gap-1 text-[13px]">
-                                                  <input
-                                                    type="radio"
-                                                    name={`adm-${passengerIndex}-${emdIndex}`}
-                                                    className="h-4 w-4"
-                                                    checked={
-                                                      emd.adm.isAdm === true
-                                                    }
-                                                    onChange={() =>
-                                                      setPnrDetails((prev) => {
-                                                        const next =
-                                                          deepClone(prev);
-                                                        next.passengers[
-                                                          passengerIndex
-                                                        ].emds[
-                                                          emdIndex
-                                                        ].adm.isAdm = true;
+                                                        const target =
+                                                          next.passengers[
+                                                            passengerIndex
+                                                          ].emds[emdIndex];
+                                                        if (!target.adm) {
+                                                          target.adm = {
+                                                            isAdm: false,
+                                                            feedback: "",
+                                                            submitted: false,
+                                                          };
+                                                        }
+                                                        target.adm.feedback =
+                                                          ev.target.value;
+                                                        // mirror top-level fields used elsewhere
+                                                        target.feedback =
+                                                          ev.target.value;
                                                         return next;
                                                       })
                                                     }
+                                                    onKeyDownCapture={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                    onKeyUpCapture={(e) =>
+                                                      e.stopPropagation()
+                                                    }
                                                   />
-                                                  <span>Yes</span>
-                                                </label>
-                                              </div>
 
-                                              <div className="flex items-center gap-2">
-                                                <input
-                                                  type="text"
-                                                  className="input h-8 px-2 flex-1"
-                                                  placeholder="Optional feedback"
-                                                  value={emd.adm.feedback || ""}
-                                                  onChange={(ev) =>
-                                                    setPnrDetails((prev) => {
-                                                      const next =
-                                                        deepClone(prev);
-                                                      next.passengers[
-                                                        passengerIndex
-                                                      ].emds[
-                                                        emdIndex
-                                                      ].adm.feedback =
-                                                        ev.target.value;
-                                                      return next;
-                                                    })
-                                                  }
-                                                />
-
-                                                <button
-                                                  className="btn btn-success h-8 px-3 disabled:opacity-40"
-                                                  onClick={() =>
-                                                    openAdmConfirm(
-                                                      passengerIndex,
-                                                      emdIndex,
-                                                    )
-                                                  }
-                                                  title="Submit Feedback"
-                                                >
-                                                  Submit Feedback
-                                                </button>
+                                                  <button
+                                                    className="btn btn-success h-8 px-3 disabled:opacity-40"
+                                                    type="button"
+                                                    onClick={() =>
+                                                      openAdmConfirm(
+                                                        passengerIndex,
+                                                        emdIndex,
+                                                      )
+                                                    }
+                                                    title="Submit Feedback"
+                                                  >
+                                                    Submit Feedback
+                                                  </button>
+                                                </div>
                                               </div>
                                             </div>
                                           </div>
@@ -2188,8 +2249,9 @@ export default function PNRDetails({
                   );
                 })}
               </div>
-
               {/* Human: Process PNR */}
+              {/* disabled={!allEmdsBuilt || isProcessSubmitting} */}
+
               {isHumanRequired && (
                 <FadeIn className="flex w-full justify-center mt-3">
                   <button
@@ -2199,7 +2261,7 @@ export default function PNRDetails({
                         ? "Process this PNR"
                         : "Build AE for all EMDs to enable"
                     }
-                    disabled={!allEmdsBuilt || isProcessSubmitting}
+                    disabled={true}
                     onClick={processPNR}
                   >
                     {isProcessSubmitting ? (
@@ -2313,7 +2375,7 @@ export default function PNRDetails({
                 </button>
                 <button
                   className="btn btn-success"
-                  onClick={confirmSubmitADM}
+                  onClick={() => confirmSubmitADM()}
                   disabled={isAdmSubmitting}
                 >
                   {isAdmSubmitting ? <Spinner size="sm" /> : "Submit"}
