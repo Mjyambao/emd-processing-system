@@ -57,35 +57,6 @@ function getEmdDiff(current, baseline) {
   return diffs;
 }
 
-function extractOtherInfoSabre(data) {
-  try {
-    const traveler = data?.travelers?.[0] || {};
-    const anc = traveler?.ancillaries?.[0] || {};
-
-    const candidates = [
-      anc?.otherInfo,
-      anc?.otherInformation,
-      anc?.extendedInfo?.description,
-      anc?.attributes?.otherInfo,
-      traveler?.remarks,
-      data?.remarks,
-      data?.notes,
-      data?.request?.remarks,
-      data?.flights?.[0]?.remarks,
-    ].filter(Boolean);
-
-    if (Array.isArray(candidates[0])) {
-      const firstString = candidates[0].find((v) => typeof v === "string");
-      if (firstString) return firstString;
-    }
-
-    const val = candidates.find((v) => typeof v === "string");
-    return val || "—";
-  } catch {
-    return "—";
-  }
-}
-
 function stopIfInteractive(e) {
   const el = e.target;
   if (
@@ -809,7 +780,7 @@ export default function PNRDetails({
               `${data?.creationDetails?.creationDate || ""} ${data?.creationDetails?.creationTime || ""}`.trim(),
             contactEmail,
             contactPhone,
-            otherInfo: extractOtherInfoSabre(data),
+            otherInfo: "-",
             errorDesc: data?.errors?.[0]?.description,
             flightNo:
               `${flight?.airlineCode || ""} ${flight?.flightNumber || ""}`.trim(),
@@ -1726,7 +1697,7 @@ export default function PNRDetails({
                                                 Other Info
                                               </>
                                             }
-                                            v={pnrDetails.otherInfo || "—"}
+                                            v={emd.otherInfo || "—"}
                                           />
                                         </div>
                                       </FadeIn>
