@@ -573,6 +573,97 @@ async function fetchPnrDetails(pnrId, { signal } = {}) {
 }
 
 // -------------------------
+// Detail decoration + silent merge helpers
+// -------------------------
+function decorateMappedDetails(mapped, selectedStatus) {
+  const statusComp = statusToComparable(mapped?.status ?? selectedStatus);
+  const isHuman =
+    statusComp === "human" || statusComp === "human input required";
+
+  if (mapped?.passengers?.length) {
+    mapped.passengers.forEach((pax) => {
+      (pax.emds || []).forEach((emd) => {
+        const aeStatus = safeUpper(emd?.aeBuildStatus);
+        if (!emd.baseline) {
+          emd.baseline = {
+            rfic: emd.rfic,
+            rfisc: emd.rfisc,
+            emdDesc: emd.emdDesc,
+          };
+        }
+      });
+    });
+  }
+
+  return mapped;
+}
+
+function getEmdKey(emd) {
+  const key = emd?.emdItemId ?? emd?.ancillaryItemId ?? emd?.emdNo ?? "";
+  return normalize(key);
+}
+
+function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
+  if (!fresh) return prev;
+  if (!prev) return decorateMappedDetails(fresh, selectedStatus);
+
+  try {
+    const next = deepClone(prev);
+
+    // Update top-level fields to reflect latest server state
+    next.status = fresh.status ?? next.status;
+    next.stage = fresh.stage ?? next.stage;
+    next.actionRequired = fresh.actionRequired ?? next.actionRequired;
+    next.assignedTo = fresh.assignedTo ?? next.assignedTo;
+    next.assignedBy = fresh.assignedBy ?? next.assignedBy;
+    next.errorDesc = fresh.errorDesc ?? next.errorDesc;
+    next.otherInfo = fresh.otherInfo ?? next.otherInfo;
+    next.header = fresh.header ?? next.header;
+    next.flights = fresh.flights ?? next.flights;
+    next.raw = fresh.raw ?? next.raw;
+
+    // If passengers shape changed, safest is to swap in fresh entirely
+    if (!Array.isArray(next.passengers) || !Array.isArray(fresh.passengers)) {
+      return decorateMappedDetails(fresh, selectedStatus);
+    }
+
+    // Build map of latest EMDs from server
+    const freshEmdMap = new Map();
+    fresh.passengers.forEach((pax) => {
+      (pax?.emds || []).forEach((emd) => {
+        const k = getEmdKey(emd);
+        if (k) freshEmdMap.set(k, emd);
+      });
+    });
+
+    // Patch only status-ish fields (avoid clobbering local input values)
+    next.passengers.forEach((pax) => {
+      (pax?.emds || []).forEach((emd) => {
+        const k = getEmdKey(emd);
+        if (!k) return;
+        const fe = freshEmdMap.get(k);
+        if (!fe) return;
+
+        emd.aeBuildStatus = fe.aeBuildStatus ?? emd.aeBuildStatus;
+        emd.aeBuiltUtc = fe.aeBuiltUtc ?? emd.aeBuiltUtc;
+        emd.aeBuiltBy = fe.aeBuiltBy ?? emd.aeBuiltBy;
+        emd.errorDesc = fe.errorDesc ?? emd.errorDesc;
+
+        // If the server changed identifiers or other non-editable metadata
+        emd.emdNo = fe.emdNo ?? emd.emdNo;
+        emd.emdItemId = fe.emdItemId ?? emd.emdItemId;
+        emd.ancillaryItemId = fe.ancillaryItemId ?? emd.ancillaryItemId;
+      });
+    });
+
+    return decorateMappedDetails(next, selectedStatus);
+  } catch {
+    // If merge fails, fall back to server state
+    return decorateMappedDetails(fresh, selectedStatus);
+  }
+}
+
+// -------------------------
 // Component
 // -------------------------
 export default function PNRDetails({
@@ -616,6 +707,31 @@ export default function PNRDetails({
 
   // Accordion open passenger index
   const [openPassengerIndex, setOpenPassengerIndex] = useState(-1);
+
+  // Silent refetch (used after actions like Build AE)
+  const silentRefetchControllerRef = useRef(null);
+
+  async function refetchPnrDetailsSilently(pnrId) {
+    if (!pnrId) return;
+
+    try {
+      if (silentRefetchControllerRef.current) {
+        silentRefetchControllerRef.current.abort();
+      }
+
+      const controller = new AbortController();
+      silentRefetchControllerRef.current = controller;
+
+      const api = await fetchPnrDetails(pnrId, { signal: controller.signal });
+      const fresh = mapApiToPnrDetails(api);
+
+      setPnrDetails(fresh);
+    } catch (e) {
+      if (e?.name !== "AbortError") {
+        console.warn("Silent PNR details refetch failed", e);
+      }
+    }
+  }
 
   // -------------------------
   // Toasts (ToastViewport)
@@ -668,6 +784,12 @@ export default function PNRDetails({
     return () => {
       Object.values(toastTimersRef.current).forEach((t) => clearTimeout(t));
       toastTimersRef.current = {};
+      // Abort any in-flight silent refetch
+      try {
+        silentRefetchControllerRef.current?.abort?.();
+      } catch {
+        // noop
+      }
     };
   }, []);
 
@@ -724,26 +846,7 @@ export default function PNRDetails({
         if (!active) return;
         const mapped = mapApiToPnrDetails(api);
 
-        const statusComp = statusToComparable(
-          mapped?.status ?? selected?.status,
-        );
-        const isHuman =
-          statusComp === "human" || statusComp === "human input required";
-        if (mapped?.passengers?.length) {
-          mapped.passengers.forEach((pax) => {
-            (pax.emds || []).forEach((emd) => {
-              const aeStatus = safeUpper(emd?.aeBuildStatus);
-              emd.editable = isHuman && aeStatus === "PENDING";
-              emd.built = emd?.aeBuildStatus === "PENDING" ? false : true;
-              if (!emd.baseline)
-                emd.baseline = {
-                  rfic: emd.rfic,
-                  rfisc: emd.rfisc,
-                  emdDesc: emd.emdDesc,
-                };
-            });
-          });
-        }
+        decorateMappedDetails(mapped, selected?.status);
 
         setPnrDetails(mapped);
         setIsDetailsLoading(false);
@@ -1031,14 +1134,34 @@ export default function PNRDetails({
   const allEmdsBuilt = useMemo(() => {
     if (!pnrDetails?.passengers?.length) return false;
     return pnrDetails.passengers.every((passenger) =>
-      (passenger.emdItems || []).every((emd) => !!emd.built),
+      (passenger.emdItems || []).every(
+        (emd) => emd.aeBuildStatus !== "PENDING",
+      ),
     );
   }, [pnrDetails]);
 
   function handleFieldChange(passengerIndex, emdIndex, field, value) {
     setPnrDetails((prev) => {
+      if (!prev) return prev;
+
       const next = deepClone(prev);
-      next.passengers[passengerIndex].emds[emdIndex][field] = value;
+      const pax = next?.passengers?.[passengerIndex];
+      if (!pax) return prev;
+
+      if (Array.isArray(pax?.emdItems) && !Array.isArray(pax?.emds))
+        pax.emds = pax.emdItems;
+      if (Array.isArray(pax?.emds) && !Array.isArray(pax?.emdItems))
+        pax.emdItems = pax.emds;
+
+      const patch = (arr) => {
+        if (Array.isArray(arr) && arr[emdIndex]) {
+          arr[emdIndex][field] = value;
+        }
+      };
+
+      patch(pax.emdItems);
+      patch(pax.emds);
+
       return next;
     });
   }
@@ -1046,7 +1169,8 @@ export default function PNRDetails({
   function openBuildFor(passengerIndex, emdIndex) {
     buildTargetRef.current = { passengerIndex, emdIndex };
 
-    const emd = pnrDetails.passengers[passengerIndex].emds[emdIndex];
+    const emd = pnrDetails.passengers[passengerIndex].emdItems?.[emdIndex];
+
     const diff = getEmdDiff(
       { rfic: emd.rfic, rfisc: emd.rfisc, emdDesc: emd.emdDesc },
       emd.baseline || { rfic: "", rfisc: "", emdDesc: "" },
@@ -1063,7 +1187,7 @@ export default function PNRDetails({
 
     const pnrId = selected?.pnr || pnrDetails?.pnr;
     const passenger = pnrDetails?.passengers?.[passengerIndex];
-    const emd = passenger?.emds?.[emdIndex];
+    const emd = passenger?.emdItems?.[emdIndex];
 
     const emdItemId = emd?.emdItemId || emd?.ancillaryItemId || null;
     const passengerId = passenger?.passengerId || null;
@@ -1103,7 +1227,7 @@ export default function PNRDetails({
 
       setPnrDetails((prev) => {
         const next = deepClone(prev);
-        const target = next.passengers[passengerIndex].emds[emdIndex];
+        const target = next.passengers[passengerIndex].emdItems?.[emdIndex];
 
         target.baseline = {
           rfic: target.rfic,
@@ -1116,6 +1240,9 @@ export default function PNRDetails({
 
         return next;
       });
+
+      // Refetch latest PNR + EMD state silently (no page reload, no global loading)
+      await refetchPnrDetailsSilently(pnrId);
 
       setIsBuildModalOpen(false);
       setBuildChanges([]);
@@ -1512,11 +1639,18 @@ export default function PNRDetails({
                       className={`rounded border ${needsAttention ? "ring-attn" : "border-black/10"} bg-white`}
                     >
                       {/* Accordion Header */}
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() =>
                           setOpenPassengerIndex(isOpen ? -1 : passengerIndex)
                         }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setOpenPassengerIndex(isOpen ? -1 : passengerIndex);
+                          }
+                        }}
                         className={`w-full text-left px-3 py-2 flex items-center justify-between transition-colors ${
                           needsAttention ? "bg-red-50" : "bg-black/[0.02]"
                         } hover:bg-black/[0.04] active:scale-[0.995]`}
@@ -1532,7 +1666,7 @@ export default function PNRDetails({
                             isOpen ? "fa-chevron-up" : "fa-chevron-down"
                           } text-black/50 transition-transform duration-200`}
                         ></i>
-                      </button>
+                      </div>
 
                       {/* Accordion Body */}
                       <Collapse open={isOpen}>
@@ -1628,7 +1762,8 @@ export default function PNRDetails({
                             {(passenger.emdItems || []).map((emd, emdIndex) => {
                               const canEdit =
                                 isHumanRequired &&
-                                emd?.aeBuildStatus === "PENDING";
+                                (emd?.aeBuildStatus || "").toUpperCase() ===
+                                  "PENDING";
 
                               return (
                                 <FadeIn
@@ -2232,7 +2367,7 @@ export default function PNRDetails({
                         ? "Process this PNR"
                         : "Build AE for all EMDs to enable"
                     }
-                    disabled={true}
+                    disabled={!allEmdsBuilt || isProcessSubmitting}
                     onClick={processPNR}
                   >
                     {isProcessSubmitting ? (

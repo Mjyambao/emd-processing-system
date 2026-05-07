@@ -36,6 +36,9 @@ const COLORS = {
   purple: "#7c3aed",
   orange: "#f97316",
 };
+const DATE_LOCALE = "en-US";
+const DATE_TZ = "UTC";
+
 
 // --------------------------------------------------
 // Fetch helpers (GET + start_date/end_date)
@@ -557,7 +560,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
   const createdAtCol = {
     key: "createdAt",
     header: "Date Created",
-    render: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"),
+    render: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ }) : "-"),
   };
 
   const errorClassCol = {
@@ -668,7 +671,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     key: "slaStartTime",
     header: "SLA Start Time",
     render: (r) =>
-      r.slaStartTime ? new Date(r.slaStartTime).toLocaleString() : "-",
+      r.slaStartTime ? new Date(r.slaStartTime).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ }) : "-",
   };
 
   const processingTimeCol = {
@@ -682,7 +685,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     key: "completionTimeAt",
     header: "Completion Time",
     render: (r) =>
-      r.completionTimeAt ? new Date(r.completionTimeAt).toLocaleString() : "-",
+      r.completionTimeAt ? new Date(r.completionTimeAt).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ }) : "-",
   };
 
   const resolutionStatusCol = {
@@ -947,7 +950,7 @@ function DetailModal({ open, title, subtitle, onClose, children }) {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 flex items-center justify-center mt-[50px]">
+      <div className="absolute inset-0 flex items-center justify-center mt-4">
         <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl h-[530px]">
           <div className="flex items-start justify-between gap-4 border-b border-black/10 p-4">
             <div className="min-w-0">
@@ -966,7 +969,7 @@ function DetailModal({ open, title, subtitle, onClose, children }) {
               Close
             </button>
           </div>
-          <div className="p-4 h-[500px]">{children}</div>
+          <div className="p-3 h-[calc(80vh-64px)]">{children}</div>
         </div>
       </div>
     </div>
@@ -992,7 +995,7 @@ function PnrModal({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="absolute inset-0 flex items-center justify-center mt-[50px]">
+      <div className="absolute inset-0 flex items-center justify-center mt-4">
         <div className="w-full max-w-6xl overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl h-[80vh]">
           <div className="flex items-start justify-between gap-4 border-b border-black/10 p-4">
             <div className="min-w-0">
@@ -1037,7 +1040,7 @@ function Card({
           : "bg-white border-black/10";
 
   return (
-    <div className={`rounded-xl border p-4 ${toneClass}`}>
+    <div className={`rounded-xl border p-3 ${toneClass}`}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5 text-black/70">{icon}</div>
         <div className="min-w-0">
@@ -1047,7 +1050,7 @@ function Card({
           {onClick ? (
             <button
               type="button"
-              className="mt-1 inline-flex items-baseline gap-2 rounded-lg px-2 py-1 text-2xl font-semibold text-black hover:bg-black/[0.04]"
+              className="mt-1 inline-flex items-baseline gap-2 rounded-lg px-2 py-0.5 text-xl font-semibold text-black hover:bg-black/[0.04]"
               title={clickTitle || "Click to view details"}
               onClick={onClick}
               disabled={loading}
@@ -1055,7 +1058,7 @@ function Card({
               {loading ? <Spinner size="sm" /> : <span>{value}</span>}
             </button>
           ) : (
-            <div className="mt-1 text-2xl font-semibold text-black">
+            <div className="mt-1 text-xl font-semibold text-black">
               {loading ? <Spinner size="sm" /> : value}
             </div>
           )}
@@ -1069,11 +1072,11 @@ function Card({
 function Section({ title, subtitle, children, right }) {
   return (
     <section className="mt-6">
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-2 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-black">{title}</h2>
+          <h2 className="text-base font-semibold text-black">{title}</h2>
           {subtitle ? (
-            <p className="text-sm text-black/60">{subtitle}</p>
+            <p className="text-xs text-black/60">{subtitle}</p>
           ) : null}
         </div>
         {right ? <div>{right}</div> : null}
@@ -2333,7 +2336,7 @@ export default function ReportsModule({ onOpenPNR }) {
   );
 
   return (
-    <div className="mt-3">
+    <div className="mt-2">
       {/* Top controls */}
       <div className="flex flex-col gap-3">
         {subTabNav}
@@ -2353,7 +2356,7 @@ export default function ReportsModule({ onOpenPNR }) {
       ) : null}
 
       {/* KPI strip always visible */}
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card
           title="Throughput"
           value={dashKpis.throughputCount}
@@ -2418,12 +2421,12 @@ export default function ReportsModule({ onOpenPNR }) {
           subtitle="A quick snapshot across operations, quality, and AI governance."
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 text-sm font-medium text-black">
                 Throughput over time{" "}
                 <span className="ml-2 text-xs text-black/40">(daily)</span>
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {throughputOTLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -2504,11 +2507,11 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 text-sm font-medium text-black">
                 AI vs Human corrections
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {aiHumanLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -2572,14 +2575,14 @@ export default function ReportsModule({ onOpenPNR }) {
           subtitle="Throughput, assignments, completion time, and error visibility."
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 text-sm font-medium text-black">
                 End-to-end completion time{" "}
                 <span className="ml-2 text-xs text-black/40">
                   (avg minutes/day)
                 </span>
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {e2eLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -2632,11 +2635,11 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 text-sm font-medium text-black">
                 Assignments to ticketers
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {assignmentsLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -2686,11 +2689,11 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4 lg:col-span-2">
+            <div className="rounded-xl border border-black/10 bg-white p-3 lg:col-span-2">
               <div className="mb-2 text-sm font-medium text-black">
                 Error visibility & classification
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {errorVisLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -2753,7 +2756,7 @@ export default function ReportsModule({ onOpenPNR }) {
           subtitle="Human-in-the-loop items and quality visibility."
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-medium text-black">
                   PNRs requiring Human-in-the-Loop (HIL)
@@ -2804,7 +2807,7 @@ export default function ReportsModule({ onOpenPNR }) {
                       header: "Queue Arrival",
                       render: (r) =>
                         r.createdAt
-                          ? new Date(r.createdAt).toLocaleString()
+                          ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ })
                           : "-",
                     },
                   ]}
@@ -2817,7 +2820,7 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-medium text-black">
                   PNRs with feedback (any ADM status)
@@ -2900,11 +2903,11 @@ export default function ReportsModule({ onOpenPNR }) {
           subtitle="AI vs human corrections + LLM metrics."
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 text-sm font-medium text-black">
                 LLM metrics (avg in range)
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {llmAvgLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -2946,11 +2949,11 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 text-sm font-medium text-black">
                 LLM metrics trend over time (daily avg)
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {llmTrendLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -3025,11 +3028,11 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4 lg:col-span-2">
+            <div className="rounded-xl border border-black/10 bg-white p-3 lg:col-span-2">
               <div className="mb-2 text-sm font-medium text-black">
                 AI RFIC/RFISC vs Human corrections
               </div>
-              <div className="h-64">
+              <div className="h-56">
                 {aiHumanLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
@@ -3089,7 +3092,7 @@ export default function ReportsModule({ onOpenPNR }) {
           subtitle="SLA breaches, ADMs, and other high-priority visibility."
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-medium text-black">
                   SLA breached PNRs
@@ -3152,7 +3155,7 @@ export default function ReportsModule({ onOpenPNR }) {
               )}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-4">
+            <div className="rounded-xl border border-black/10 bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-medium text-black">ADMs</div>
                 <div className="text-xs text-black/50">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 
 // Components
@@ -8,14 +9,28 @@ import PNRDetails from "../components/PNRDetails";
 import ToastViewport from "../components/ToastViewport";
 import Spinner from "../components/Spinner";
 import Chip from "../components/Chip";
-import ReportingDashboard from "../components/ReportingDashboard";
-import ReportsModule from "../components/ReportsModule";
-import AIAgentsDockPortal from "../components/AIAgentsDockPortal";
 
 // Utils
 import { refreshStatuses } from "../lib/sampleData";
 import { generateReportSampleData } from "../lib/reportSampleData";
 import { requireAuth } from "../lib/auth";
+
+// Client-only components to avoid hydration mismatches
+const ReportsModule = dynamic(() => import("../components/ReportsModule"), {
+  ssr: false,
+  loading: () => (
+    <div className="py-6 flex items-center justify-center text-black/60">
+      <Spinner />
+      <span className="ml-2 text-sm">Loading reports…</span>
+    </div>
+  ),
+});
+const AIAgentsDockPortal = dynamic(
+  () => import("../components/AIAgentsDockPortal"),
+  {
+    ssr: false,
+  },
+);
 
 // APIs
 // import { logout } from "../api/userApi";
@@ -47,7 +62,11 @@ export default function Dashboard() {
   const [myStatus, setMyStatus] = useState("all"); // same enum as above
 
   const [killing, setKilling] = useState(new Set()); // set of PNRs being killed
-  const [retrying, setRetrying] = useState(new Set()); // set of PNRs being retried (optional)
+  const [retrying, setRetrying] = useState(new Set());
+
+  // Client-only session (avoid SSR hydration mismatch from localStorage)
+  const [session, setSession] = useState(null);
+  const [hasMounted, setHasMounted] = useState(false); // set of PNRs being retried (optional)
   const [allTableSnapshot, setAllTableSnapshot] = useState({
     rows: [],
     meta: null,
@@ -73,6 +92,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     requireAuth(router);
+  }, []);
+
+  useEffect(() => {
+    setHasMounted(true);
+    try {
+      const raw = localStorage.getItem("session") || "{}";
+      setSession(JSON.parse(raw));
+    } catch {
+      setSession({});
+    }
   }, []);
 
   /**
@@ -187,6 +216,9 @@ export default function Dashboard() {
   // Chips counter
   const counters = activeTab === TABS.ALL ? allCounts : myCounts;
 
+  const loggedInName = session?.name || session?.user?.name || "";
+  const loggedInUserId =
+    session?.userId || session?.user?.userId || session?.user?.name || "";
   function handleLogout() {
     localStorage.removeItem("session");
     //Trigger logout API to clear session
@@ -194,19 +226,12 @@ export default function Dashboard() {
     router.replace("/");
   }
 
-  const session =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("session") || "{}")
-      : {};
-  const loggedInName = session?.name || session?.user?.name || "";
-  const loggedInUserId = session?.userId || session?.user?.name || "";
-
   return (
     <div className="min-h-screen">
       <TopNav onLogout={handleLogout} />
       <main className="mx-auto max-w-6xl p-4">
         {/* Header */}
-        <div className="mb-3 flex items-center gap-2 text-sm text-black/70">
+        <div className="mb-2 flex items-center gap-2 text-sm text-black/70">
           <span>
             <i className="fa-solid fa-table"></i> Dashboard
           </span>
@@ -221,7 +246,7 @@ export default function Dashboard() {
         </div>
 
         {/* Tabs with counters */}
-        <div className="mb-3 border-b border-black/10">
+        <div className="mb-2 border-b border-black/10">
           <div className="flex gap-2">
             <button
               type="button"
@@ -276,7 +301,7 @@ export default function Dashboard() {
         </div>
 
         {activeTab !== TABS.REPORTS ? (
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <Chip
               label={`All (${counters.total})`}
               active={statusFilter === "all"}
@@ -327,52 +352,62 @@ export default function Dashboard() {
           />
         ) : (
           <>
-            <PNRTable
-              rows={rows}
-              search={search}
-              setSearch={setSearch}
-              onRefresh={onRefresh}
-              onSelect={setSelected}
-              selected={selected}
-              onKill={onKill}
-              statusFilter={statusFilter}
-              killingSet={killing}
-              retryingSet={retrying}
-              assignees={[
-                { id: "t-01", name: "Ticketer 1" },
-                { id: "t-02", name: "Guest User" },
-                { id: "t-03", name: "Ticketer 2" },
-              ]}
-              onAssign={({ assignee, items }) => {
-                console.log("Assign to:", assignee, "Items:", items);
-              }}
-              onRowsChange={({ rows: latestRows, meta }) => {
-                if (activeTab === TABS.ALL)
-                  setAllTableSnapshot({ rows: latestRows, meta });
-                if (activeTab === TABS.MINE)
-                  setMyTableSnapshot({ rows: latestRows, meta });
-              }}
-              assignedToOverride={
-                activeTab === TABS.MINE ? loggedInName : undefined
-              }
-              loggedInUserName={loggedInName}
-              loggedInUserId={loggedInUserId}
-            />
-
-            <PNRDetails
-              loggedInUserId={loggedInUserId}
-              selected={selected}
-              onApprove={({ pnr }) => {
-                setRows((list) =>
-                  list.map((r) =>
-                    r.pnr === pnr
-                      ? { ...r, status: "processed", action: "NA" }
-                      : r,
-                  ),
-                );
-                pushToast({ type: "success", message: `Approved • ${pnr}` });
-              }}
-            />
+            <div className="grid grid-cols-1 gap-3 items-start">
+              <div>
+                <PNRTable
+                  rows={rows}
+                  search={search}
+                  setSearch={setSearch}
+                  onRefresh={onRefresh}
+                  onSelect={setSelected}
+                  selected={selected}
+                  onKill={onKill}
+                  statusFilter={statusFilter}
+                  killingSet={killing}
+                  retryingSet={retrying}
+                  assignees={[
+                    { id: "t-01", name: "Ticketer 1" },
+                    { id: "t-02", name: "Guest User" },
+                    { id: "t-03", name: "Ticketer 2" },
+                  ]}
+                  onAssign={({ assignee, items }) => {
+                    console.log("Assign to:", assignee, "Items:", items);
+                  }}
+                  onRowsChange={({ rows: latestRows, meta }) => {
+                    if (activeTab === TABS.ALL)
+                      setAllTableSnapshot({ rows: latestRows, meta });
+                    if (activeTab === TABS.MINE)
+                      setMyTableSnapshot({ rows: latestRows, meta });
+                  }}
+                  assignedToOverride={
+                    activeTab === TABS.MINE && loggedInName
+                      ? loggedInName
+                      : undefined
+                  }
+                  loggedInUserName={loggedInName}
+                  loggedInUserId={loggedInUserId}
+                />
+              </div>
+              <div>
+                <PNRDetails
+                  loggedInUserId={loggedInUserId}
+                  selected={selected}
+                  onApprove={({ pnr }) => {
+                    setRows((list) =>
+                      list.map((r) =>
+                        r.pnr === pnr
+                          ? { ...r, status: "processed", action: "NA" }
+                          : r,
+                      ),
+                    );
+                    pushToast({
+                      type: "success",
+                      message: `Approved • ${pnr}`,
+                    });
+                  }}
+                />
+              </div>
+            </div>
           </>
         )}
 
