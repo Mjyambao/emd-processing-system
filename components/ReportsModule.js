@@ -39,7 +39,6 @@ const COLORS = {
 const DATE_LOCALE = "en-US";
 const DATE_TZ = "UTC";
 
-
 // --------------------------------------------------
 // Fetch helpers (GET + start_date/end_date)
 // --------------------------------------------------
@@ -560,7 +559,12 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
   const createdAtCol = {
     key: "createdAt",
     header: "Date Created",
-    render: (r) => (r.createdAt ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ }) : "-"),
+    render: (r) =>
+      r.createdAt
+        ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, {
+            timeZone: DATE_TZ,
+          })
+        : "-",
   };
 
   const errorClassCol = {
@@ -671,7 +675,11 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     key: "slaStartTime",
     header: "SLA Start Time",
     render: (r) =>
-      r.slaStartTime ? new Date(r.slaStartTime).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ }) : "-",
+      r.slaStartTime
+        ? new Date(r.slaStartTime).toLocaleString(DATE_LOCALE, {
+            timeZone: DATE_TZ,
+          })
+        : "-",
   };
 
   const processingTimeCol = {
@@ -685,7 +693,11 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     key: "completionTimeAt",
     header: "Completion Time",
     render: (r) =>
-      r.completionTimeAt ? new Date(r.completionTimeAt).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ }) : "-",
+      r.completionTimeAt
+        ? new Date(r.completionTimeAt).toLocaleString(DATE_LOCALE, {
+            timeZone: DATE_TZ,
+          })
+        : "-",
   };
 
   const resolutionStatusCol = {
@@ -962,11 +974,12 @@ function DetailModal({ open, title, subtitle, onClose, children }) {
               ) : null}
             </div>
             <button
-              type="button"
-              className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-black/70 hover:text-black"
+              className="btn h-8 px-2"
               onClick={onClose}
+              aria-label="Close"
+              title="Close"
             >
-              Close
+              ✕
             </button>
           </div>
           <div className="p-3 h-[calc(80vh-64px)]">{children}</div>
@@ -1003,11 +1016,12 @@ function PnrModal({
             </div>
             <div className="flex items-center gap-2">
               <button
-                type="button"
-                className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-black/70 hover:text-black"
+                className="btn h-8 px-2"
                 onClick={onClose}
+                aria-label="Close"
+                title="Close"
               >
-                Close
+                ✕
               </button>
             </div>
           </div>
@@ -2807,7 +2821,9 @@ export default function ReportsModule({ onOpenPNR }) {
                       header: "Queue Arrival",
                       render: (r) =>
                         r.createdAt
-                          ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, { timeZone: DATE_TZ })
+                          ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, {
+                              timeZone: DATE_TZ,
+                            })
                           : "-",
                     },
                   ]}

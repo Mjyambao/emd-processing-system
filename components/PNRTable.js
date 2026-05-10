@@ -1148,16 +1148,16 @@ export default function PNRTable({
   );
 
   return (
-    <div className="card mb-8 relative">
+    <div className="card mb-6 relative pnr-table compact">
       {/* Toasts */}
       <ToastViewport toasts={toasts} onDismiss={dismissToast} />
 
       {/* Header */}
-      <div className="p-3 border-b border-black/10 flex flex-col md:flex-row md:items-center justify-between gap-2">
+      <div className="p-2 border-b border-black/10 flex flex-col md:flex-row md:items-center justify-between gap-1">
         <div className="flex items-center gap-2 w-full md:w-auto">
           <button
             type="button"
-            className="btn btn-primary h-[40px] justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn btn-primary h-9 px-3 text-xs justify-center disabled:opacity-60 disabled:cursor-not-allowed"
             title={
               selectedCount > 0
                 ? "Assign selected PNRs"
@@ -1167,12 +1167,12 @@ export default function PNRTable({
             disabled={selectedCount === 0 || assigning}
           >
             <i className="fa-regular fa-paper-plane" />
-            <span className="ml-2">
+            <span className="ml-1.5">
               {assigning ? "Assigning..." : "Assign PNR"}
             </span>
           </button>
 
-          <div className="text-sm text-black/70">{selectedCount} selected</div>
+          <div className="text-xs text-black/70">{selectedCount} selected</div>
 
           <div className="ml-2 text-xs text-black/50">
             {apiLoading ? "Loading..." : apiError ? "Failed to load" : ""}
@@ -1182,7 +1182,7 @@ export default function PNRTable({
 
       {/* Helper banner */}
       {totalRecords > 0 && pageSelectableEligibleCount === 0 && (
-        <div className="mx-3 my-2 px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded">
+        <div className="mx-2 my-1.5 px-2 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-xs">
           No selectable rows in current results. Only <b>Error</b> or{" "}
           <b>Human</b> statuses are eligible for assignment.
         </div>
@@ -1190,19 +1190,19 @@ export default function PNRTable({
 
       {/* API Error banner */}
       {apiError && (
-        <div className="mx-3 my-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded">
+        <div className="mx-2 my-1.5 px-2 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs">
           {apiError}
         </div>
       )}
 
       <div
-        className="relative overflow-x-auto overflow-y-auto scroll-smooth max-h-[340px] pb-4"
+        className="relative overflow-x-auto overflow-y-auto scroll-smooth max-h-[340px] pb-2"
         tabIndex={0}
         role="region"
         aria-label="PNR results table"
       >
-        <table className="table min-w-[2400px] bg-white">
-          <thead className="sticky top-0 z-[30] bg-white">
+        <table className="table min-w-[2400px] bg-white text-xs leading-tight">
+          <thead className="sticky top-0 z-[30] bg-white [&>tr>th]:px-2 [&>tr>th]:py-1.5">
             <tr className="bg-white">
               <ThCheckboxHeader
                 headerCbRef={headerCbRef}
@@ -1232,7 +1232,7 @@ export default function PNRTable({
                 {filterOpen.pnr && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter PNR…"
                       value={colFilters.pnr}
                       onChange={(e) => updateFilter("pnr", e.target.value)}
@@ -1262,7 +1262,7 @@ export default function PNRTable({
                 {filterOpen.brand && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter brand…"
                       value={colFilters.brand}
                       onChange={(e) => updateFilter("brand", e.target.value)}
@@ -1292,7 +1292,7 @@ export default function PNRTable({
                 {filterOpen.gds && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter GDS…"
                       value={colFilters.gds}
                       onChange={(e) => updateFilter("gds", e.target.value)}
@@ -1322,7 +1322,7 @@ export default function PNRTable({
                 {filterOpen.pcc && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter PCC…"
                       value={colFilters.pcc}
                       onChange={(e) => updateFilter("pcc", e.target.value)}
@@ -1352,7 +1352,7 @@ export default function PNRTable({
                 {filterOpen.documentType && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter document type…"
                       value={colFilters.documentType}
                       onChange={(e) =>
@@ -1384,7 +1384,7 @@ export default function PNRTable({
                 {filterOpen.status && (
                   <div className="mt-1">
                     <select
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       value={colFilters.status}
                       onChange={(e) => updateFilter("status", e.target.value)}
                     >
@@ -1420,7 +1420,7 @@ export default function PNRTable({
                 {filterOpen.passengerNames && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter passenger…"
                       value={colFilters.passengerNames}
                       onChange={(e) =>
@@ -1451,7 +1451,7 @@ export default function PNRTable({
                 onSort={toggleSort}
               >
                 {filterOpen.departureDate && (
-                  <div className="mt-1 flex gap-1">
+                  <div className="mt-1 flex gap-0.5">
                     <input
                       type="date"
                       className="input h-8 text-xs"
@@ -1494,7 +1494,7 @@ export default function PNRTable({
                 onSort={toggleSort}
               >
                 {filterOpen.lastUpdated && (
-                  <div className="mt-1 flex gap-1">
+                  <div className="mt-1 flex gap-0.5">
                     <input
                       type="date"
                       className="input h-8 text-xs"
@@ -1537,7 +1537,7 @@ export default function PNRTable({
                 onSort={toggleSort}
               >
                 {filterOpen.queueArrival && (
-                  <div className="mt-1 flex gap-1">
+                  <div className="mt-1 flex gap-0.5">
                     <input
                       type="date"
                       className="input h-8 text-xs"
@@ -1578,7 +1578,7 @@ export default function PNRTable({
                 onSort={toggleSort}
               >
                 {filterOpen.ttl && (
-                  <div className="mt-1 flex gap-1">
+                  <div className="mt-1 flex gap-0.5">
                     <input
                       type="date"
                       className="input h-8 text-xs"
@@ -1618,7 +1618,7 @@ export default function PNRTable({
                 {filterOpen.error && (
                   <div className="mt-1">
                     <input
-                      className="input h-8 text-xs w-full"
+                      className="input h-7 text-xs w-full"
                       placeholder="Filter error…"
                       value={colFilters.error}
                       onChange={(e) => updateFilter("error", e.target.value)}
@@ -1669,7 +1669,7 @@ export default function PNRTable({
             </tr>
           </thead>
 
-          <tbody className="relative z-[10]">
+          <tbody className="relative z-[10] [&>tr>td]:px-2 [&>tr>td]:py-1.5 [&>tr>td]:align-middle">
             {pageRows.map((row) => {
               const selectable = isSelectable(row);
               const isChecked = selectable && selectedPNRs.has(row.pnr);
@@ -1687,7 +1687,7 @@ export default function PNRTable({
                 >
                   <td
                     onClick={(e) => e.stopPropagation()}
-                    className="align-middle w-12 border-r border-black/10"
+                    className="align-middle w-10 border-r border-black/10"
                   >
                     {selectable ? (
                       <input
@@ -2032,6 +2032,19 @@ export default function PNRTable({
           }
         }}
       />
+
+      <style jsx>{`
+        /* Compact table mode (scoped) */
+        .pnr-table.compact :global(table.table) {
+          border-collapse: separate;
+          border-spacing: 0;
+        }
+        /* Slightly tighter checkbox */
+        .pnr-table.compact :global(input[type="checkbox"]) {
+          width: 14px;
+          height: 14px;
+        }
+      `}</style>
     </div>
   );
 }

@@ -1971,7 +1971,8 @@ export default function PNRDetails({
                                                       <div className="text-[12px] text-black/60 font-medium mb-1">
                                                         LLM Metrics
                                                       </div>
-                                                      <div className="flex flex-wrap gap-1">
+
+                                                      <div className="lg:w-1/2">
                                                         <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
                                                           Accuracy:{" "}
                                                           <span className="font-medium">
@@ -2008,18 +2009,18 @@ export default function PNRDetails({
                                                     </div>
                                                   )}
 
-                                                  <div className="text-[12px] text-black/60 flex items-center gap-2 mt-2">
+                                                  <div className="text-[12px] text-black/60 flex items-center gap-1 mt-2">
                                                     <i className="fa-solid fa-circle-info text-black/50"></i>
                                                     Notes / Suggestions
                                                   </div>
 
-                                                  <ul className="mt-2 list-disc pl-5 space-y-1 text-[12px] text-black/80">
+                                                  <ul className="mt-1 list-disc pl-4 grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-black/80 leading-tight">
                                                     {aiList.length
                                                       ? aiList.map(
                                                           (textVal, i) => (
                                                             <li
                                                               key={`emd-ai-${passengerIndex}-${emdIndex}-${i}`}
-                                                              className="text-black/80"
+                                                              className="text-black/80 break-words"
                                                             >
                                                               {textVal}
                                                             </li>
@@ -2042,13 +2043,13 @@ export default function PNRDetails({
                                                           return (
                                                             <li
                                                               key={`emd-suggest-${passengerIndex}-${emdIndex}-${i}`}
-                                                              className={
+                                                              className={`break-words ${
                                                                 danger
                                                                   ? "text-red-700"
                                                                   : ok
                                                                     ? "text-green-800"
                                                                     : "text-black/80"
-                                                              }
+                                                              }`}
                                                             >
                                                               {item.text}
                                                             </li>
@@ -2056,7 +2057,7 @@ export default function PNRDetails({
                                                         })}
                                                   </ul>
 
-                                                  <div className="mt-3">
+                                                  <div className="mt-2">
                                                     <div className="text-[12px] text-black/60 font-medium mb-1">
                                                       Knowledge source
                                                     </div>
@@ -2088,7 +2089,6 @@ export default function PNRDetails({
                                                         return null;
                                                       };
 
-                                                      // 1) Preferred: new array format
                                                       if (
                                                         Array.isArray(ks) &&
                                                         ks.length > 0
@@ -2122,7 +2122,7 @@ export default function PNRDetails({
                                                         }
 
                                                         return (
-                                                          <div className="flex flex-col gap-1">
+                                                          <div className="flex flex-wrap gap-x-3 gap-y-1">
                                                             {valid.map(
                                                               (src, idx2) =>
                                                                 src.href ? (
@@ -2133,24 +2133,23 @@ export default function PNRDetails({
                                                                     }
                                                                     target="_blank"
                                                                     rel="noreferrer"
-                                                                    className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px]"
+                                                                    className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px] whitespace-nowrap"
                                                                   >
                                                                     {src.label}
                                                                   </a>
                                                                 ) : (
-                                                                  <div
+                                                                  <span
                                                                     key={`${src.label}-${idx2}`}
-                                                                    className="text-[12px] text-black/60"
+                                                                    className="text-[12px] text-black/60 whitespace-nowrap"
                                                                   >
                                                                     {src.label}
-                                                                  </div>
+                                                                  </span>
                                                                 ),
                                                             )}
                                                           </div>
                                                         );
                                                       }
 
-                                                      // 3) Default: nothing
                                                       return (
                                                         <div className="text-[12px] text-black/60">
                                                           -
@@ -2532,7 +2531,7 @@ export default function PNRDetails({
 
         {/* View PNR JSON Modal */}
         {isViewModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 z-50 flex items-center justify-center mt-12">
             <div
               className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
               onClick={() => setIsViewModalOpen(false)}
@@ -2548,10 +2547,12 @@ export default function PNRDetails({
               <div className="flex items-center justify-between">
                 <h5 className="text-lg font-semibold">PNR Snapshot</h5>
                 <button
-                  className="btn btn-secondary h-8 px-3 text-xs"
+                  className="btn h-8 px-2"
                   onClick={() => setIsViewModalOpen(false)}
+                  aria-label="Close"
+                  title="Close"
                 >
-                  Close
+                  ✕
                 </button>
               </div>
 
@@ -2593,11 +2594,12 @@ export default function PNRDetails({
             <div className="flex items-center justify-between gap-2">
               <h5 className="text-lg font-semibold">Detailed Error</h5>
               <button
-                className="btn btn-secondary h-8 px-3 text-xs"
+                className="btn h-8 px-2"
                 onClick={closeErrorDetails}
-                type="button"
+                aria-label="Close"
+                title="Close"
               >
-                Close
+                ✕
               </button>
             </div>
             <div className="mt-3">

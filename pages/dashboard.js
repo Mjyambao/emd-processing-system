@@ -352,7 +352,7 @@ export default function Dashboard() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-3 items-start">
+            <div className="grid grid-cols-1 items-start">
               <div>
                 <PNRTable
                   rows={rows}
