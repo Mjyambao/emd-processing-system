@@ -71,8 +71,19 @@ export function getPnrDetails(pnrId) {
  * @param {string} pnrId
  * @param {Object} payload
  */
-export function assignPnrs(payload) {
-  return api.patch("/api/v1/pnrs/assign", payload);
+export async function patchAssignPnr(pnrId, payload) {
+  return api.patch(`/api/v1/pnrs/${encodeURIComponent(pnrId)}/assign`, payload);
+}
+
+/*
+ * Set Pnr TTL
+ * POST /api/v1/pnrs/ttl
+ *
+ * @param {string} pnrId
+ * @param {Object} ttlUtc
+ */
+export async function patchTtlPnr(pnrId, payload) {
+  return api.patch(`/api/v1/pnrs/${encodeURIComponent(pnrId)}/ttl`, payload);
 }
 
 /*
@@ -135,9 +146,9 @@ export function removePnrFromQueue(pnrId, payload) {
  * @param {string} emdItemId
  * @param {Object} payload
  */
-export function buildAeForEmd(emdItemId, payload) {
-  return api.patch(
-    `/api/v1/emd-s/${encodeURIComponent(emdItemId)}/build-ae`,
+export function postBuildAeForEmd(pnrId, payload) {
+  return api.post(
+    `/api/v1/pnrs/${encodeURIComponent(pnrId)}/build-ae`,
     payload,
   );
 }
@@ -149,11 +160,8 @@ export function buildAeForEmd(emdItemId, payload) {
  * @param {string} pnrId
  * @param {Object} payload
  */
-export function processPnr(pnrId, payload = {}) {
-  return api.patch(
-    `/api/v1/pnrs/${encodeURIComponent(pnrId)}/process`,
-    payload,
-  );
+export function postProcessPNR(pnrId, payload = {}) {
+  return api.post(`/api/v1/pnrs/${encodeURIComponent(pnrId)}/process`, payload);
 }
 
 /*
@@ -162,4 +170,75 @@ export function processPnr(pnrId, payload = {}) {
  */
 export function logUiAction(payload) {
   return api.post("/api/v1/logs/ui-actions", payload);
+}
+
+// -------------------------
+// PNRDetails API helpers (moved from PNRDetailsV4.js)
+// Keeps existing endpoints/methods/error-shape + AbortController support
+// -------------------------
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+// Feedback (ADM) API
+function buildEmdFeedbackUrl(emdId) {
+  const id = encodeURIComponent(emdId || "");
+  const path = `/api/v1/pnrs/emd-items/${id}/feedback`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
+// Build AE API
+function buildBuildAeUrl(pnrId) {
+  const id = encodeURIComponent(pnrId || "");
+  const path = `/api/v1/pnrs/${id}/build-ae`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
+// Process PNR API
+function buildProcessPnrUrl(pnrId) {
+  const id = encodeURIComponent(pnrId ?? "");
+  const path = `/api/v1/pnrs/${id}/process`;
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
+
+async function parseJsonOrEmpty(res) {
+  const txt = await res.text().catch(() => "");
+  try {
+    return txt ? JSON.parse(txt) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function throwHttpError(res) {
+  const text = await res.text().catch(() => "");
+  const err = new Error(
+    `HTTP ${res.status} ${res.statusText}${text ? ` â€” ${text}` : ""}`,
+  );
+  err.status = res.status;
+  throw err;
+}
+
+export function getEmdFeedbackId(emd) {
+  // Prefer server-side identifiers
+  const id = emd?.emdItemId ?? emd?.ancillaryItemId;
+  if (id != null && String(id).trim() !== "") return id;
+
+  // Fallback to EMD number if it looks valid (best-effort)
+  const no = emd?.emdNo;
+  if (no && no !== "â€”" && String(no).trim() !== "") return no;
+
+  return null;
+}
+
+export async function patchEmdFeedback(emdId, payload, { signal } = {}) {
+  const url = buildEmdFeedbackUrl(emdId);
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+    signal,
+  });
+
+  if (!res.ok) await throwHttpError(res);
+  return parseJsonOrEmpty(res);
 }

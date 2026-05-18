@@ -16,7 +16,9 @@ export default function PNRDetailsActionBar({
     <div>
       <div className="text-sm w-[250px] mb-2">
         <span className="text-black/60 mr-1">Error Details:</span>
-        <strong className="font-semibold">{errorDetails}</strong>
+        <strong className="font-semibold">
+          {errorDetails != "" ? errorDetails : "-"}
+        </strong>
       </div>
 
       <div>

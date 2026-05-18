@@ -435,8 +435,7 @@ function mapApiToPnrDetails(pnrApi) {
       primaryEmail: pax?.primaryEmail,
       primaryPhoneNumber: pax?.primaryPhoneNumber,
       passengerFlights: paxFlights,
-      emdItems: emds,
-      emdItemsRaw: emdItems,
+      emdItems,
     };
   });
 
@@ -547,15 +546,6 @@ export default function PNRDetails({
   loggedInUserId,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
-  // Keep a synchronous reference of the latest PNR details (prevents stale reads in modals)
-  const pnrDetailsRef = useRef(null);
-  const setPnrDetailsAndRef = (updater) => {
-    setPnrDetails((prev) => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      pnrDetailsRef.current = next;
-      return next;
-    });
-  };
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
 
   // Build AE (per-EMD) modal
@@ -605,9 +595,7 @@ export default function PNRDetails({
       const api = await getPnrDetails(pnrId, { signal: controller.signal });
       const fresh = mapApiToPnrDetails(api);
 
-      setPnrDetailsAndRef((prev) =>
-        mergePnrDetailsSilently(prev, fresh, selected?.status || prev?.status),
-      );
+      setPnrDetails(fresh);
     } catch (e) {
       if (e?.name !== "AbortError") {
         console.warn("Silent PNR details refetch failed", e);
@@ -713,13 +701,13 @@ export default function PNRDetails({
 
     async function load() {
       if (!selected) {
-        setPnrDetailsAndRef(null);
+        setPnrDetails(null);
         setIsDetailsLoading(false);
         return;
       }
 
       setIsDetailsLoading(true);
-      setPnrDetailsAndRef(null);
+      setPnrDetails(null);
 
       try {
         const api = await getPnrDetails(selected.pnr, {
@@ -730,7 +718,7 @@ export default function PNRDetails({
 
         decorateMappedDetails(mapped, selected?.status);
 
-        setPnrDetailsAndRef(mapped);
+        setPnrDetails(mapped);
         setIsDetailsLoading(false);
         return;
       } catch (e) {
@@ -849,7 +837,7 @@ export default function PNRDetails({
             emdDesc: emd2b.emdDesc,
           };
 
-          setPnrDetailsAndRef({
+          setPnrDetails({
             ...common,
             passengers: [
               {
@@ -961,7 +949,7 @@ export default function PNRDetails({
             ],
           };
 
-          setPnrDetailsAndRef({ ...common, passengers: [pax1, pax2] });
+          setPnrDetails({ ...common, passengers: [pax1, pax2] });
         }
         setIsDetailsLoading(false);
       } catch (e) {
@@ -1023,7 +1011,7 @@ export default function PNRDetails({
   }, [pnrDetails]);
 
   function handleFieldChange(passengerIndex, emdIndex, field, value) {
-    setPnrDetailsAndRef((prev) => {
+    setPnrDetails((prev) => {
       if (!prev) return prev;
 
       const next = deepClone(prev);
@@ -1051,16 +1039,7 @@ export default function PNRDetails({
   function openBuildFor(passengerIndex, emdIndex) {
     buildTargetRef.current = { passengerIndex, emdIndex };
 
-    const details = pnrDetailsRef.current || pnrDetails;
-
-    const emd = details?.passengers?.[passengerIndex]?.emdItems?.[emdIndex];
-
-    if (!emd) {
-      setBuildChanges([]);
-      setBuildNotes("");
-      setIsBuildModalOpen(true);
-      return;
-    }
+    const emd = pnrDetails.passengers[passengerIndex].emdItems?.[emdIndex];
 
     const diff = getEmdDiff(
       { rfic: emd.rfic, rfisc: emd.rfisc, emdDesc: emd.emdDesc },
@@ -1114,7 +1093,7 @@ export default function PNRDetails({
 
       await postBuildAeForEmd(pnrId, payload);
 
-      setPnrDetailsAndRef((prev) => {
+      setPnrDetails((prev) => {
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emdItems?.[emdIndex];
 
@@ -1123,10 +1102,8 @@ export default function PNRDetails({
           rfisc: target.rfisc,
           emdDesc: target.emdDesc,
         };
-
         target.built = true;
-        target.editable = false;
-        target.aeBuildStatus = "BUILT";
+        target.aeBuildStatus = target.aeBuildStatus || "BUILT";
         target.aeBuiltUtc = target.aeBuiltUtc || new Date().toISOString();
 
         return next;
@@ -1169,7 +1146,7 @@ export default function PNRDetails({
     try {
       await postProcessPNR(pnrId);
 
-      setPnrDetailsAndRef((prev) => {
+      setPnrDetails((prev) => {
         if (!prev) return prev;
         const next = deepClone(prev);
         next.status = "Processing";
@@ -1259,7 +1236,7 @@ export default function PNRDetails({
 
       await patchEmdFeedback(emdId, payload);
 
-      setPnrDetailsAndRef((prev) => {
+      setPnrDetails((prev) => {
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emds[emdIndex];
         target.adm = target.adm || {
@@ -1633,7 +1610,8 @@ export default function PNRDetails({
                                   </>
                                 }
                                 v={
-                                  passenger.passengerFlights?.seatNumber || "—"
+                                  passenger.passengerFlights[0]?.seatNumber ||
+                                  "—"
                                 }
                               />
                               <Field
@@ -2109,7 +2087,7 @@ export default function PNRDetails({
                                                         e.stopPropagation()
                                                       }
                                                       onChange={() => {
-                                                        setPnrDetailsAndRef(
+                                                        setPnrDetails(
                                                           (prev) => {
                                                             const next =
                                                               deepClone(prev);
@@ -2148,7 +2126,7 @@ export default function PNRDetails({
                                                         e.stopPropagation()
                                                       }
                                                       onChange={() => {
-                                                        setPnrDetailsAndRef(
+                                                        setPnrDetails(
                                                           (prev) => {
                                                             const next =
                                                               deepClone(prev);
@@ -2184,29 +2162,27 @@ export default function PNRDetails({
                                                       emd?.adm?.feedback ?? ""
                                                     }
                                                     onChange={(ev) =>
-                                                      setPnrDetailsAndRef(
-                                                        (prev) => {
-                                                          const next =
-                                                            deepClone(prev);
-                                                          const target =
-                                                            next.passengers[
-                                                              passengerIndex
-                                                            ].emds[emdIndex];
-                                                          if (!target.adm) {
-                                                            target.adm = {
-                                                              isAdm: false,
-                                                              feedback: "",
-                                                              submitted: false,
-                                                            };
-                                                          }
-                                                          target.adm.feedback =
-                                                            ev.target.value;
-                                                          // mirror top-level fields used elsewhere
-                                                          target.feedback =
-                                                            ev.target.value;
-                                                          return next;
-                                                        },
-                                                      )
+                                                      setPnrDetails((prev) => {
+                                                        const next =
+                                                          deepClone(prev);
+                                                        const target =
+                                                          next.passengers[
+                                                            passengerIndex
+                                                          ].emds[emdIndex];
+                                                        if (!target.adm) {
+                                                          target.adm = {
+                                                            isAdm: false,
+                                                            feedback: "",
+                                                            submitted: false,
+                                                          };
+                                                        }
+                                                        target.adm.feedback =
+                                                          ev.target.value;
+                                                        // mirror top-level fields used elsewhere
+                                                        target.feedback =
+                                                          ev.target.value;
+                                                        return next;
+                                                      })
                                                     }
                                                     onKeyDownCapture={(e) =>
                                                       e.stopPropagation()

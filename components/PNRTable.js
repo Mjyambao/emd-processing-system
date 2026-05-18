@@ -10,7 +10,7 @@ import AssigneeMultiSelectFilter from "./AssigneeMultiSelectFilter";
 import formatDate from "../utils/helper";
 
 // API
-import { getPnrQueueList } from "../api/pnrApi";
+import { getPnrQueueList, patchAssignPnr, patchTtlPnr } from "../api/pnrApi";
 
 export default function PNRTable({
   // NOTE: rows prop is kept for compatibility, but table renders API rows (apiRows).
@@ -30,9 +30,9 @@ export default function PNRTable({
   onUpdateTTL,
   //  callback to let Dashboard compute chip counts based on table rows (current page)
   onRowsChange,
-  //  force assignedTo for API query (used by "My Queues" tab to show only logged-in user)
+  //  force assignTo for API query (used by "My Queues" tab to show only logged-in user)
   // If provided, it overrides Assigned To filter & includeUnassigned logic.
-  assignedToOverride,
+  assignToOverride,
   loggedInUserName,
   loggedInUserId,
 }) {
@@ -136,7 +136,8 @@ export default function PNRTable({
    * - queueName defaults to "-"
    * - userId defaults to 0
    */
-  const getAssignedBy = () => loggedInUserId || "31";
+  const getAssignedById = () => "31";
+  const getAssignedByName = () => loggedInUserName || "-";
 
   const makeCorrelationId = () => {
     try {
@@ -146,71 +147,6 @@ export default function PNRTable({
       // ignore
     }
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  };
-
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-  const patchAssignPnr = async (pnrId, payload) => {
-    const url = `${API_BASE}/api/v1/pnrs/${encodeURIComponent(pnrId)}/assign`;
-
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = `Assign failed (${res.status})`;
-      try {
-        const t = await res.text();
-        if (t) msg = `${msg}: ${t}`;
-      } catch (_) {
-        // ignore
-      }
-      throw new Error(msg);
-    }
-
-    // Response may be empty; swallow JSON parse errors
-    try {
-      return await res.json();
-    } catch (_) {
-      return null;
-    }
-  };
-
-  // PATCH /api/v1/pnrs/{pnrId}/ttl
-  // Body: { ttlUtc: "2026-04-07T03:37:27.848Z" }
-  const patchTtlPnr = async (pnrId, ttlUtc) => {
-    const url = `${API_BASE}/api/v1/pnrs/${encodeURIComponent(pnrId)}/ttl`;
-
-    const res = await fetch(url, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({ ttlUtc }),
-    });
-
-    if (!res.ok) {
-      let msg = `Set TLL failed (${res.status})`;
-      try {
-        const t = await res.text();
-        if (t) msg = `${msg}: ${t}`;
-      } catch (_) {
-        // ignore
-      }
-      throw new Error(msg);
-    }
-
-    // Response may be empty; swallow JSON parse errors
-    try {
-      return await res.json();
-    } catch (_) {
-      return null;
-    }
   };
 
   const mapSortKeyToSwaggerField = (key) => {
@@ -242,7 +178,7 @@ export default function PNRTable({
       case "errorDetailed":
         return "errorDetails";
       case "assigned":
-        return "assignedTo";
+        return "assignTo";
       default:
         return "departureDate";
     }
@@ -263,7 +199,7 @@ export default function PNRTable({
     lastUpdated: item?.lastUpdated ?? null,
     error: item?.humanError ?? "",
     errorDetailed: item?.errorDetails ?? "",
-    assigned: item?.assignedTo ?? "",
+    assigned: item?.assignTo ?? "",
     action: item?.actionRequired ?? "",
 
     // Extra fields kept for downstream actions (e.g., Assign API payload)
@@ -447,7 +383,7 @@ export default function PNRTable({
 
   const filteredRows = useMemo(() => {
     // --- MY QUEUE STRICT RULE ---
-    if (assignedToOverride && loggedInUserName) {
+    if (assignToOverride && loggedInUserName) {
       return effectiveRows.filter(
         (r) =>
           r.assigned === loggedInUserName &&
@@ -457,7 +393,7 @@ export default function PNRTable({
 
     // --- ALL QUEUE (NO EXTRA FILTERING) ---
     return effectiveRows;
-  }, [effectiveRows, assignedToOverride, loggedInUserName]);
+  }, [effectiveRows, assignToOverride, loggedInUserName]);
 
   const statusOptions = useMemo(() => {
     const set = new Set(filteredRows.map((r) => r.status).filter(Boolean));
@@ -468,9 +404,9 @@ export default function PNRTable({
   const assigneeOptions = assignees.length
     ? assignees
     : [
-        { id: "u1", name: "Ticketer 1" },
-        { id: "u2", name: "Guest User" },
-        { id: "u3", name: "Ticketer 2" },
+        { id: "1", name: "Ticketer 1" },
+        { id: "2", name: "Guest User" },
+        { id: "3", name: "Ticketer 2" },
       ];
 
   const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Ticketer 2"];
@@ -605,19 +541,19 @@ export default function PNRTable({
       ? uiStatusToApiStatus(chosenStatusUi)
       : undefined;
 
-    // AssignedTo base logic (existing behavior), unless assignedToOverride is provided.
-    let assignedTo;
-    if (assignedToOverride && String(assignedToOverride).trim()) {
-      assignedTo = String(assignedToOverride).trim();
+    // assignTo base logic (existing behavior), unless assignToOverride is provided.
+    let assignTo;
+    if (assignToOverride && String(assignToOverride).trim()) {
+      assignTo = String(assignToOverride).trim();
     } else if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
-      assignedTo = f.assignedNames[0];
+      assignTo = f.assignedNames[0];
     } else if (
       f.includeUnassigned &&
       (!f.assignedNames || f.assignedNames.length === 0)
     ) {
-      assignedTo = "Unassigned";
+      assignTo = "Unassigned";
     } else {
-      assignedTo = undefined;
+      assignTo = undefined;
     }
 
     const pnr = f.pnr?.trim()
@@ -671,7 +607,7 @@ export default function PNRTable({
       page: Math.max(1, page), // backend expects 1-based
       pageSize: Math.min(100, Math.max(1, pageSize)),
       status,
-      assignedTo,
+      assignTo,
       pnr,
       brand,
       gds,
@@ -853,7 +789,7 @@ export default function PNRTable({
   // Reset to page 1 when filters/sort/search/pageSize change
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, colFilters, sort, pageSize, assignedToOverride]);
+  }, [search, statusFilter, colFilters, sort, pageSize, assignToOverride]);
 
   // Debounced fetch on relevant changes (normal fetch - not silent)
   useEffect(() => {
@@ -870,7 +806,7 @@ export default function PNRTable({
     statusFilter,
     search,
     colFilters,
-    assignedToOverride,
+    assignToOverride,
   ]);
 
   //  Poll for updates every 30 seconds
@@ -1043,8 +979,9 @@ export default function PNRTable({
 
   const assignPnrsToAssignee = async (assignee, items) => {
     // Items: [{ pnr, originalIndex }]
-    const assignedTo = assignee?.name ?? String(assignee?.id ?? "");
-    const assignedBy = getAssignedBy();
+    const assignTo = assignee?.name ?? String(assignee?.id ?? "");
+    const assignedById = getAssignedById();
+    const assignedByName = getAssignedByName();
 
     const failures = [];
 
@@ -1057,20 +994,14 @@ export default function PNRTable({
       const row = apiRowsRef.current?.find?.((r) => r.pnr === pnrId);
 
       const payload = {
-        assignedTo,
-        assignedBy,
-        assignmentReason: "Assign to Ticketer",
-        correlationId: row?.correlationId || makeCorrelationId(),
-        oasisQueueId: row?.oasisQueueId || "testQueueID",
-        queueName: "testQueueName",
-        userId: assignedBy,
+        assignTo,
       };
 
       await patchAssignPnr(pnrId, payload);
 
       // Apply local UI update for that PNR immediately
       setApiRows((prev) =>
-        prev.map((r) => (r.pnr === pnrId ? { ...r, assigned: assignedTo } : r)),
+        prev.map((r) => (r.pnr === pnrId ? { ...r, assigned: assignTo } : r)),
       );
     };
 
@@ -1095,7 +1026,7 @@ export default function PNRTable({
     // Optional notification hook for parent (kept for compatibility)
     try {
       await Promise.resolve(
-        onAssign?.({ assignee, items, assignedTo, assignedBy, failures }),
+        onAssign?.({ assignee, items, assignTo, assignedByName, failures }),
       );
     } catch (_) {
       // ignore parent callback errors to avoid masking API results
@@ -1994,8 +1925,12 @@ export default function PNRTable({
               return;
             }
 
+            const payload_utc = {
+              ttlUtc,
+            };
+
             // Call the new Set TLL endpoint
-            await patchTtlPnr(ttlModal.pnr, ttlUtc);
+            await patchTtlPnr(ttlModal.pnr, payload_utc);
 
             // Backward compatibility: still notify parent if provided
             const payload = {

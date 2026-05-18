@@ -1,15 +1,22 @@
 import "../styles/globals.css";
 import "../styles/pnr-details.css";
-import { useResponse, clearToken } from "../api/api";
+import { useResponse } from "../api/api";
 
 export default function MyApp({ Component, pageProps }) {
   useResponse(async ({ response }) => {
     if (response.status === 401) {
-      // Clear session and optionally route to login
-      clearToken();
-      window.location.href = "/";
+      // Only sign out if the token is actually invalid, not for other errors
+      const { default: oktaAuth } = await import("../lib/okta");
+      const isAuth = await oktaAuth.isAuthenticated();
+      if (!isAuth) {
+        localStorage.removeItem("session");
+        await oktaAuth.signOut({
+          postLogoutRedirectUri: window.location.origin,
+        });
+      }
     }
     return response;
   });
+
   return <Component {...pageProps} />;
 }
