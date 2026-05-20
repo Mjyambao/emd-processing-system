@@ -44,9 +44,27 @@ export default function Dashboard() {
 
   // Ticket Type / GDS Region (UI filters)
   const TICKET_TYPES = ["EMD", "Refund", "Reissue"];
-  const GDS_REGIONS = ["Sabre AU", "Sabre NZ", "Amadeus AU + NZ"];
+  const GDS_TYPES = ["Sabre AU", "Sabre NZ", "Amadeus AU", "Amadeus NZ"];
+  const REGION_TYPES = ["AU", "NZ"];
   const [ticketType, setTicketType] = useState(TICKET_TYPES[0]);
-  const [gdsRegion, setGdsRegion] = useState(GDS_REGIONS[0]);
+  const [gdsType, setGdsType] = useState(GDS_TYPES[0]);
+  const [regionType, setRegionType] = useState(REGION_TYPES[0]);
+  const [gdsRegion, setGdsRegion] = useState([]);
+
+  const toggleGdsRegion = (region) => {
+    setGdsRegion((prev) => {
+      const isSelected = prev.includes(region);
+      if (isSelected && prev.length === 1) {
+        return prev; // do nothing
+      }
+
+      if (isSelected) {
+        return prev.filter((r) => r !== region);
+      }
+
+      return [...prev, region];
+    });
+  };
 
   // All Queue (legacy local sample state kept for other UI behaviors)
   const [allRows, setAllRows] = useState([]);
@@ -100,6 +118,10 @@ export default function Dashboard() {
   useEffect(() => {
     requireAuth(router);
   }, []);
+
+  useEffect(() => {
+    setStatus("all");
+  }, [ticketType]);
 
   useEffect(() => {
     setHasMounted(true);
@@ -223,6 +245,45 @@ export default function Dashboard() {
   // Chips counter
   const counters = activeTab === TABS.ALL ? allCounts : myCounts;
 
+  // Non-EMD counters (Assigned / Unassigned)
+  const nonEmdCounts = useMemo(() => {
+    const sourceRows =
+      activeTab === TABS.ALL
+        ? allTableSnapshot.rows?.length
+          ? allTableSnapshot.rows
+          : allRows
+        : myTableSnapshot.rows?.length
+          ? myTableSnapshot.rows
+          : myRows;
+
+    let assigned = 0;
+    let unassigned = 0;
+
+    const isAssigned = (value) => {
+      return (
+        value &&
+        value !== "" &&
+        value !== "-" &&
+        value !== null &&
+        value !== undefined
+      );
+    };
+
+    sourceRows.forEach((r) => {
+      if (isAssigned(r.assigned)) {
+        assigned++;
+      } else {
+        unassigned++;
+      }
+    });
+
+    return {
+      total: sourceRows.length,
+      assigned,
+      unassigned,
+    };
+  }, [activeTab, allRows, myRows, allTableSnapshot.rows, myTableSnapshot.rows]);
+
   const loggedInName = session?.name || session?.user?.name || "";
   const loggedInUserId =
     session?.userId || session?.user?.userId || session?.user?.name || "";
@@ -254,17 +315,78 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Ticket Type / GDS Region */}
+        <div className="mb-2 grid grid-cols-1 gap-3">
+          <div>
+            <div className="mt-1 inline-flex border border-black/10 overflow-hidden">
+              {TICKET_TYPES.map((type) => {
+                const isActive = ticketType === type;
+
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setTicketType(type)}
+                    className={`px-4 py-2 text-sm font-semibold transition
+            ${
+              isActive
+                ? "bg-brand-red text-white"
+                : "bg-white text-black/70 hover:bg-black/5 border border-1"
+            }
+          `}
+                  >
+                    {type}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-black/60">
+              Only <span className="font-semibold">EMD</span> ticket types are
+              AI Enabled while <span className="font-semibold">Refund</span> and{" "}
+              <span className="font-semibold">Reissue</span> are still not
+              migrated to the AI Agents.
+            </p>
+          </div>
+
+          <div>
+            <div className="mb-2 inline-flex border border-black/10 overflow-hidden">
+              {GDS_TYPES.map((type) => {
+                const isActive = gdsType === type;
+
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setGdsType(type)}
+                    className={`px-4 py-2 text-sm font-semibold transition
+            ${
+              isActive
+                ? "bg-brand-red text-white"
+                : "bg-white text-black/70 hover:bg-black/5 border border-1 "
+            }
+          `}
+                  >
+                    {type}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         {/* Tabs with counters */}
         <div className="mb-2 border-b border-black/10">
-          <div className="flex gap-2">
+          <div className="flex">
             <button
               type="button"
               onClick={() => setActiveTab(TABS.ALL)}
-              className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
-                activeTab === TABS.ALL
-                  ? "border-brand-red text-brand-red bg-red-50"
-                  : "border-transparent text-black/70 hover:text-black"
-              }`}
+              className={`px-4 py-2 text-sm font-semibold transition
+            ${
+              activeTab === TABS.ALL
+                ? "bg-brand-red text-white"
+                : "bg-white text-black/70 hover:bg-black/5 border border-1"
+            }
+          `}
               aria-selected={activeTab === TABS.ALL}
               role="tab"
               title="All Queue"
@@ -275,11 +397,13 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => setActiveTab(TABS.MINE)}
-              className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
-                activeTab === TABS.MINE
-                  ? "border-brand-red text-brand-red bg-red-50"
-                  : "border-transparent text-black/70 hover:text-black"
-              }`}
+              className={`px-4 py-2 text-sm font-semibold transition
+            ${
+              activeTab === TABS.MINE
+                ? "bg-brand-red text-white"
+                : "bg-white text-black/70 hover:bg-black/5 border border-1 "
+            }
+          `}
               aria-selected={activeTab === TABS.MINE}
               role="tab"
               title="My Queues"
@@ -290,11 +414,13 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => setActiveTab(TABS.REPORTS)}
-              className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
-                activeTab === TABS.REPORTS
-                  ? "border-brand-red text-brand-red bg-red-50"
-                  : "border-transparent text-black/70 hover:text-black"
-              }`}
+              className={`px-4 py-2 text-sm font-semibold transition
+            ${
+              activeTab === TABS.REPORTS
+                ? "bg-brand-red text-white"
+                : "bg-white text-black/70 hover:bg-black/5 border border-1 "
+            }
+          `}
               aria-selected={activeTab === TABS.REPORTS}
               role="tab"
               title="Reports"
@@ -307,98 +433,72 @@ export default function Dashboard() {
 
         {activeTab !== TABS.REPORTS ? (
           <>
-            {/* Ticket Type / GDS Region */}
-            <div className="mb-2 grid grid-cols-1 sm:grid-cols-2 gap-3 lg:w-1/2">
-              <div>
-                <label
-                  htmlFor="ticketType"
-                  className="block text-sm font-semibold text-black/70"
-                >
-                  Ticket Type:
-                </label>
-                <select
-                  id="ticketType"
-                  value={ticketType}
-                  onChange={(e) => setTicketType(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-black/10 bg-black/5 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-red"
-                >
-                  {TICKET_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="gdsRegion"
-                  className="block text-sm font-semibold text-black/70"
-                >
-                  GDS Region:
-                </label>
-                <select
-                  id="gdsRegion"
-                  value={gdsRegion}
-                  onChange={(e) => setGdsRegion(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-black/10 bg-black/5 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-red"
-                >
-                  {GDS_REGIONS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <p className="mb-2 text-[10px] text-black/60">
-              Only <span className="font-semibold">EMD</span> ticket type are AI
-              Enabled while <span className="font-semibold">Refund</span> and{" "}
-              <span className="font-semibold">Reissue</span> is still not
-              migrated to the AI Agents.
-            </p>
-
             {/* Chips */}
-            <div className="mb-2 flex flex-wrap items-center gap-2 mt-8">
-              <Chip
-                label={`All (${counters.total})`}
-                active={statusFilter === "all"}
-                onClick={() => setStatus("all")}
-              />
-
-              {activeTab === TABS.ALL ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {/* ✅ NON-EMD (Refund / Reissue) */}
+              {ticketType !== "EMD" ? (
                 <>
                   <Chip
-                    label={`Processed (${counters.processed})`}
-                    color="green"
-                    active={statusFilter === "processed"}
-                    onClick={() => setStatus("processed")}
+                    label={`All (${nonEmdCounts.total})`}
+                    active={statusFilter === "all"}
+                    onClick={() => setStatus("all")}
                   />
+
                   <Chip
-                    label={`Processing (${counters.processing})`}
-                    color="yellow"
-                    active={statusFilter === "processing"}
-                    onClick={() => setStatus("processing")}
+                    label={`Assigned (${nonEmdCounts.assigned})`}
+                    color="green"
+                    active={statusFilter === "assigned"}
+                    onClick={() => setStatus("assigned")}
+                  />
+
+                  <Chip
+                    label={`Unassigned (${nonEmdCounts.unassigned})`}
+                    color="red"
+                    active={statusFilter === "unassigned"}
+                    onClick={() => setStatus("unassigned")}
                   />
                 </>
               ) : (
-                ""
+                /* ✅ ORIGINAL EMD CHIPS */
+                <>
+                  <Chip
+                    label={`All (${counters.total})`}
+                    active={statusFilter === "all"}
+                    onClick={() => setStatus("all")}
+                  />
+
+                  {activeTab === TABS.ALL ? (
+                    <>
+                      <Chip
+                        label={`Processed (${counters.processed})`}
+                        color="green"
+                        active={statusFilter === "processed"}
+                        onClick={() => setStatus("processed")}
+                      />
+                      <Chip
+                        label={`Processing (${counters.processing})`}
+                        color="yellow"
+                        active={statusFilter === "processing"}
+                        onClick={() => setStatus("processing")}
+                      />
+                    </>
+                  ) : null}
+
+                  <Chip
+                    label={`Error (${counters.error})`}
+                    color="red"
+                    active={statusFilter === "error"}
+                    onClick={() => setStatus("error")}
+                  />
+
+                  <Chip
+                    label={`Human Input Required (${counters.human})`}
+                    color="purple"
+                    active={statusFilter === "human"}
+                    onClick={() => setStatus("human")}
+                  />
+                </>
               )}
-
-              <Chip
-                label={`Error (${counters.error})`}
-                color="red"
-                active={statusFilter === "error"}
-                onClick={() => setStatus("error")}
-              />
-
-              <Chip
-                label={`Human Input Required (${counters.human})`}
-                color="purple"
-                active={statusFilter === "human"}
-                onClick={() => setStatus("human")}
-              />
             </div>
           </>
         ) : null}
@@ -446,20 +546,22 @@ export default function Dashboard() {
               loggedInUserId={loggedInUserId}
             />
 
-            <PNRDetails
-              selected={selected}
-              onClose={() => setSelected(null)}
-              onApprove={(pnr) => {
-                setRows((list) =>
-                  list.map((r) =>
-                    r.pnr === pnr
-                      ? { ...r, status: "processed", action: "NA" }
-                      : r,
-                  ),
-                );
-                pushToast({ type: "success", message: `Approved • ${pnr}` });
-              }}
-            />
+            {ticketType === "EMD" && (
+              <PNRDetails
+                selected={selected}
+                onClose={() => setSelected(null)}
+                onApprove={(pnr) => {
+                  setRows((list) =>
+                    list.map((r) =>
+                      r.pnr === pnr
+                        ? { ...r, status: "processed", action: "NA" }
+                        : r,
+                    ),
+                  );
+                  pushToast({ type: "success", message: `Approved • ${pnr}` });
+                }}
+              />
+            )}
           </>
         )}
 

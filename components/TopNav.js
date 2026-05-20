@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/router";
 
 export default function TopNav({ onLogout }) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState("");
   const [session, setSession] = useState(null);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     setMounted(true);
@@ -21,6 +26,37 @@ export default function TopNav({ onLogout }) {
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Close menu on outside click / Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const onDocMouseDown = (e) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+
+    const onDocKeyDown = (e) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onDocKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+  }, [menuOpen]);
+
+  const go = (path) => {
+    setMenuOpen(false);
+    router.push(path);
+  };
+
+  const doLogout = async () => {
+    setMenuOpen(false);
+    await onLogout?.();
+  };
 
   return (
     <header className="sticky top-0 z-[99999] border-b border-black/10 bg-white/80 backdrop-blur">
@@ -49,9 +85,59 @@ export default function TopNav({ onLogout }) {
               </div>
             </>
           )}
-          <button className="btn btn-ghost" onClick={onLogout} title="Logout">
-            <i className="fa-solid fa-right-from-bracket"></i> Logout
-          </button>
+
+          {/* Burger menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              title="Menu"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <i className="fa-solid fa-bars"></i>
+            </button>
+
+            {menuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-black/10 bg-white shadow-lg"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-black/[0.04] flex items-center gap-2"
+                  onClick={() => go("/admin")}
+                >
+                  <i className="fa-solid fa-user-shield text-black/60"></i>
+                  Admin
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-black/[0.04] flex items-center gap-2"
+                  onClick={() => go("/dashboard")}
+                >
+                  <i className="fa-solid fa-gauge-high text-black/60"></i>
+                  Dashboard
+                </button>
+
+                <div className="h-px bg-black/10" />
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 text-brand-red flex items-center gap-2"
+                  onClick={doLogout}
+                >
+                  <i className="fa-solid fa-right-from-bracket"></i>
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
