@@ -30,7 +30,7 @@ export default function TopNav({ onLogout }) {
             <i className="fa-solid fa-plane"></i>
           </div>
           <h1 className="text-lg font-semibold tracking-wide">
-            EMD Processing System
+            Ticket Processing System
           </h1>
         </div>
 

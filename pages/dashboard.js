@@ -20,11 +20,11 @@ const ReportsModule = dynamic(() => import("../components/ReportsModule"), {
   ssr: false,
   loading: () => (
     <div className="py-6 flex items-center justify-center text-black/60">
-      <Spinner />
-      <span className="ml-2 text-sm">Loading reports…</span>
+      Loading reports…
     </div>
   ),
 });
+
 const AIAgentsDockPortal = dynamic(
   () => import("../components/AIAgentsDockPortal"),
   {
@@ -42,12 +42,18 @@ export default function Dashboard() {
   const TABS = { ALL: "all", MINE: "mine", REPORTS: "reports" };
   const [activeTab, setActiveTab] = useState(TABS.ALL);
 
+  // Ticket Type / GDS Region (UI filters)
+  const TICKET_TYPES = ["EMD", "Refund", "Reissue"];
+  const GDS_REGIONS = ["Sabre AU", "Sabre NZ", "Amadeus AU + NZ"];
+  const [ticketType, setTicketType] = useState(TICKET_TYPES[0]);
+  const [gdsRegion, setGdsRegion] = useState(GDS_REGIONS[0]);
+
   // All Queue (legacy local sample state kept for other UI behaviors)
   const [allRows, setAllRows] = useState([]);
   const [allSearch, setAllSearch] = useState("");
   const [allSelected, setAllSelected] = useState(null);
   const [allRefreshing, setAllRefreshing] = useState(false);
-  const [allStatus, setAllStatus] = useState("all"); // 'all'|'processed'|'processing'|'error'|'human'
+  const [allStatus, setAllStatus] = useState("all"); // 'all' 'processed' 'processing' 'error' 'human'
 
   // Reports sample
   const [reportData] = useState(() =>
@@ -62,11 +68,12 @@ export default function Dashboard() {
   const [myStatus, setMyStatus] = useState("all"); // same enum as above
 
   const [killing, setKilling] = useState(new Set()); // set of PNRs being killed
-  const [retrying, setRetrying] = useState(new Set());
+  const [retrying, setRetrying] = useState(new Set()); // set of PNRs being retried (optional)
 
   // Client-only session (avoid SSR hydration mismatch from localStorage)
   const [session, setSession] = useState(null);
-  const [hasMounted, setHasMounted] = useState(false); // set of PNRs being retried (optional)
+  const [hasMounted, setHasMounted] = useState(false);
+
   const [allTableSnapshot, setAllTableSnapshot] = useState({
     rows: [],
     meta: null,
@@ -219,6 +226,7 @@ export default function Dashboard() {
   const loggedInName = session?.name || session?.user?.name || "";
   const loggedInUserId =
     session?.userId || session?.user?.userId || session?.user?.name || "";
+
   function handleLogout() {
     localStorage.removeItem("session");
     //Trigger logout API to clear session
@@ -260,9 +268,7 @@ export default function Dashboard() {
               role="tab"
               title="All Queue"
             >
-              <i className="fa-solid fa-layer-group mr-1"></i>
-              All Queue{" "}
-              {/* <span className="ml-1 text-black/50">({allCounts.total})</span> */}
+              All Queue {/* ({allCounts.total}) */}
             </button>
 
             <button
@@ -277,9 +283,7 @@ export default function Dashboard() {
               role="tab"
               title="My Queues"
             >
-              <i className="fa-solid fa-user-check mr-1"></i>
-              My Queues{" "}
-              {/* <span className="ml-1 text-black/50">({myCounts.total})</span> */}
+              My Queues {/* ({myCounts.total}) */}
             </button>
 
             <button
@@ -301,50 +305,107 @@ export default function Dashboard() {
         </div>
 
         {activeTab !== TABS.REPORTS ? (
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Chip
-              label={`All (${counters.total})`}
-              active={statusFilter === "all"}
-              onClick={() => setStatus("all")}
-            />
+          <>
+            {/* Ticket Type / GDS Region */}
+            <div className="mb-2 grid grid-cols-1 sm:grid-cols-2 gap-3 lg:w-1/2">
+              <div>
+                <label
+                  htmlFor="ticketType"
+                  className="block text-sm font-semibold text-black/70"
+                >
+                  Ticket Type:
+                </label>
+                <select
+                  id="ticketType"
+                  value={ticketType}
+                  onChange={(e) => setTicketType(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-black/10 bg-black/5 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-red"
+                >
+                  {TICKET_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {activeTab === TABS.ALL ? (
-              <>
-                <Chip
-                  label={`Processed (${counters.processed})`}
-                  color="green"
-                  active={statusFilter === "processed"}
-                  onClick={() => setStatus("processed")}
-                />
-                <Chip
-                  label={`Processing (${counters.processing})`}
-                  color="yellow"
-                  active={statusFilter === "processing"}
-                  onClick={() => setStatus("processing")}
-                />
-              </>
-            ) : (
-              ""
-            )}
+              <div>
+                <label
+                  htmlFor="gdsRegion"
+                  className="block text-sm font-semibold text-black/70"
+                >
+                  GDS Region:
+                </label>
+                <select
+                  id="gdsRegion"
+                  value={gdsRegion}
+                  onChange={(e) => setGdsRegion(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-black/10 bg-black/5 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-red"
+                >
+                  {GDS_REGIONS.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-            <Chip
-              label={`Error (${counters.error})`}
-              color="red"
-              active={statusFilter === "error"}
-              onClick={() => setStatus("error")}
-            />
-            <Chip
-              label={`Human (${counters.human})`}
-              color="gray"
-              active={statusFilter === "human"}
-              onClick={() => setStatus("human")}
-            />
-          </div>
+            <p className="mb-2 text-[10px] text-black/60">
+              Only <span className="font-semibold">EMD</span> ticket type are AI
+              Enabled while <span className="font-semibold">Refund</span> and{" "}
+              <span className="font-semibold">Reissue</span> is still not
+              migrated to the AI Agents.
+            </p>
+
+            {/* Chips */}
+            <div className="mb-2 flex flex-wrap items-center gap-2 mt-8">
+              <Chip
+                label={`All (${counters.total})`}
+                active={statusFilter === "all"}
+                onClick={() => setStatus("all")}
+              />
+
+              {activeTab === TABS.ALL ? (
+                <>
+                  <Chip
+                    label={`Processed (${counters.processed})`}
+                    color="green"
+                    active={statusFilter === "processed"}
+                    onClick={() => setStatus("processed")}
+                  />
+                  <Chip
+                    label={`Processing (${counters.processing})`}
+                    color="yellow"
+                    active={statusFilter === "processing"}
+                    onClick={() => setStatus("processing")}
+                  />
+                </>
+              ) : (
+                ""
+              )}
+
+              <Chip
+                label={`Error (${counters.error})`}
+                color="red"
+                active={statusFilter === "error"}
+                onClick={() => setStatus("error")}
+              />
+
+              <Chip
+                label={`Human Input Required (${counters.human})`}
+                color="purple"
+                active={statusFilter === "human"}
+                onClick={() => setStatus("human")}
+              />
+            </div>
+          </>
         ) : null}
 
         {activeTab === TABS.REPORTS ? (
           <ReportsModule
-            onOpenPNR={(pnr) => {
+            data={reportData}
+            onSelectPNR={(pnr) => {
               setActiveTab(TABS.ALL);
               const found = allRows.find((r) => r.pnr === pnr);
               if (found) setAllSelected(found);
@@ -352,62 +413,52 @@ export default function Dashboard() {
           />
         ) : (
           <>
-            <div className="grid grid-cols-1 items-start">
-              <div>
-                <PNRTable
-                  rows={rows}
-                  search={search}
-                  setSearch={setSearch}
-                  onRefresh={onRefresh}
-                  onSelect={setSelected}
-                  selected={selected}
-                  onKill={onKill}
-                  statusFilter={statusFilter}
-                  killingSet={killing}
-                  retryingSet={retrying}
-                  assignees={[
-                    { id: "t-01", name: "Ticketer 1" },
-                    { id: "t-02", name: "Guest User" },
-                    { id: "t-03", name: "Ticketer 2" },
-                  ]}
-                  onAssign={({ assignee, items }) => {
-                    console.log("Assign to:", assignee, "Items:", items);
-                  }}
-                  onRowsChange={({ rows: latestRows, meta }) => {
-                    if (activeTab === TABS.ALL)
-                      setAllTableSnapshot({ rows: latestRows, meta });
-                    if (activeTab === TABS.MINE)
-                      setMyTableSnapshot({ rows: latestRows, meta });
-                  }}
-                  assignedToOverride={
-                    activeTab === TABS.MINE && loggedInName
-                      ? loggedInName
-                      : undefined
-                  }
-                  loggedInUserName={loggedInName}
-                  loggedInUserId={loggedInUserId}
-                />
-              </div>
-              <div>
-                <PNRDetails
-                  loggedInUserId={loggedInUserId}
-                  selected={selected}
-                  onApprove={({ pnr }) => {
-                    setRows((list) =>
-                      list.map((r) =>
-                        r.pnr === pnr
-                          ? { ...r, status: "processed", action: "NA" }
-                          : r,
-                      ),
-                    );
-                    pushToast({
-                      type: "success",
-                      message: `Approved • ${pnr}`,
-                    });
-                  }}
-                />
-              </div>
-            </div>
+            <PNRTable
+              ticketType={ticketType}
+              gdsRegion={gdsRegion}
+              rows={rows}
+              search={search}
+              setSearch={setSearch}
+              onRefresh={onRefresh}
+              onSelect={setSelected}
+              selected={selected}
+              onKill={onKill}
+              statusFilter={statusFilter}
+              isRefreshing={isRefreshing}
+              killingSet={killing}
+              retryingSet={retrying}
+              onAssign={({ assignee, items }) => {
+                console.log("Assign to:", assignee, "Items:", items);
+              }}
+              onRowsChange={({ rows: latestRows, meta }) => {
+                if (activeTab === TABS.ALL)
+                  setAllTableSnapshot({ rows: latestRows, meta });
+                if (activeTab === TABS.MINE)
+                  setMyTableSnapshot({ rows: latestRows, meta });
+              }}
+              assignedToOverride={
+                activeTab === TABS.MINE && loggedInName
+                  ? loggedInName
+                  : undefined
+              }
+              loggedInUserName={loggedInName}
+              loggedInUserId={loggedInUserId}
+            />
+
+            <PNRDetails
+              selected={selected}
+              onClose={() => setSelected(null)}
+              onApprove={(pnr) => {
+                setRows((list) =>
+                  list.map((r) =>
+                    r.pnr === pnr
+                      ? { ...r, status: "processed", action: "NA" }
+                      : r,
+                  ),
+                );
+                pushToast({ type: "success", message: `Approved • ${pnr}` });
+              }}
+            />
           </>
         )}
 
@@ -415,7 +466,8 @@ export default function Dashboard() {
         <ToastViewport toasts={toasts} onDismiss={dismissToast} />
       </main>
 
-      <AIAgentsDockPortal />
+      {/* Optional dock portal */}
+      {hasMounted ? <AIAgentsDockPortal /> : null}
     </div>
   );
 }

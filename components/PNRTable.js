@@ -15,6 +15,8 @@ import { getPnrQueueList } from "../api/pnrApi";
 export default function PNRTable({
   // NOTE: rows prop is kept for compatibility, but table renders API rows (apiRows).
   rows,
+  ticketType = "EMD",
+  gdsRegion,
   search,
   setSearch,
   onRefresh,
@@ -41,6 +43,7 @@ export default function PNRTable({
    * Helpers
    * -----------------------------
    */
+  const isNonEmdTicket = String(ticketType ?? "EMD") !== "EMD";
   const includesCI = (value, query) => {
     const v = String(value ?? "").toLowerCase();
     const q = String(query ?? "")
@@ -1332,104 +1335,110 @@ export default function PNRTable({
               </ThWithFilter>
 
               {/* Document Type */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Document Type
-                    <FilterToggleButton
-                      open={filterOpen.documentType}
-                      active={isFilterActive.documentType}
-                      onClick={() => toggleFilterUI("documentType")}
-                      label="Document Type"
-                    />
-                  </span>
-                }
-                widthClass="w-[150px]"
-                sortKey="documentType"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.documentType && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-7 text-xs w-full"
-                      placeholder="Filter document type…"
-                      value={colFilters.documentType}
-                      onChange={(e) =>
-                        updateFilter("documentType", e.target.value)
-                      }
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Document Type
+                      <FilterToggleButton
+                        open={filterOpen.documentType}
+                        active={isFilterActive.documentType}
+                        onClick={() => toggleFilterUI("documentType")}
+                        label="Document Type"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[150px]"
+                  sortKey="documentType"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.documentType && (
+                    <div className="mt-1">
+                      <input
+                        className="input h-7 text-xs w-full"
+                        placeholder="Filter document type…"
+                        value={colFilters.documentType}
+                        onChange={(e) =>
+                          updateFilter("documentType", e.target.value)
+                        }
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Status */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Status
-                    <FilterToggleButton
-                      open={filterOpen.status}
-                      active={isFilterActive.status}
-                      onClick={() => toggleFilterUI("status")}
-                      label="Status"
-                    />
-                  </span>
-                }
-                widthClass="w-[130px]"
-                sortKey="status"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.status && (
-                  <div className="mt-1">
-                    <select
-                      className="input h-7 text-xs w-full"
-                      value={colFilters.status}
-                      onChange={(e) => updateFilter("status", e.target.value)}
-                    >
-                      <option value="">All</option>
-                      {statusOptions.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Status
+                      <FilterToggleButton
+                        open={filterOpen.status}
+                        active={isFilterActive.status}
+                        onClick={() => toggleFilterUI("status")}
+                        label="Status"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[130px]"
+                  sortKey="status"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.status && (
+                    <div className="mt-1">
+                      <select
+                        className="input h-7 text-xs w-full"
+                        value={colFilters.status}
+                        onChange={(e) => updateFilter("status", e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {statusOptions.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Passenger Names */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Passenger Names
-                    <FilterToggleButton
-                      open={filterOpen.passengerNames}
-                      active={isFilterActive.passengerNames}
-                      onClick={() => toggleFilterUI("passengerNames")}
-                      label="Passenger Names"
-                    />
-                  </span>
-                }
-                widthClass="w-[260px]"
-                sortKey="passengerNames"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.passengerNames && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-7 text-xs w-full"
-                      placeholder="Filter passenger…"
-                      value={colFilters.passengerNames}
-                      onChange={(e) =>
-                        updateFilter("passengerNames", e.target.value)
-                      }
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Passenger Names
+                      <FilterToggleButton
+                        open={filterOpen.passengerNames}
+                        active={isFilterActive.passengerNames}
+                        onClick={() => toggleFilterUI("passengerNames")}
+                        label="Passenger Names"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[260px]"
+                  sortKey="passengerNames"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.passengerNames && (
+                    <div className="mt-1">
+                      <input
+                        className="input h-7 text-xs w-full"
+                        placeholder="Filter passenger…"
+                        value={colFilters.passengerNames}
+                        onChange={(e) =>
+                          updateFilter("passengerNames", e.target.value)
+                        }
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Departure Date */}
               <ThWithFilter
@@ -1559,73 +1568,79 @@ export default function PNRTable({
               </ThWithFilter>
 
               {/* TTL */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    TTL
-                    <FilterToggleButton
-                      open={filterOpen.ttl}
-                      active={isFilterActive.ttl}
-                      onClick={() => toggleFilterUI("ttl")}
-                      label="TTL"
-                    />
-                  </span>
-                }
-                widthClass="w-[180px]"
-                nowrap
-                sortKey="ttl"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.ttl && (
-                  <div className="mt-1 flex gap-0.5">
-                    <input
-                      type="date"
-                      className="input h-8 text-xs"
-                      value={colFilters.ttlFrom}
-                      onChange={(e) => updateFilter("ttlFrom", e.target.value)}
-                      aria-label="TTL from"
-                    />
-                    <input
-                      type="date"
-                      className="input h-8 text-xs"
-                      value={colFilters.ttlTo}
-                      onChange={(e) => updateFilter("ttlTo", e.target.value)}
-                      aria-label="TTL to"
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      TTL
+                      <FilterToggleButton
+                        open={filterOpen.ttl}
+                        active={isFilterActive.ttl}
+                        onClick={() => toggleFilterUI("ttl")}
+                        label="TTL"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[180px]"
+                  nowrap
+                  sortKey="ttl"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.ttl && (
+                    <div className="mt-1 flex gap-0.5">
+                      <input
+                        type="date"
+                        className="input h-8 text-xs"
+                        value={colFilters.ttlFrom}
+                        onChange={(e) =>
+                          updateFilter("ttlFrom", e.target.value)
+                        }
+                        aria-label="TTL from"
+                      />
+                      <input
+                        type="date"
+                        className="input h-8 text-xs"
+                        value={colFilters.ttlTo}
+                        onChange={(e) => updateFilter("ttlTo", e.target.value)}
+                        aria-label="TTL to"
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Error Details */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Error Details
-                    <FilterToggleButton
-                      open={filterOpen.error}
-                      active={isFilterActive.error}
-                      onClick={() => toggleFilterUI("error")}
-                      label="Error Details"
-                    />
-                  </span>
-                }
-                widthClass="w-[420px]"
-                sortKey="error"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.error && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-7 text-xs w-full"
-                      placeholder="Filter error…"
-                      value={colFilters.error}
-                      onChange={(e) => updateFilter("error", e.target.value)}
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Error Details
+                      <FilterToggleButton
+                        open={filterOpen.error}
+                        active={isFilterActive.error}
+                        onClick={() => toggleFilterUI("error")}
+                        label="Error Details"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[420px]"
+                  sortKey="error"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.error && (
+                    <div className="mt-1">
+                      <input
+                        className="input h-7 text-xs w-full"
+                        placeholder="Filter error…"
+                        value={colFilters.error}
+                        onChange={(e) => updateFilter("error", e.target.value)}
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Assigned To */}
               <ThWithFilter
@@ -1666,6 +1681,10 @@ export default function PNRTable({
                   Action Required
                 </div>
               </th> */}
+
+              {isNonEmdTicket && (
+                <th className="px-3 py-2 text-left text-xs font-semibold text-black/60 w-[140px]"></th>
+              )}
             </tr>
           </thead>
 
@@ -1722,30 +1741,36 @@ export default function PNRTable({
                   </td>
 
                   {/* Document Type */}
-                  <td className="w-[150px] text-black/80 whitespace-nowrap">
-                    {row.documentType || "-"}
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[150px] text-black/80 whitespace-nowrap">
+                      {row.documentType || "-"}
+                    </td>
+                  )}
 
                   {/* Status */}
-                  <td className="w-[130px]">
-                    <button
-                      type="button"
-                      className="inline-flex items-center"
-                      title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
-                    >
-                      <StatusBadge status={row.status} />
-                    </button>
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[130px]">
+                      <button
+                        type="button"
+                        className="inline-flex items-center"
+                        title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
+                      >
+                        <StatusBadge status={row.status} />
+                      </button>
+                    </td>
+                  )}
 
                   {/* Passenger Names */}
-                  <td
-                    className="w-[260px] text-black/80 truncate"
-                    title={row.passengerNames || ""}
-                  >
-                    {row.passengerNames || "-"}
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td
+                      className="w-[260px] text-black/80 truncate"
+                      title={row.passengerNames || ""}
+                    >
+                      {row.passengerNames || "-"}
+                    </td>
+                  )}
 
                   {/* Departure Date */}
                   <td className="w-[170px] text-black/80 whitespace-nowrap">
@@ -1763,39 +1788,43 @@ export default function PNRTable({
                   </td>
 
                   {/* TTL */}
-                  <td className="w-[220px] text-black/80 whitespace-nowrap">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 underline-offset-2 text-black/80 hover:text-brand-red"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTTLModalForRow(row);
-                      }}
-                      title="Set Ticket Time Limit"
-                    >
-                      {ttlForRow ? toYYYYMMDD(ttlForRow) : "-"}
-                      <i className="fa-regular fa-calendar" />
-                    </button>
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[220px] text-black/80 whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 underline-offset-2 text-black/80 hover:text-brand-red"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTTLModalForRow(row);
+                        }}
+                        title="Set Ticket Time Limit"
+                      >
+                        {ttlForRow ? toYYYYMMDD(ttlForRow) : "-"}
+                        <i className="fa-regular fa-calendar" />
+                      </button>
+                    </td>
+                  )}
 
                   {/* Error Details */}
-                  <td className="w-[420px] text-black/80">
-                    <p>
-                      {row.status === "error" ? (
-                        <button
-                          type="button"
-                          disabled
-                          title={row.errorDetailed}
-                          className="ml-1 mr-2 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
-                          aria-label="More info about this error"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <i className="fa-solid fa-circle-info text-[14px]" />
-                        </button>
-                      ) : null}
-                      {row.error ? row.error : "-"}
-                    </p>
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[420px] text-black/80">
+                      <p>
+                        {row.status === "error" ? (
+                          <button
+                            type="button"
+                            disabled
+                            title={row.errorDetailed}
+                            className="ml-1 mr-2 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                            aria-label="More info about this error"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <i className="fa-solid fa-circle-info text-[14px]" />
+                          </button>
+                        ) : null}
+                        {row.error ? row.error : "-"}
+                      </p>
+                    </td>
+                  )}
 
                   {/* Assigned */}
                   <td className="w-[240px] text-black/80 truncate">
@@ -1806,6 +1835,14 @@ export default function PNRTable({
                   {/* <td className="w-[220px] text-black/80">
                     {row.action ?? "NA"}
                   </td> */}
+
+                  {isNonEmdTicket && (
+                    <td className="px-3 py-2">
+                      <a type="button" href="">
+                        Go to Oasis
+                      </a>
+                    </td>
+                  )}
                 </tr>
               );
             })}
