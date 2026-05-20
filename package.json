@@ -8,6 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
+		 "@okta/okta-auth-js": "^8.0.0",
+    "@okta/okta-react": "^6.11.0",
     "next": "^16.1.6",
     "react": "18.2.0",
     "react-dom": "18.2.0",

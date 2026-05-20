@@ -1,33 +1,24 @@
-import { api, setToken, clearToken, getToken } from "./api";
+import oktaAuth from "../lib/okta";
+import { getAccessToken } from "../lib/auth";
 
-export async function login(credentials, path = "/api/v1/auth/login") {
-  const resp = await api.post(path, credentials);
-  const token = resp?.data?.accessToken;
-
-  if (!token) {
-    throw new Error("Login succeeded but no token was found in the response");
-  }
-
-  setToken(token);
-
-  return {
-    token,
-    user: resp?.user || resp?.profile || null,
-    raw: resp,
-  };
+export async function logout() {
+  localStorage.removeItem("session");
+  localStorage.setItem("chat_history_processing", {});
+  localStorage.setItem("chat_history_admin", {});
+  localStorage.set("conversation_id", "");
+  await oktaAuth.signOut({ postLogoutRedirectUri: window.location.origin });
 }
 
-// Clear token (logout client-side)
-export function logout() {
-  clearToken();
-}
-
-// Manually set token
-export function setAuthToken(token) {
-  setToken(token);
-}
-
-// Get current token (if any)
 export function getAuthToken() {
-  return getToken();
+  return getAccessToken();
+}
+
+/*
+ * Get user permission
+ *
+ * GET /api/v1/auth/me/permissions
+ *
+ */
+export function getUserPermissions() {
+  return api.get("/api/v1/auth/me/permissions");
 }

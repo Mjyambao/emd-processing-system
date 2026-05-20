@@ -227,11 +227,12 @@ export default function Dashboard() {
   const loggedInUserId =
     session?.userId || session?.user?.userId || session?.user?.name || "";
 
-  function handleLogout() {
-    localStorage.removeItem("session");
-    //Trigger logout API to clear session
-    // logout();
-    router.replace("/");
+  async function handleLogout() {
+    const { default: oktaAuth } = await import("../lib/okta");
+    await oktaAuth.signOut({
+      postLogoutRedirectUri: window.location.origin,
+      clearTokensBeforeRedirect: true,
+    });
   }
 
   return (

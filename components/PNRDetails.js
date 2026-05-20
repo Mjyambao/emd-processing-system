@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  getPnrDetails,
+  postBuildAeForEmd,
+  postProcessPNR,
+  patchEmdFeedback,
+  getEmdFeedbackId,
+} from "../api/pnrApi";
+
 // Components
 import StatusBadge from "./StatusBadge";
 import Field from "./Field";
@@ -249,130 +257,6 @@ function coerceKnowledgeSources(value) {
   });
 }
 
-// -------------------------
-// API mapping
-// -------------------------
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-
-function buildPnrDetailsUrl(pnrId) {
-  const id = encodeURIComponent(pnrId || "");
-  const path = `/api/v1/pnrs/${id}`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-// Feedback (ADM) API
-function buildEmdFeedbackUrl(emdId) {
-  const id = encodeURIComponent(emdId || "");
-  const path = `/api/v1/pnrs/emd-items/${id}/feedback`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-// Build AE API
-function buildBuildAeUrl(pnrId) {
-  const id = encodeURIComponent(pnrId || "");
-  const path = `/api/v1/pnrs/${id}/build-ae`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-// Process PNR API
-function buildProcessPnrUrl(pnrId) {
-  const id = encodeURIComponent(pnrId ?? "");
-  const path = `/api/v1/pnrs/${id}/process`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-async function postBuildAE(pnrId, payload, { signal } = {}) {
-  const url = buildBuildAeUrl(pnrId);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload || {}),
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new Error(
-      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
-    );
-    err.status = res.status;
-    throw err;
-  }
-
-  const txt = await res.text().catch(() => "");
-  try {
-    return txt ? JSON.parse(txt) : {};
-  } catch {
-    return {};
-  }
-}
-
-async function postProcessPNR(pnrId, payload, { signal } = {}) {
-  const url = buildProcessPnrUrl(pnrId);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload ?? {}),
-    signal,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new Error(
-      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
-    );
-    err.status = res.status;
-    throw err;
-  }
-  const txt = await res.text().catch(() => "");
-  try {
-    return txt ? JSON.parse(txt) : {};
-  } catch {
-    return {};
-  }
-}
-
-function getEmdFeedbackId(emd) {
-  // Prefer server-side identifiers
-  const id = emd?.emdItemId ?? emd?.ancillaryItemId;
-  if (id != null && String(id).trim() !== "") return id;
-  // Fallback to EMD number if it looks valid (best-effort)
-  const no = emd?.emdNo;
-  if (no && no !== "—" && String(no).trim() !== "") return no;
-  return null;
-}
-
-async function patchEmdFeedback(emdId, payload, { signal } = {}) {
-  const url = buildEmdFeedbackUrl(emdId);
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload || {}),
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new Error(
-      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
-    );
-    err.status = res.status;
-    throw err;
-  }
-
-  const txt = await res.text().catch(() => "");
-  try {
-    return txt ? JSON.parse(txt) : {};
-  } catch {
-    return {};
-  }
-}
-
 function pickOtherInfoFromApi(pnrApi) {
   const passengers = pnrApi?.passengers || [];
   for (const pax of passengers) {
@@ -551,25 +435,12 @@ function mapApiToPnrDetails(pnrApi) {
       primaryEmail: pax?.primaryEmail,
       primaryPhoneNumber: pax?.primaryPhoneNumber,
       passengerFlights: paxFlights,
-      emdItems,
+      emdItems: emds,
+      emdItemsRaw: emdItems,
     };
   });
 
   return { ...common, passengers, raw: pnrApi };
-}
-
-async function fetchPnrDetails(pnrId, { signal } = {}) {
-  const url = buildPnrDetailsUrl(pnrId);
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new Error(
-      `HTTP ${res.status} ${res.statusText}${text ? ` — ${text}` : ""}`,
-    );
-    err.status = res.status;
-    throw err;
-  }
-  return res.json();
 }
 
 // -------------------------
@@ -676,6 +547,15 @@ export default function PNRDetails({
   loggedInUserId,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
+  // Keep a synchronous reference of the latest PNR details (prevents stale reads in modals)
+  const pnrDetailsRef = useRef(null);
+  const setPnrDetailsAndRef = (updater) => {
+    setPnrDetails((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      pnrDetailsRef.current = next;
+      return next;
+    });
+  };
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
 
   // Build AE (per-EMD) modal
@@ -711,7 +591,7 @@ export default function PNRDetails({
   // Silent refetch (used after actions like Build AE)
   const silentRefetchControllerRef = useRef(null);
 
-  async function refetchPnrDetailsSilently(pnrId) {
+  async function regetPnrDetailsSilently(pnrId) {
     if (!pnrId) return;
 
     try {
@@ -722,10 +602,12 @@ export default function PNRDetails({
       const controller = new AbortController();
       silentRefetchControllerRef.current = controller;
 
-      const api = await fetchPnrDetails(pnrId, { signal: controller.signal });
+      const api = await getPnrDetails(pnrId, { signal: controller.signal });
       const fresh = mapApiToPnrDetails(api);
 
-      setPnrDetails(fresh);
+      setPnrDetailsAndRef((prev) =>
+        mergePnrDetailsSilently(prev, fresh, selected?.status || prev?.status),
+      );
     } catch (e) {
       if (e?.name !== "AbortError") {
         console.warn("Silent PNR details refetch failed", e);
@@ -831,16 +713,16 @@ export default function PNRDetails({
 
     async function load() {
       if (!selected) {
-        setPnrDetails(null);
+        setPnrDetailsAndRef(null);
         setIsDetailsLoading(false);
         return;
       }
 
       setIsDetailsLoading(true);
-      setPnrDetails(null);
+      setPnrDetailsAndRef(null);
 
       try {
-        const api = await fetchPnrDetails(selected.pnr, {
+        const api = await getPnrDetails(selected.pnr, {
           signal: controller.signal,
         });
         if (!active) return;
@@ -848,7 +730,7 @@ export default function PNRDetails({
 
         decorateMappedDetails(mapped, selected?.status);
 
-        setPnrDetails(mapped);
+        setPnrDetailsAndRef(mapped);
         setIsDetailsLoading(false);
         return;
       } catch (e) {
@@ -967,7 +849,7 @@ export default function PNRDetails({
             emdDesc: emd2b.emdDesc,
           };
 
-          setPnrDetails({
+          setPnrDetailsAndRef({
             ...common,
             passengers: [
               {
@@ -1079,7 +961,7 @@ export default function PNRDetails({
             ],
           };
 
-          setPnrDetails({ ...common, passengers: [pax1, pax2] });
+          setPnrDetailsAndRef({ ...common, passengers: [pax1, pax2] });
         }
         setIsDetailsLoading(false);
       } catch (e) {
@@ -1141,7 +1023,7 @@ export default function PNRDetails({
   }, [pnrDetails]);
 
   function handleFieldChange(passengerIndex, emdIndex, field, value) {
-    setPnrDetails((prev) => {
+    setPnrDetailsAndRef((prev) => {
       if (!prev) return prev;
 
       const next = deepClone(prev);
@@ -1169,7 +1051,16 @@ export default function PNRDetails({
   function openBuildFor(passengerIndex, emdIndex) {
     buildTargetRef.current = { passengerIndex, emdIndex };
 
-    const emd = pnrDetails.passengers[passengerIndex].emdItems?.[emdIndex];
+    const details = pnrDetailsRef.current || pnrDetails;
+
+    const emd = details?.passengers?.[passengerIndex]?.emdItems?.[emdIndex];
+
+    if (!emd) {
+      setBuildChanges([]);
+      setBuildNotes("");
+      setIsBuildModalOpen(true);
+      return;
+    }
 
     const diff = getEmdDiff(
       { rfic: emd.rfic, rfisc: emd.rfisc, emdDesc: emd.emdDesc },
@@ -1214,18 +1105,16 @@ export default function PNRDetails({
 
     try {
       const payload = {
-        correlation_id: selected?.correlationId || "",
         emd_item_id: emdItemId,
         rfic: emd?.rfic || "",
         rfisc: emd?.rfisc || "",
         rfic_name: emd?.emdDesc || "",
         feedback: buildNotes || "",
-        requested_by: requestedBy,
       };
 
-      await postBuildAE(pnrId, payload);
+      await postBuildAeForEmd(pnrId, payload);
 
-      setPnrDetails((prev) => {
+      setPnrDetailsAndRef((prev) => {
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emdItems?.[emdIndex];
 
@@ -1234,15 +1123,17 @@ export default function PNRDetails({
           rfisc: target.rfisc,
           emdDesc: target.emdDesc,
         };
+
         target.built = true;
-        target.aeBuildStatus = target.aeBuildStatus || "BUILT";
+        target.editable = false;
+        target.aeBuildStatus = "BUILT";
         target.aeBuiltUtc = target.aeBuiltUtc || new Date().toISOString();
 
         return next;
       });
 
       // Refetch latest PNR + EMD state silently (no page reload, no global loading)
-      await refetchPnrDetailsSilently(pnrId);
+      await regetPnrDetailsSilently(pnrId);
 
       setIsBuildModalOpen(false);
       setBuildChanges([]);
@@ -1276,9 +1167,9 @@ export default function PNRDetails({
 
     setIsProcessSubmitting(true);
     try {
-      await postProcessPNR(pnrId, {});
+      await postProcessPNR(pnrId);
 
-      setPnrDetails((prev) => {
+      setPnrDetailsAndRef((prev) => {
         if (!prev) return prev;
         const next = deepClone(prev);
         next.status = "Processing";
@@ -1311,6 +1202,9 @@ export default function PNRDetails({
         ariaLabel: `PNR ${pnrId} processed`,
         title: `PNR ${pnrId} processed`,
       });
+    } catch (e) {
+      const msg = `Failed to Process PNR: ${e?.message || "Unknown error"}`;
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
     } finally {
       setIsProcessSubmitting(false);
     }
@@ -1336,13 +1230,11 @@ export default function PNRDetails({
   }
 
   function openAdmConfirm(passengerIndex, emdIndex) {
-    console.log("OPEN");
     admTargetRef.current = { passengerIndex, emdIndex };
     setIsAdmConfirmOpen(true);
   }
 
   const confirmSubmitADM = async () => {
-    console.log("Feedback");
     const { passengerIndex, emdIndex } = admTargetRef.current;
     if (passengerIndex < 0 || emdIndex < 0) return;
 
@@ -1367,7 +1259,7 @@ export default function PNRDetails({
 
       await patchEmdFeedback(emdId, payload);
 
-      setPnrDetails((prev) => {
+      setPnrDetailsAndRef((prev) => {
         const next = deepClone(prev);
         const target = next.passengers[passengerIndex].emds[emdIndex];
         target.adm = target.adm || {
@@ -1412,7 +1304,7 @@ export default function PNRDetails({
 
     try {
       if (selected?.pnr) {
-        const json = await fetchPnrDetails(selected.pnr);
+        const json = await getPnrDetails(selected.pnr);
         setViewJson(json);
         return;
       }
@@ -1588,7 +1480,7 @@ export default function PNRDetails({
                       Agency IATA
                     </>
                   }
-                  v={pnrDetails.agencyIataNumber || "—"}
+                  v={pnrDetails.agencyIata || "—"}
                 />
                 <Field
                   k={
@@ -1613,7 +1505,7 @@ export default function PNRDetails({
                       <i className="fa-solid fa-phone text-black/60"></i> Brand
                     </>
                   }
-                  v={pnrDetails.brandCode || "—"}
+                  v={pnrDetails.brand || "—"}
                 />
               </div>
             </section>
@@ -1741,8 +1633,7 @@ export default function PNRDetails({
                                   </>
                                 }
                                 v={
-                                  passenger.passengerFlights[0].seatNumber ||
-                                  "—"
+                                  passenger.passengerFlights?.seatNumber || "—"
                                 }
                               />
                               <Field
@@ -2218,7 +2109,7 @@ export default function PNRDetails({
                                                         e.stopPropagation()
                                                       }
                                                       onChange={() => {
-                                                        setPnrDetails(
+                                                        setPnrDetailsAndRef(
                                                           (prev) => {
                                                             const next =
                                                               deepClone(prev);
@@ -2257,7 +2148,7 @@ export default function PNRDetails({
                                                         e.stopPropagation()
                                                       }
                                                       onChange={() => {
-                                                        setPnrDetails(
+                                                        setPnrDetailsAndRef(
                                                           (prev) => {
                                                             const next =
                                                               deepClone(prev);
@@ -2293,27 +2184,29 @@ export default function PNRDetails({
                                                       emd?.adm?.feedback ?? ""
                                                     }
                                                     onChange={(ev) =>
-                                                      setPnrDetails((prev) => {
-                                                        const next =
-                                                          deepClone(prev);
-                                                        const target =
-                                                          next.passengers[
-                                                            passengerIndex
-                                                          ].emds[emdIndex];
-                                                        if (!target.adm) {
-                                                          target.adm = {
-                                                            isAdm: false,
-                                                            feedback: "",
-                                                            submitted: false,
-                                                          };
-                                                        }
-                                                        target.adm.feedback =
-                                                          ev.target.value;
-                                                        // mirror top-level fields used elsewhere
-                                                        target.feedback =
-                                                          ev.target.value;
-                                                        return next;
-                                                      })
+                                                      setPnrDetailsAndRef(
+                                                        (prev) => {
+                                                          const next =
+                                                            deepClone(prev);
+                                                          const target =
+                                                            next.passengers[
+                                                              passengerIndex
+                                                            ].emds[emdIndex];
+                                                          if (!target.adm) {
+                                                            target.adm = {
+                                                              isAdm: false,
+                                                              feedback: "",
+                                                              submitted: false,
+                                                            };
+                                                          }
+                                                          target.adm.feedback =
+                                                            ev.target.value;
+                                                          // mirror top-level fields used elsewhere
+                                                          target.feedback =
+                                                            ev.target.value;
+                                                          return next;
+                                                        },
+                                                      )
                                                     }
                                                     onKeyDownCapture={(e) =>
                                                       e.stopPropagation()

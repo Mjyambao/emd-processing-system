@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
+// API
+import { createChatSession, processingAgentChat } from "../api/chatApi";
+
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
@@ -32,8 +35,8 @@ function newId(prefix = "m") {
 
 // ---- localStorage helpers (safe for SSR) ----
 const STORAGE_KEYS = {
-  processing: "emd_ai_chat_history_processing_v1",
-  admin: "emd_ai_chat_history_admin_v1",
+  processing: "chat_history_processing",
+  admin: "chat_history_admin",
 };
 
 function loadHistory(agentId) {
@@ -110,80 +113,31 @@ const SAMPLE_PROMPTS = {
   ],
 };
 
-/**
- * Sends a message to the chat API.
- *
- * API: POST /api/v1/chat/message
- * Request body:
- *  {
- *    agent_type: "processing" | "admin",
- *    message: string,
- *    session_id: string,
- *    user_id: string,
- *    correlation_id: string,
- *    extra_arguments: object
- *  }
- *
- * Expected response:
- *  { success: boolean, message: string, agent_type: string, session_id: string, correlation_id: string, data?: object }
- */
-async function sendMessageToAgent({ agentId, messages, userText, context }) {
+async function sendMessageToAgent({ agentId, messages, userText }) {
   const agentType = agentId === "admin" ? "admin" : "processing";
+  const conversationId = localStorage.getItem("conversation_id");
 
   const payload = {
     agent_type: agentType,
     message: userText,
-    session_id: "", // blank for now
-    user_id: "1",
-    correlation_id: "", // blank for now
-    extra_arguments: {
-      additionalProp1: {},
-      // Keep this flexible for future enhancements without breaking the current UI.
-      // The backend can safely ignore these fields if not needed.
-      context: context ?? {},
-      // Provide a small, recent window of messages to support better answers (optional).
-      // If your backend doesn't need it, it can ignore it.
-      recent_messages: Array.isArray(messages) ? messages.slice(-12) : [],
-    },
   };
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const res = await processingAgentChat(conversationId, payload);
 
-  const res = await fetch(`${API_BASE}/api/v1/chat/message`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(payload),
-  });
+  console.log("Chat Response: ", res);
 
-  let json;
-  try {
-    json = await res.json();
-  } catch {
-    json = null;
-  }
-
-  if (!res.ok) {
+  if (!res.success) {
     const msg =
-      json?.data?.message ||
+      res?.message ||
       `Request failed (${res.status}${res.statusText ? ` ${res.statusText}` : ""}).`;
     throw new Error(msg);
   }
 
-  if (!json?.success) {
-    throw new Error(json?.data?.message || "Request failed.");
-  }
-
   return {
-    text: json?.data?.message ?? "",
+    text: res?.message ?? "",
     meta: {
       api: true,
-      agent_type: json?.agent_type,
-      session_id: json?.session_id,
-      correlation_id: json?.correlation_id,
-      data: json?.data,
+      agent_type: res?.agent_type,
     },
   };
 }
@@ -482,8 +436,9 @@ function ChatPanel({
         agentId,
         messages,
         userText,
-        context,
       });
+
+      console.log("Chat Response 2: ", res);
 
       const fullText = res?.text ?? "No response.";
       const meta = res?.meta;
