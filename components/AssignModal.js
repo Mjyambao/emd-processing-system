@@ -169,6 +169,8 @@ function AssignModal({
             {filteredAssignees.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
+                {" - "}
+                <span className="text-xs text-black/10">{a.description}</span>
               </option>
             ))}
           </select>

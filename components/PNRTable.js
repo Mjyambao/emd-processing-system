@@ -447,9 +447,21 @@ export default function PNRTable({
   const assigneeOptions = assignees.length
     ? assignees
     : [
-        { id: "1", name: "Ticketer 1" },
-        { id: "2", name: "Guest User" },
-        { id: "3", name: "Ticketer 2" },
+        {
+          id: "1",
+          name: "Ticketer 1",
+          description: "(4 PNRs / 06:00 - 14:00)",
+        },
+        {
+          id: "2",
+          name: "Guest User",
+          description: "(2 PNRs / 14:00 - 22:00)",
+        },
+        {
+          id: "3",
+          name: "Ticketer 2",
+          description: "(0 PNRs / 22:00 - 06:00)",
+        },
       ];
 
   const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Ticketer 2"];
