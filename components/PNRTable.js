@@ -15,6 +15,8 @@ import { getPnrQueueList, patchAssignPnr, patchTtlPnr } from "../api/pnrApi";
 export default function PNRTable({
   // NOTE: rows prop is kept for compatibility, but table renders API rows (apiRows).
   rows,
+  ticketType = "EMD",
+  gdsRegion,
   search,
   setSearch,
   onRefresh,
@@ -32,7 +34,7 @@ export default function PNRTable({
   onRowsChange,
   //  force assignTo for API query (used by "My Queues" tab to show only logged-in user)
   // If provided, it overrides Assigned To filter & includeUnassigned logic.
-  assignToOverride,
+  assignedToOverride,
   loggedInUserName,
   loggedInUserId,
 }) {
@@ -41,6 +43,7 @@ export default function PNRTable({
    * Helpers
    * -----------------------------
    */
+  const isNonEmdTicket = String(ticketType ?? "EMD") !== "EMD";
   const includesCI = (value, query) => {
     const v = String(value ?? "").toLowerCase();
     const q = String(query ?? "")
@@ -49,6 +52,29 @@ export default function PNRTable({
     if (!q) return true;
     return v.includes(q);
   };
+
+  const isAssigned = (value) => {
+    return (
+      value &&
+      value !== "" &&
+      value !== "-" &&
+      value !== null &&
+      value !== undefined
+    );
+  };
+
+  const isUnassigned = (value) => {
+    return (
+      !value ||
+      value === "" ||
+      value === "-" ||
+      value === null ||
+      value === undefined
+    );
+  };
+
+  const isAssignmentOnlyFilter =
+    statusFilter === "assigned" || statusFilter === "unassigned";
 
   const normalizeStatus = (raw) => {
     const s = String(raw ?? "")
@@ -199,7 +225,7 @@ export default function PNRTable({
     lastUpdated: item?.lastUpdated ?? null,
     error: item?.humanError ?? "",
     errorDetailed: item?.errorDetails ?? "",
-    assigned: item?.assignTo ?? "",
+    assigned: item?.assignedTo ?? "",
     action: item?.actionRequired ?? "",
 
     // Extra fields kept for downstream actions (e.g., Assign API payload)
@@ -382,18 +408,35 @@ export default function PNRTable({
   const effectiveRows = apiRows;
 
   const filteredRows = useMemo(() => {
-    // --- MY QUEUE STRICT RULE ---
-    if (assignToOverride && loggedInUserName) {
-      return effectiveRows.filter(
-        (r) =>
-          r.assigned === loggedInUserName &&
-          (r.status === "error" || r.status === "human"),
+    let rowsToFilter = effectiveRows;
+
+    // MY QUEUE FILTER
+    if (assignedToOverride) {
+      rowsToFilter = rowsToFilter.filter(
+        (r) => r.assigned === assignedToOverride,
       );
     }
 
-    // --- ALL QUEUE (NO EXTRA FILTERING) ---
-    return effectiveRows;
-  }, [effectiveRows, assignToOverride, loggedInUserName]);
+    // REFUND / REISSUE
+    if (ticketType !== "EMD") {
+      if (statusFilter === "assigned") {
+        return rowsToFilter.filter((r) => isAssigned(r.assigned));
+      }
+
+      if (statusFilter === "unassigned") {
+        return rowsToFilter.filter((r) => isUnassigned(r.assigned));
+      }
+
+      return rowsToFilter;
+    }
+
+    // EMD (existing)
+    if (statusFilter !== "all") {
+      rowsToFilter = rowsToFilter.filter((r) => r.status === statusFilter);
+    }
+
+    return rowsToFilter;
+  }, [effectiveRows, statusFilter, ticketType, assignedToOverride]);
 
   const statusOptions = useMemo(() => {
     const set = new Set(filteredRows.map((r) => r.status).filter(Boolean));
@@ -404,9 +447,21 @@ export default function PNRTable({
   const assigneeOptions = assignees.length
     ? assignees
     : [
-        { id: "1", name: "Ticketer 1" },
-        { id: "2", name: "Guest User" },
-        { id: "3", name: "Ticketer 2" },
+        {
+          id: "1",
+          name: "Ticketer 1",
+          description: "(4 PNRs / 06:00 - 14:00)",
+        },
+        {
+          id: "2",
+          name: "Guest User",
+          description: "(2 PNRs / 14:00 - 22:00)",
+        },
+        {
+          id: "3",
+          name: "Ticketer 2",
+          description: "(0 PNRs / 22:00 - 06:00)",
+        },
       ];
 
   const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Ticketer 2"];
@@ -535,16 +590,20 @@ export default function PNRTable({
   const buildQueryParams = () => {
     const f = colFilters;
 
-    const chosenStatusUi =
-      f.status || (statusFilter !== "all" ? statusFilter : "");
-    const status = chosenStatusUi
-      ? uiStatusToApiStatus(chosenStatusUi)
-      : undefined;
+    const apiStatusFilter =
+      statusFilter === "assigned" || statusFilter === "unassigned"
+        ? "all"
+        : statusFilter;
 
-    // assignTo base logic (existing behavior), unless assignToOverride is provided.
+    const status =
+      apiStatusFilter === "all"
+        ? undefined
+        : uiStatusToApiStatus(apiStatusFilter);
+
+    // assignTo base logic (existing behavior), unless assignedToOverride is provided.
     let assignTo;
-    if (assignToOverride && String(assignToOverride).trim()) {
-      assignTo = String(assignToOverride).trim();
+    if (assignedToOverride && String(assignedToOverride).trim()) {
+      assignTo = String(assignedToOverride).trim();
     } else if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
       assignTo = f.assignedNames[0];
     } else if (
@@ -789,10 +848,16 @@ export default function PNRTable({
   // Reset to page 1 when filters/sort/search/pageSize change
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, colFilters, sort, pageSize, assignToOverride]);
+  }, [search, statusFilter, colFilters, sort, pageSize, assignedToOverride]);
 
   // Debounced fetch on relevant changes (normal fetch - not silent)
   useEffect(() => {
+    // Do NOT call API when using Assigned/Unassigned chips.
+    // Those chips are UI-only filters on already-fetched apiRows.
+    if (statusFilter === "assigned" || statusFilter === "unassigned") {
+      return;
+    }
+
     const t = setTimeout(() => {
       fetchPnrList({ silent: false, reason: "params-change" });
     }, 250);
@@ -806,7 +871,7 @@ export default function PNRTable({
     statusFilter,
     search,
     colFilters,
-    assignToOverride,
+    assignedToOverride,
   ]);
 
   //  Poll for updates every 30 seconds
@@ -821,6 +886,7 @@ export default function PNRTable({
     const id = setInterval(() => {
       // Skip polling when tab not visible
       if (typeof document !== "undefined" && document.hidden) return;
+      if (statusFilter === "assigned" || statusFilter === "unassigned") return;
       fetchRef.current?.({ silent: true, reason: "poll" });
     }, POLL_INTERVAL_MS);
 
@@ -1103,6 +1169,25 @@ export default function PNRTable({
             </span>
           </button>
 
+          {statusFilter === "assigned" && (
+            <button
+              type="button"
+              className="btn btn-secondary h-9 px-3 text-xs justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+              title={
+                selectedCount > 0
+                  ? "Send selected PNRs to Oasis"
+                  : "Select eligible rows to enable"
+              }
+              onClick={() => alert("Sending PNRs to Oasis")}
+              disabled={selectedCount === 0 || assigning}
+            >
+              <i className="fa-regular fa-paper-plane" />
+              <span className="ml-1.5">
+                {assigning ? "Sending..." : "Send to Oasis"}
+              </span>
+            </button>
+          )}
+
           <div className="text-xs text-black/70">{selectedCount} selected</div>
 
           <div className="ml-2 text-xs text-black/50">
@@ -1263,104 +1348,110 @@ export default function PNRTable({
               </ThWithFilter>
 
               {/* Document Type */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Document Type
-                    <FilterToggleButton
-                      open={filterOpen.documentType}
-                      active={isFilterActive.documentType}
-                      onClick={() => toggleFilterUI("documentType")}
-                      label="Document Type"
-                    />
-                  </span>
-                }
-                widthClass="w-[150px]"
-                sortKey="documentType"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.documentType && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-7 text-xs w-full"
-                      placeholder="Filter document type…"
-                      value={colFilters.documentType}
-                      onChange={(e) =>
-                        updateFilter("documentType", e.target.value)
-                      }
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Document Type
+                      <FilterToggleButton
+                        open={filterOpen.documentType}
+                        active={isFilterActive.documentType}
+                        onClick={() => toggleFilterUI("documentType")}
+                        label="Document Type"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[150px]"
+                  sortKey="documentType"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.documentType && (
+                    <div className="mt-1">
+                      <input
+                        className="input h-7 text-xs w-full"
+                        placeholder="Filter document type…"
+                        value={colFilters.documentType}
+                        onChange={(e) =>
+                          updateFilter("documentType", e.target.value)
+                        }
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Status */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Status
-                    <FilterToggleButton
-                      open={filterOpen.status}
-                      active={isFilterActive.status}
-                      onClick={() => toggleFilterUI("status")}
-                      label="Status"
-                    />
-                  </span>
-                }
-                widthClass="w-[130px]"
-                sortKey="status"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.status && (
-                  <div className="mt-1">
-                    <select
-                      className="input h-7 text-xs w-full"
-                      value={colFilters.status}
-                      onChange={(e) => updateFilter("status", e.target.value)}
-                    >
-                      <option value="">All</option>
-                      {statusOptions.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Status
+                      <FilterToggleButton
+                        open={filterOpen.status}
+                        active={isFilterActive.status}
+                        onClick={() => toggleFilterUI("status")}
+                        label="Status"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[130px]"
+                  sortKey="status"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.status && (
+                    <div className="mt-1">
+                      <select
+                        className="input h-7 text-xs w-full"
+                        value={colFilters.status}
+                        onChange={(e) => updateFilter("status", e.target.value)}
+                      >
+                        <option value="">All</option>
+                        {statusOptions.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Passenger Names */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Passenger Names
-                    <FilterToggleButton
-                      open={filterOpen.passengerNames}
-                      active={isFilterActive.passengerNames}
-                      onClick={() => toggleFilterUI("passengerNames")}
-                      label="Passenger Names"
-                    />
-                  </span>
-                }
-                widthClass="w-[260px]"
-                sortKey="passengerNames"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.passengerNames && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-7 text-xs w-full"
-                      placeholder="Filter passenger…"
-                      value={colFilters.passengerNames}
-                      onChange={(e) =>
-                        updateFilter("passengerNames", e.target.value)
-                      }
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Passenger Names
+                      <FilterToggleButton
+                        open={filterOpen.passengerNames}
+                        active={isFilterActive.passengerNames}
+                        onClick={() => toggleFilterUI("passengerNames")}
+                        label="Passenger Names"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[260px]"
+                  sortKey="passengerNames"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.passengerNames && (
+                    <div className="mt-1">
+                      <input
+                        className="input h-7 text-xs w-full"
+                        placeholder="Filter passenger…"
+                        value={colFilters.passengerNames}
+                        onChange={(e) =>
+                          updateFilter("passengerNames", e.target.value)
+                        }
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Departure Date */}
               <ThWithFilter
@@ -1490,6 +1581,7 @@ export default function PNRTable({
               </ThWithFilter>
 
               {/* TTL */}
+
               <ThWithFilter
                 label={
                   <span className="inline-flex items-center gap-1">
@@ -1529,34 +1621,36 @@ export default function PNRTable({
               </ThWithFilter>
 
               {/* Error Details */}
-              <ThWithFilter
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Error Details
-                    <FilterToggleButton
-                      open={filterOpen.error}
-                      active={isFilterActive.error}
-                      onClick={() => toggleFilterUI("error")}
-                      label="Error Details"
-                    />
-                  </span>
-                }
-                widthClass="w-[420px]"
-                sortKey="error"
-                sort={sort}
-                onSort={toggleSort}
-              >
-                {filterOpen.error && (
-                  <div className="mt-1">
-                    <input
-                      className="input h-7 text-xs w-full"
-                      placeholder="Filter error…"
-                      value={colFilters.error}
-                      onChange={(e) => updateFilter("error", e.target.value)}
-                    />
-                  </div>
-                )}
-              </ThWithFilter>
+              {!isNonEmdTicket && (
+                <ThWithFilter
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Error Details
+                      <FilterToggleButton
+                        open={filterOpen.error}
+                        active={isFilterActive.error}
+                        onClick={() => toggleFilterUI("error")}
+                        label="Error Details"
+                      />
+                    </span>
+                  }
+                  widthClass="w-[420px]"
+                  sortKey="error"
+                  sort={sort}
+                  onSort={toggleSort}
+                >
+                  {filterOpen.error && (
+                    <div className="mt-1">
+                      <input
+                        className="input h-7 text-xs w-full"
+                        placeholder="Filter error…"
+                        value={colFilters.error}
+                        onChange={(e) => updateFilter("error", e.target.value)}
+                      />
+                    </div>
+                  )}
+                </ThWithFilter>
+              )}
 
               {/* Assigned To */}
               <ThWithFilter
@@ -1597,6 +1691,12 @@ export default function PNRTable({
                   Action Required
                 </div>
               </th> */}
+
+              {isNonEmdTicket && (
+                <th className="w-[220px] whitespace-nowrap">
+                  <div className="px-3 py-2 font-semibold text-sm text-black text-center"></div>
+                </th>
+              )}
             </tr>
           </thead>
 
@@ -1609,10 +1709,10 @@ export default function PNRTable({
               return (
                 <tr
                   key={row.pnr}
-                  onClick={() => onSelect(row)}
-                  className={`cursor-pointer hover:bg-black/5 ${
-                    selected?.pnr === row.pnr
-                      ? "ring-1 ring-brand-red/60 bg-white"
+                  onClick={() => (!isNonEmdTicket ? onSelect(row) : "")}
+                  className={`${!isNonEmdTicket ? "cursor-pointer hover:bg-black/5" : "cursor-default"} ${
+                    !isNonEmdTicket && selected?.pnr === row.pnr
+                      ? "bg-black/10"
                       : ""
                   }`}
                 >
@@ -1653,30 +1753,36 @@ export default function PNRTable({
                   </td>
 
                   {/* Document Type */}
-                  <td className="w-[150px] text-black/80 whitespace-nowrap">
-                    {row.documentType || "-"}
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[150px] text-black/80 whitespace-nowrap">
+                      {row.documentType || "-"}
+                    </td>
+                  )}
 
                   {/* Status */}
-                  <td className="w-[130px]">
-                    <button
-                      type="button"
-                      className="inline-flex items-center"
-                      title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
-                    >
-                      <StatusBadge status={row.status} />
-                    </button>
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[130px]">
+                      <button
+                        type="button"
+                        className="inline-flex items-center"
+                        title={`Stage: ${row.stage ? String(row.stage) : "—"}`}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
+                      >
+                        <StatusBadge status={row.status} />
+                      </button>
+                    </td>
+                  )}
 
                   {/* Passenger Names */}
-                  <td
-                    className="w-[260px] text-black/80 truncate"
-                    title={row.passengerNames || ""}
-                  >
-                    {row.passengerNames || "-"}
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td
+                      className="w-[260px] text-black/80 truncate"
+                      title={row.passengerNames || ""}
+                    >
+                      {row.passengerNames || "-"}
+                    </td>
+                  )}
 
                   {/* Departure Date */}
                   <td className="w-[170px] text-black/80 whitespace-nowrap">
@@ -1694,6 +1800,7 @@ export default function PNRTable({
                   </td>
 
                   {/* TTL */}
+
                   <td className="w-[220px] text-black/80 whitespace-nowrap">
                     <button
                       type="button"
@@ -1710,23 +1817,25 @@ export default function PNRTable({
                   </td>
 
                   {/* Error Details */}
-                  <td className="w-[420px] text-black/80">
-                    <p>
-                      {row.status === "error" ? (
-                        <button
-                          type="button"
-                          disabled
-                          title={row.errorDetailed}
-                          className="ml-1 mr-2 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
-                          aria-label="More info about this error"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <i className="fa-solid fa-circle-info text-[14px]" />
-                        </button>
-                      ) : null}
-                      {row.error ? row.error : "-"}
-                    </p>
-                  </td>
+                  {!isNonEmdTicket && (
+                    <td className="w-[420px] text-black/80">
+                      <p>
+                        {row.status === "error" ? (
+                          <button
+                            type="button"
+                            disabled
+                            title={row.errorDetailed}
+                            className="ml-1 mr-2 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                            aria-label="More info about this error"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <i className="fa-solid fa-circle-info text-[14px]" />
+                          </button>
+                        ) : null}
+                        {row.error ? row.error : "-"}
+                      </p>
+                    </td>
+                  )}
 
                   {/* Assigned */}
                   <td className="w-[240px] text-black/80 truncate">
@@ -1737,6 +1846,17 @@ export default function PNRTable({
                   {/* <td className="w-[220px] text-black/80">
                     {row.action ?? "NA"}
                   </td> */}
+
+                  {isNonEmdTicket && (
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        type="button"
+                        className="btn btn-secondary h-7 w-[120px] text-sm justify-center"
+                      >
+                        Go to Oasis
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
