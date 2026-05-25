@@ -1,9 +1,9 @@
 import "../styles/globals.css";
 import "../styles/pnr-details.css";
-import { useResponse } from "../api/api";
+import { registerResponseInterceptor } from "../api/api";
 
 export default function MyApp({ Component, pageProps }) {
-  useResponse(async ({ response }) => {
+  registerResponseInterceptor(async ({ response }) => {
     if (response.status === 401) {
       // Only sign out if the token is actually invalid, not for other errors
       const { default: oktaAuth } = await import("../lib/okta");

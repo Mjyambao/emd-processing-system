@@ -53,21 +53,21 @@ export default function Callback() {
     handleCallback();
   }, [router]);
 
-  if (error) {
-    return (
-      <main className="min-h-screen grid place-items-center p-4">
-        <div className="card p-6 text-center">
-          <p className="text-red-600 mb-4">Login failed: {error}</p>
-          <button
-            className="btn btn-primary"
-            onClick={() => router.replace("/")}
-          >
-            Try Again
-          </button>
-        </div>
-      </main>
-    );
-  }
+  // if (error) {
+  //   return (
+  //     <main className="min-h-screen grid place-items-center p-4">
+  //       <div className="card p-6 text-center">
+  //         <p className="text-red-600 mb-4">Login failed: {error}</p>
+  //         <button
+  //           className="btn btn-primary"
+  //           onClick={() => router.replace("/")}
+  //         >
+  //           Try Again
+  //         </button>
+  //       </div>
+  //     </main>
+  //   );
+  // }
 
   return (
     <main className="min-h-screen grid place-items-center">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -21,7 +21,6 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-
 import Spinner from "./Spinner";
 import PNRDetails from "./PNRDetails";
 
@@ -36,6 +35,7 @@ const COLORS = {
   purple: "#7c3aed",
   orange: "#f97316",
 };
+
 const DATE_LOCALE = "en-US";
 const DATE_TZ = "UTC";
 
@@ -45,7 +45,9 @@ const DATE_TZ = "UTC";
 function buildUrl(path, { start_date, end_date } = {}) {
   const base = API_BASE ? `${API_BASE}${path}` : path;
   if (start_date && end_date) {
-    const qs = `start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}`;
+    const qs = `start_date=${encodeURIComponent(
+      start_date,
+    )}&end_date=${encodeURIComponent(end_date)}`;
     return `${base}?${qs}`;
   }
   return base;
@@ -221,13 +223,18 @@ function safeStr(v) {
   return d === "-" ? "" : String(d);
 }
 
+function normCmp(v) {
+  return String(display(v)).trim().toLowerCase();
+}
+
 function toDateKey(iso) {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
+  // Use UTC to avoid day-shift issues when APIs/Charts are UTC-based.
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -595,17 +602,20 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     header: "Triage",
     render: (r) => (r.triageTime != null ? `${r.triageTime}m` : "-"),
   };
+
   const maskCheckTimeCol = {
     key: "maskCheckTime",
     header: "Mask Check",
     render: (r) => (r.maskCheckTime != null ? `${r.maskCheckTime}m` : "-"),
   };
+
   const dealMatchingTimeCol = {
     key: "dealMatchingTime",
     header: "Deal Matching",
     render: (r) =>
       r.dealMatchingTime != null ? `${r.dealMatchingTime}m` : "-",
   };
+
   const issuanceTimeCol = {
     key: "issuanceTime",
     header: "Issuance",
@@ -727,6 +737,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       <span className="font-mono text-blue-700">{display(r.aiRFIC)}</span>
     ),
   };
+
   const aiRfiscCol = {
     key: "aiRFISC",
     header: "AI-suggested RFISC",
@@ -734,6 +745,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       <span className="font-mono text-blue-700">{display(r.aiRFISC)}</span>
     ),
   };
+
   const aiEmdDescCol = {
     key: "aiEmdDesc",
     header: "AI-suggested EMD Desc",
@@ -749,6 +761,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       </span>
     ),
   };
+
   const correctedRfiscCol = {
     key: "correctedRFISC",
     header: "Corrected RFISC",
@@ -758,6 +771,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       </span>
     ),
   };
+
   const correctedEmdDescCol = {
     key: "correctedEmdDesc",
     header: "Corrected EMD Desc",
@@ -771,16 +785,19 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     header: "Accuracy",
     render: (r) => (r.llm?.accuracy != null ? pct(r.llm.accuracy) : "-"),
   };
+
   const coherenceCol = {
     key: "llm.coherence",
     header: "Coherence",
     render: (r) => (r.llm?.coherence != null ? pct(r.llm.coherence) : "-"),
   };
+
   const consistencyCol = {
     key: "llm.consistency",
     header: "Consistency",
     render: (r) => (r.llm?.consistency != null ? pct(r.llm.consistency) : "-"),
   };
+
   const groundednessCol = {
     key: "llm.groundedness",
     header: "Groundedness",
@@ -997,10 +1014,7 @@ function PnrModal({
   onOpenDashboard,
 }) {
   if (!open) return null;
-  const selected = {
-    pnr: selectedPnr,
-    status: selectedStatus || "-",
-  };
+  const selected = { pnr: selectedPnr, status: selectedStatus || "-" };
   return (
     <div className="fixed inset-0 z-[60]">
       <div
@@ -1052,7 +1066,6 @@ function Card({
         : tone === "bad"
           ? "bg-red-50 border-red-200"
           : "bg-white border-black/10";
-
   return (
     <div className={`rounded-xl border p-3 ${toneClass}`}>
       <div className="flex items-start gap-3">
@@ -1244,12 +1257,9 @@ function mapAvgCompletionItemToRow(item) {
   const maskMs = coerceNumber(item.mask_check_agent_ms);
   const dealMs = coerceNumber(item.deal_matching_agent_ms);
   const issuanceMs = coerceNumber(item.issuance_agent_ms);
-
   const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
-
   // If server provides total_processing_minutes as a string, prefer it
   const totalMins = coerceNumber(item.total_processing_minutes);
-
   return {
     ...base,
     status:
@@ -1372,10 +1382,7 @@ function mapPnrAdmItemToRow(item) {
 
 function mapAssignmentItemToRow(item) {
   const base = mapCommonItemToRow(item) || {};
-  return {
-    ...base,
-    createdAt: item.queue_arrival_utc || base.createdAt,
-  };
+  return { ...base, createdAt: item.queue_arrival_utc || base.createdAt };
 }
 
 function mapErrorVisibilityItemToRow(item) {
@@ -1435,6 +1442,7 @@ export default function ReportsModule({ onOpenPNR }) {
     AI: "ai",
     EXCEPTIONS: "exceptions",
   };
+
   const [subTab, setSubTab] = useState(SUBTABS.OVERVIEW);
 
   // timeframe controls
@@ -1447,11 +1455,13 @@ export default function ReportsModule({ onOpenPNR }) {
 
   const [preset, setPreset] = useState(presets.MONTHLY);
   const now = new Date();
+
   const [from, setFrom] = useState(() => {
     const d = new Date(now);
     d.setDate(d.getDate() - 29);
     return d.toISOString().slice(0, 10);
   });
+
   const [to, setTo] = useState(() => now.toISOString().slice(0, 10));
 
   function setPresetRange(p) {
@@ -1495,6 +1505,17 @@ export default function ReportsModule({ onOpenPNR }) {
     errorClass: "All",
   });
 
+  // Modal performance controls (pagination / virtualization)
+  const deferredDetailSearch = useDeferredValue(detailSearch);
+  const [detailRenderMode, setDetailRenderMode] = useState("paged"); // paged | virtual
+  const [detailPageSize, setDetailPageSize] = useState(50);
+  const [detailPage, setDetailPage] = useState(1);
+  const virtualBodyRef = useRef(null);
+  const [virtualScrollTop, setVirtualScrollTop] = useState(0);
+  const VROW_H = 36;
+  const VVIEW_H = 320;
+  const V_OVERSCAN = 8;
+
   const closeDetailModal = () => setDetailOpen(false);
 
   const openDetailModal = ({ title, subtitle, rows } = {}) => {
@@ -1511,7 +1532,8 @@ export default function ReportsModule({ onOpenPNR }) {
 
     let finalRows = Array.isArray(rows) ? rows : [];
     finalRows = applyStatusRules(finalRows);
-    finalRows = finalRows.slice(0, 10);
+
+    // ✅ FIX: no truncation here — show ALL rows
 
     setDetailTitle(title || "Details");
     setDetailSubtitle(subtitle || "");
@@ -1597,16 +1619,15 @@ export default function ReportsModule({ onOpenPNR }) {
 
   async function loadTabData(
     activeTab,
-    { start_date = from, end_date = to, force = false } = {},
+    { start_date = from, end_date = to } = {},
   ) {
     // Per-tab lazy loading: only fetch what the active tab needs.
-    const key = `${start_date}|${end_date}`;
-
     // Abort previous request for this tab only
     reqRef.current.controllers = reqRef.current.controllers || {};
     if (reqRef.current.controllers[activeTab]) {
       reqRef.current.controllers[activeTab].abort();
     }
+
     const controller = new AbortController();
     reqRef.current.controllers[activeTab] = controller;
 
@@ -1614,9 +1635,9 @@ export default function ReportsModule({ onOpenPNR }) {
     reqRef.current.id += 1;
     const reqId = reqRef.current.id;
     const signal = controller.signal;
+
     const withRange = { start_date, end_date, signal };
 
-    // Determine which endpoints to call for the active tab
     const needs = {
       dash: activeTab === SUBTABS.OVERVIEW,
       throughputOT: activeTab === SUBTABS.OVERVIEW,
@@ -1630,7 +1651,6 @@ export default function ReportsModule({ onOpenPNR }) {
       llmTrend: activeTab === SUBTABS.AI,
     };
 
-    // Set loading only for the widgets in this tab
     if (needs.dash) {
       setDashLoading(true);
       setDashErr("");
@@ -1706,7 +1726,6 @@ export default function ReportsModule({ onOpenPNR }) {
 
     const settled = await Promise.allSettled(requests.map((r) => r.p));
 
-    // ignore stale or aborted
     if (reqRef.current.id !== reqId || signal.aborted) return;
 
     for (let i = 0; i < requests.length; i++) {
@@ -1798,7 +1817,7 @@ export default function ReportsModule({ onOpenPNR }) {
 
   // initial load and range changes
   useEffect(() => {
-    loadTabData(subTab, { start_date: from, end_date: to, force: true });
+    loadTabData(subTab, { start_date: from, end_date: to });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to]);
 
@@ -1808,23 +1827,19 @@ export default function ReportsModule({ onOpenPNR }) {
   const dashKpis = useMemo(() => {
     const s = dashSummary && dashSummary.success ? dashSummary : null;
     const throughputCount = coerceNumber(s?.throughput?.data?.count) ?? 0;
-
     const avgMins = coerceNumber(s?.avgCompletionTime?.data?.avgMins) ?? 0;
     const avgItems = Array.isArray(s?.avgCompletionTime?.data?.items)
       ? s.avgCompletionTime.data.items
       : [];
-
     const errPct01 = normalizePercentage01(s?.errorRate?.data?.percentage) ?? 0;
     const errorCount = coerceNumber(s?.errorRate?.data?.errorCount) ?? 0;
     const hilCount = coerceNumber(s?.errorRate?.data?.hilCount) ?? 0;
-
     const exc = s?.exceptions?.data;
     const slaCount = coerceNumber(exc?.slaCount) ?? 0;
     const slaACount = coerceNumber(exc?.slaACount) ?? 0;
     const slaSCount = coerceNumber(exc?.slaSCount) ?? 0;
     const admCount = coerceNumber(exc?.admCount) ?? 0;
     const withFeedbackCount = coerceNumber(exc?.withFeedbackCount) ?? 0;
-
     return {
       throughputCount,
       throughputItems: Array.isArray(s?.throughput?.data?.items)
@@ -1953,7 +1968,6 @@ export default function ReportsModule({ onOpenPNR }) {
 
   const llmRadar = useMemo(() => {
     const arr = Array.isArray(llmAvg.chart) ? llmAvg.chart : [];
-    // expect metric + score
     return arr.map((r) => ({
       metric: r.metric || "-",
       value: clamp01(coerceNumber(r.score) ?? 0),
@@ -2024,7 +2038,6 @@ export default function ReportsModule({ onOpenPNR }) {
   };
 
   const handleChartPick = ({ metricLabel, label, seriesName, value }) => {
-    // Filter the correct list based on chart and clicked label
     let rows = [];
 
     if (metricLabel === "Throughput over time") {
@@ -2032,16 +2045,18 @@ export default function ReportsModule({ onOpenPNR }) {
         throughputOverTimeChart.find((d) => d.date === label) ||
         throughputOverTimeChart.find((d) => d.key === label);
       const dayKey = dayRow?.key;
+
       rows = throughputOT.items.map(mapCommonItemToRow).filter(Boolean);
       if (dayKey) {
         rows = rows.filter((x) => toDateKey(x.createdAt) === dayKey);
       }
+
       if (seriesName === "Processed")
-        rows = rows.filter((x) => x.status === "processed");
+        rows = rows.filter((x) => normalizeStatus(x.status) === "processed");
       if (seriesName === "Human")
-        rows = rows.filter((x) => x.status === "human");
+        rows = rows.filter((x) => normalizeStatus(x.status) === "human");
       if (seriesName === "Error")
-        rows = rows.filter((x) => x.status === "error");
+        rows = rows.filter((x) => normalizeStatus(x.status) === "error");
 
       openDetailModal({
         title: `Throughput over time${label ? ` — ${label}` : ""}`,
@@ -2056,17 +2071,29 @@ export default function ReportsModule({ onOpenPNR }) {
       metricLabel === "AI RFIC/RFISC vs Human corrections"
     ) {
       rows = aiHuman.list.map(mapAiVsHumanItemToRow).filter(Boolean);
+
       if (label) {
-        // interpret label as chart segment name
-        if (String(label).toLowerCase().includes("human")) {
-          rows = rows.filter(
-            (x) =>
-              display(x.correctedRFIC) !== "-" ||
-              display(x.correctedRFISC) !== "-" ||
-              display(x.correctedEmdDesc) !== "-",
-          );
+        // interpret label as chart segment name (make filtering resilient to naming)
+        const ll = String(label).toLowerCase();
+
+        const hasHuman = (x) =>
+          display(x.correctedRFIC) !== "-" ||
+          display(x.correctedRFISC) !== "-" ||
+          display(x.correctedEmdDesc) !== "-";
+
+        const hasAI = (x) =>
+          display(x.aiRFIC) !== "-" ||
+          display(x.aiRFISC) !== "-" ||
+          display(x.aiEmdDesc) !== "-";
+
+        if (ll.includes("human")) {
+          rows = rows.filter((x) => hasHuman(x));
+        } else if (ll.includes("ai")) {
+          // keep rows where AI suggested something but no human correction was applied
+          rows = rows.filter((x) => hasAI(x) && !hasHuman(x));
         }
       }
+
       openDetailModal({
         title: `AI vs Human corrections${label ? ` — ${label}` : ""}`,
         subtitle: `${display(value)}`,
@@ -2080,8 +2107,10 @@ export default function ReportsModule({ onOpenPNR }) {
         e2eChart.find((d) => d.date === label) ||
         e2eChart.find((d) => d.key === label);
       const dayKey = dayRow?.key;
+
       rows = e2eListRows;
       if (dayKey) rows = rows.filter((x) => toDateKey(x.createdAt) === dayKey);
+
       openDetailModal({
         title: `End-to-end completion time${label ? ` — ${label}` : ""}`,
         subtitle: `${display(seriesName)} • ${display(value)}`,
@@ -2093,7 +2122,8 @@ export default function ReportsModule({ onOpenPNR }) {
     if (metricLabel === "Assignments to ticketers") {
       rows = assignments.list.map(mapAssignmentItemToRow).filter(Boolean);
       if (label)
-        rows = rows.filter((x) => display(x.assigned) === display(label));
+        rows = rows.filter((x) => normCmp(x.assigned) === normCmp(label));
+
       openDetailModal({
         title: `Assignments to ticketers${label ? ` — ${label}` : ""}`,
         subtitle: `${display(value)}`,
@@ -2105,7 +2135,10 @@ export default function ReportsModule({ onOpenPNR }) {
     if (metricLabel === "Error visibility & classification") {
       rows = errorVis.list.map(mapErrorVisibilityItemToRow).filter(Boolean);
       if (label)
-        rows = rows.filter((x) => display(x.errorClass) === display(label));
+        rows = rows.filter((x) =>
+          normCmp(x.errorClass).includes(normCmp(label)),
+        );
+
       openDetailModal({
         title: `Error visibility & classification${label ? ` — ${label}` : ""}`,
         subtitle: `${display(value)}`,
@@ -2119,8 +2152,10 @@ export default function ReportsModule({ onOpenPNR }) {
         llmTrendChart.find((d) => d.date === label) ||
         llmTrendChart.find((d) => d.key === label);
       const dayKey = dayRow?.key;
+
       rows = llmTrend.list.map(mapLlmTrendListItemToRow).filter(Boolean);
       if (dayKey) rows = rows.filter((x) => toDateKey(x.createdAt) === dayKey);
+
       openDetailModal({
         title: `LLM metrics trend over time${label ? ` — ${label}` : ""}`,
         subtitle: `${display(seriesName)} • ${display(value)}`,
@@ -2139,7 +2174,6 @@ export default function ReportsModule({ onOpenPNR }) {
       return;
     }
 
-    // fallback
     openDetailModal({
       title: metricLabel || "Details",
       subtitle: `${display(value)}`,
@@ -2168,7 +2202,7 @@ export default function ReportsModule({ onOpenPNR }) {
   }, [detailRows]);
 
   const filteredDetailRows = useMemo(() => {
-    const q = detailSearch.trim().toLowerCase();
+    const q = (deferredDetailSearch || "").trim().toLowerCase();
     let rows = detailRows.filter((r) => {
       if (detailFilters.status !== "All" && r.status !== detailFilters.status)
         return false;
@@ -2186,6 +2220,7 @@ export default function ReportsModule({ onOpenPNR }) {
         return false;
 
       if (!q) return true;
+
       const hay = [
         r.pnr,
         r.status,
@@ -2200,6 +2235,7 @@ export default function ReportsModule({ onOpenPNR }) {
         .map(safeStr)
         .join(" ")
         .toLowerCase();
+
       return hay.includes(q);
     });
 
@@ -2218,6 +2254,49 @@ export default function ReportsModule({ onOpenPNR }) {
     return rows;
   }, [detailRows, detailSearch, detailFilters, detailSortKey, detailSortDir]);
 
+  useEffect(() => {
+    // Reset paging when filters/search/sort change
+    setDetailPage(1);
+  }, [deferredDetailSearch, detailFilters, detailSortKey, detailSortDir]);
+
+  const activeModalColumns = useMemo(
+    () => getModalColumnDefs(detailTitle, openPnrDetails),
+    [detailTitle],
+  );
+
+  const totalPages = useMemo(() => {
+    const ps = Math.max(1, Number(detailPageSize) || 50);
+    return Math.max(1, Math.ceil((filteredDetailRows.length || 0) / ps));
+  }, [filteredDetailRows.length, detailPageSize]);
+
+  const safeDetailPage = useMemo(() => {
+    const p = Number(detailPage) || 1;
+    return Math.min(Math.max(1, p), totalPages);
+  }, [detailPage, totalPages]);
+
+  const pagedDetailRows = useMemo(() => {
+    const ps = Math.max(1, Number(detailPageSize) || 50);
+    const start = (safeDetailPage - 1) * ps;
+    return filteredDetailRows.slice(start, start + ps);
+  }, [filteredDetailRows, safeDetailPage, detailPageSize]);
+
+  const modalGridTemplate = useMemo(() => {
+    const n = Math.max(1, activeModalColumns.length || 1);
+    return Array.from({ length: n })
+      .map(() => "minmax(140px, 1fr)")
+      .join(" ");
+  }, [activeModalColumns.length]);
+
+  const virtualRange = useMemo(() => {
+    const total = filteredDetailRows.length;
+    if (total <= 0) return { start: 0, end: 0, total, top: 0, height: 0 };
+    const rawStart = Math.floor((virtualScrollTop || 0) / VROW_H);
+    const start = Math.max(0, rawStart - V_OVERSCAN);
+    const visible = Math.ceil(VVIEW_H / VROW_H) + V_OVERSCAN * 2;
+    const end = Math.min(total, start + visible);
+    return { start, end, total, top: start * VROW_H, height: total * VROW_H };
+  }, [filteredDetailRows.length, virtualScrollTop]);
+
   const toggleDetailSort = (key) => {
     if (detailSortKey !== key) {
       setDetailSortKey(key);
@@ -2226,11 +2305,6 @@ export default function ReportsModule({ onOpenPNR }) {
     }
     setDetailSortDir((d) => (d === "asc" ? "desc" : "asc"));
   };
-
-  const activeModalColumns = useMemo(
-    () => getModalColumnDefs(detailTitle, openPnrDetails),
-    [detailTitle],
-  );
 
   const rangeControls = (
     <div className="flex flex-wrap items-center gap-2">
@@ -2278,6 +2352,7 @@ export default function ReportsModule({ onOpenPNR }) {
       >
         Custom
       </button>
+
       <div className="ml-1 flex items-center gap-2">
         <label className="text-xs text-black/50">From</label>
         <input
@@ -2300,11 +2375,10 @@ export default function ReportsModule({ onOpenPNR }) {
           className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm"
         />
       </div>
+
       <button
         type="button"
-        onClick={() =>
-          loadTabData(subTab, { start_date: from, end_date: to, force: true })
-        }
+        onClick={() => loadTabData(subTab, { start_date: from, end_date: to })}
         className="rounded-lg border border-black/10 bg-white px-3 py-1.5 text-sm text-black/70 hover:text-black"
         title="Reload reports"
       >
@@ -2387,6 +2461,7 @@ export default function ReportsModule({ onOpenPNR }) {
           onClick={openThroughputCardModal}
           loading={dashLoading}
         />
+
         <Card
           title="Avg Completion Time"
           value={minutesToHrs(dashKpis.avgMins)}
@@ -2400,6 +2475,7 @@ export default function ReportsModule({ onOpenPNR }) {
           onClick={openAvgCompletionCardModal}
           loading={dashLoading}
         />
+
         <Card
           title="Error Rate"
           value={pct(dashKpis.errorPct01)}
@@ -2413,6 +2489,7 @@ export default function ReportsModule({ onOpenPNR }) {
           onClick={openErrorRateCardModal}
           loading={dashLoading}
         />
+
         <Card
           title="Exceptions"
           value={`${dashKpis.slaCount} SLA • ${dashKpis.admCount} ADM`}
@@ -2831,6 +2908,7 @@ export default function ReportsModule({ onOpenPNR }) {
                   emptyText="No HIL items in this range."
                 />
               )}
+
               {hilErr ? (
                 <div className="mt-2 text-xs text-red-700">{hilErr}</div>
               ) : null}
@@ -2904,6 +2982,7 @@ export default function ReportsModule({ onOpenPNR }) {
                   emptyText="No feedback items in this range."
                 />
               )}
+
               {pnrAdmErr ? (
                 <div className="mt-2 text-xs text-red-700">{pnrAdmErr}</div>
               ) : null}
@@ -3253,6 +3332,7 @@ export default function ReportsModule({ onOpenPNR }) {
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
             />
           </div>
+
           <div className="lg:col-span-1">
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
               Status
@@ -3271,6 +3351,7 @@ export default function ReportsModule({ onOpenPNR }) {
               ))}
             </select>
           </div>
+
           <div className="lg:col-span-1">
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
               Assigned To
@@ -3289,6 +3370,7 @@ export default function ReportsModule({ onOpenPNR }) {
               ))}
             </select>
           </div>
+
           <div className="lg:col-span-1">
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
               Stage
@@ -3307,6 +3389,7 @@ export default function ReportsModule({ onOpenPNR }) {
               ))}
             </select>
           </div>
+
           <div className="lg:col-span-1">
             <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-black/40">
               Error Class
@@ -3349,6 +3432,7 @@ export default function ReportsModule({ onOpenPNR }) {
                 ))}
               </tr>
             </thead>
+
             <tbody>
               {!filteredDetailRows.length ? (
                 <tr>
@@ -3360,7 +3444,8 @@ export default function ReportsModule({ onOpenPNR }) {
                   </td>
                 </tr>
               ) : (
-                filteredDetailRows.slice(0, 10).map((r, idx) => (
+                // ✅ FIX: render ALL rows (no 10-limit)
+                filteredDetailRows.map((r, idx) => (
                   <tr
                     key={`${r.pnr}-${idx}`}
                     className="border-b border-black/5 hover:bg-black/[0.02]"
@@ -3385,8 +3470,7 @@ export default function ReportsModule({ onOpenPNR }) {
             <span className="font-semibold text-black">
               {filteredDetailRows.length}
             </span>{" "}
-            entries
-            {filteredDetailRows.length > 10 ? " (truncated to 10)" : ""}
+            entries {""}
           </div>
         </div>
       </DetailModal>

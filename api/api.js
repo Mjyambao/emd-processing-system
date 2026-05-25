@@ -74,7 +74,7 @@ async function logoutAndRedirectOnce() {
  * Register a request interceptor.
  * @param {(config: RequestConfig) => Promise<RequestConfig>|RequestConfig} fn
  */
-export function useRequest(fn) {
+export function registerRequestInterceptor(fn) {
   requestInterceptors.push(fn);
 }
 
@@ -82,9 +82,10 @@ export function useRequest(fn) {
  * Register a response interceptor.
  * @param {(ctx: { response: Response, request: RequestConfig }) => Promise<Response>|Response} fn
  */
-export function useResponse(fn) {
+export function registerResponseInterceptor(fn) {
   responseInterceptors.push(fn);
 }
+
 
 /*
  * Request configuration object
@@ -152,7 +153,7 @@ function buildHeaders(extra = {}, body) {
 }
 
 // Default response error normalization interceptor
-useResponse(async ({ response, request }) => {
+registerResponseInterceptor(async ({ response, request }) => {
   if (response.ok) return response;
 
   let payload = null;

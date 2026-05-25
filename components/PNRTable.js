@@ -12,6 +12,29 @@ import formatDate from "../utils/helper";
 // API
 import { getPnrQueueList, patchAssignPnr, patchTtlPnr } from "../api/pnrApi";
 
+const FilterToggleButton = ({ open, active, onClick, label }) => (
+  <button
+    type="button"
+    className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-black/60 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red ${
+      open ? "text-brand-red" : ""
+    }`}
+    aria-label={`Toggle ${label} filter`}
+    aria-expanded={open ? "true" : "false"}
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick?.();
+    }}
+    title={`Show/hide ${label} filter`}
+  >
+    <span className="relative inline-flex">
+      <i className="fa-solid fa-filter text-[11px]" />
+      {active ? (
+        <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-brand-red ring-1 ring-white" />
+      ) : null}
+    </span>
+  </button>
+);
+
 export default function PNRTable({
   // NOTE: rows prop is kept for compatibility, but table renders API rows (apiRows).
   rows,
@@ -1119,29 +1142,6 @@ export default function PNRTable({
   const pageSelectableEligibleCount = useMemo(
     () => pageRows.filter(isSelectable).length,
     [pageRows],
-  );
-
-  const FilterToggleButton = ({ open, active, onClick, label }) => (
-    <button
-      type="button"
-      className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-black/60 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red ${
-        open ? "text-brand-red" : ""
-      }`}
-      aria-label={`Toggle ${label} filter`}
-      aria-expanded={open ? "true" : "false"}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick?.();
-      }}
-      title={`Show/hide ${label} filter`}
-    >
-      <span className="relative inline-flex">
-        <i className="fa-solid fa-filter text-[11px]" />
-        {active ? (
-          <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-brand-red ring-1 ring-white" />
-        ) : null}
-      </span>
-    </button>
   );
 
   return (
