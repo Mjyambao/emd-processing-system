@@ -663,6 +663,7 @@ export default function AdminPage() {
                   </label>
                   <input
                     type="text"
+                    disabled={true}
                     value={editForm.fullName}
                     onChange={(e) =>
                       setEditForm((p) => ({ ...p, fullName: e.target.value }))
@@ -679,6 +680,7 @@ export default function AdminPage() {
                     </label>
                     <input
                       type="date"
+                      disabled={true}
                       value={editForm.dateISO}
                       onChange={(e) =>
                         setEditForm((p) => ({ ...p, dateISO: e.target.value }))

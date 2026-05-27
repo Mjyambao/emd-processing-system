@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 
@@ -7,7 +7,6 @@ import TopNav from "../components/TopNav";
 import PNRTable from "../components/PNRTable";
 import PNRDetails from "../components/PNRDetails";
 import ToastViewport from "../components/ToastViewport";
-import Spinner from "../components/Spinner";
 import Chip from "../components/Chip";
 
 // Utils
@@ -32,8 +31,113 @@ const AIAgentsDockPortal = dynamic(
   },
 );
 
-// APIs
-// import { logout } from "../api/userApi";
+// Reusable multi-select dropdown with checkboxes
+function MultiSelectDropdown({
+  label,
+  options = [],
+  selectedValues = [],
+  onChange,
+  placeholder = "Select options",
+  disabled = false,
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+    }
+  }, [disabled]);
+
+  const toggleValue = (value) => {
+    if (!onChange) return;
+
+    const alreadySelected = selectedValues.includes(value);
+    if (alreadySelected) {
+      onChange(selectedValues.filter((item) => item !== value));
+      return;
+    }
+
+    onChange([...selectedValues, value]);
+  };
+
+  const displayValue =
+    selectedValues.length === 0
+      ? placeholder
+      : selectedValues.length <= 2
+        ? selectedValues.join(", ")
+        : `${selectedValues.length} selected`;
+
+  return (
+    <div ref={wrapperRef} className="w-full max-w-sm">
+      <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-black/70">
+        {label}
+      </label>
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+        className={`flex w-full items-center justify-between border px-3 py-2 text-left text-sm transition ${
+          disabled
+            ? "cursor-not-allowed border-black/10 bg-black/5 text-black/40"
+            : "border-black/10 bg-white text-black hover:bg-black/[0.03]"
+        }`}
+      >
+        <span
+          className={selectedValues.length ? "text-black" : "text-black/50"}
+        >
+          {displayValue}
+        </span>
+        <i
+          className={`fa-solid ${
+            open ? "fa-chevron-up" : "fa-chevron-down"
+          } text-xs text-black/50`}
+        />
+      </button>
+
+      {open && !disabled ? (
+        <div className="mt-1 max-h-64 overflow-auto border border-black/10 bg-white shadow-lg">
+          {options.map((option) => {
+            const checked = selectedValues.includes(option);
+
+            return (
+              <label
+                key={option}
+                className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-black/[0.03]"
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-brand-red"
+                  checked={checked}
+                  onChange={() => toggleValue(option)}
+                />
+                <span className="text-black">{option}</span>
+              </label>
+            );
+          })}
+
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-black/50">
+              No options available
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const router = useRouter();
@@ -42,29 +146,63 @@ export default function Dashboard() {
   const TABS = { ALL: "all", MINE: "mine", REPORTS: "reports" };
   const [activeTab, setActiveTab] = useState(TABS.ALL);
 
-  // Ticket Type / GDS Region (UI filters)
-  const TICKET_TYPES = ["EMD", "Refund", "Reissue"];
-  const GDS_TYPES = ["Sabre AU", "Sabre NZ", "Amadeus AU", "Amadeus NZ"];
-  const REGION_TYPES = ["AU", "NZ"];
-  const [ticketType, setTicketType] = useState(TICKET_TYPES[0]);
-  const [gdsType, setGdsType] = useState(GDS_TYPES[0]);
-  const [regionType, setRegionType] = useState(REGION_TYPES[0]);
-  const [gdsRegion, setGdsRegion] = useState([]);
-
-  const toggleGdsRegion = (region) => {
-    setGdsRegion((prev) => {
-      const isSelected = prev.includes(region);
-      if (isSelected && prev.length === 1) {
-        return prev; // do nothing
-      }
-
-      if (isSelected) {
-        return prev.filter((r) => r !== region);
-      }
-
-      return [...prev, region];
-    });
+  // Ticket Type / Filters
+  const TICKET_TYPES = ["Ticketing", "Refund"];
+  const REGION_TYPES = ["AU", "NZ", "RSA"];
+  const REGION_TYPES_2 = ["AU"];
+  const BRAND_OPTIONS = ["FC", "CT"];
+  const SUB_BRAND_OPTIONS = ["FC sub 1", "FC sub 2"];
+  const CT_POS_OPTIONS = ["CT POS 1", "CT POS 2", "CT POS 3"];
+  const FC_SUB_BRAND_TO_POS = {
+    "FC sub 1": ["FC sub 1 POS 1", "FC sub 1 POS 2"],
+    "FC sub 2": ["FC sub 2 POS 1", "FC sub 2 POS 2"],
   };
+
+  const [ticketType, setTicketType] = useState(TICKET_TYPES[0]);
+  const [gdsRegion, setGdsRegion] = useState([]);
+  const [brandSelections, setBrandSelections] = useState([]);
+  const [subBrandSelections, setSubBrandSelections] = useState([]);
+  const [posSelections, setPosSelections] = useState([]);
+
+  const showSubBrandDropdown = brandSelections.includes("FC");
+
+  const posOptions = useMemo(() => {
+    const hasFC = brandSelections.includes("FC");
+    const hasCT = brandSelections.includes("CT");
+
+    let nextOptions = [];
+
+    // CT contributes its POS options immediately when selected
+    if (hasCT) {
+      nextOptions = [...nextOptions, ...CT_POS_OPTIONS];
+    }
+
+    // FC contributes POS options only if one or more sub-brands are selected
+    if (hasFC && subBrandSelections.length > 0) {
+      subBrandSelections.forEach((subBrand) => {
+        const mapped = FC_SUB_BRAND_TO_POS[subBrand] || [];
+        nextOptions = [...nextOptions, ...mapped];
+      });
+    }
+
+    return nextOptions;
+  }, [brandSelections, subBrandSelections]);
+
+  const isPosDisabled = posOptions.length === 0;
+
+  // Clear sub-brand if FC is no longer selected
+  useEffect(() => {
+    if (!showSubBrandDropdown && subBrandSelections.length) {
+      setSubBrandSelections([]);
+    }
+  }, [showSubBrandDropdown, subBrandSelections.length]);
+
+  // Keep only valid selected POS values whenever available options change
+  useEffect(() => {
+    setPosSelections((prev) =>
+      prev.filter((item) => posOptions.includes(item)),
+    );
+  }, [posOptions]);
 
   // All Queue (legacy local sample state kept for other UI behaviors)
   const [allRows, setAllRows] = useState([]);
@@ -92,6 +230,31 @@ export default function Dashboard() {
   const [session, setSession] = useState(null);
   const [hasMounted, setHasMounted] = useState(false);
 
+  const loggedInName = session?.name || session?.user?.name || "";
+
+  const identityCandidates = [
+    session?.email,
+    session?.user?.email,
+    session?.userId,
+    session?.user?.userId,
+    session?.name,
+    session?.user?.name,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).toLowerCase());
+
+  const loggedInEmail = identityCandidates.find((v) => v.includes("@")) || "";
+
+  const loggedInUserId =
+    session?.userId || session?.user?.userId || session?.user?.name || "";
+
+  // ✅ IMPORTANT: this must be defined BEFORE usage
+  const isTicketer2User = identityCandidates.includes("ticketer2@email.com");
+
+  const regionOptions = isTicketer2User ? ["AU"] : REGION_TYPES;
+  const brandOptions = isTicketer2User ? ["CT"] : BRAND_OPTIONS;
+  const shouldLockRestrictedFilters = isTicketer2User;
+
   const [allTableSnapshot, setAllTableSnapshot] = useState({
     rows: [],
     meta: null,
@@ -117,7 +280,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     requireAuth(router);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     setStatus("all");
@@ -132,6 +295,17 @@ export default function Dashboard() {
       setSession({});
     }
   }, []);
+
+  useEffect(() => {
+    if (!hasMounted) return;
+
+    if (isTicketer2User) {
+      setGdsRegion(["AU"]);
+      setBrandSelections(["CT"]);
+      setSubBrandSelections([]);
+      setPosSelections(CT_POS_OPTIONS);
+    }
+  }, [hasMounted, session, isTicketer2User]);
 
   /**
    * Counters for chips
@@ -199,7 +373,6 @@ export default function Dashboard() {
 
     withBusy(setKilling, victim.pnr, true);
     try {
-      // simulate API call
       await new Promise((r) => setTimeout(r, 700));
       setAllRows((prev) => prev.filter((_, i) => i !== originalIndex));
       setAllSelected((sel) => (sel?.pnr === victim?.pnr ? null : sel));
@@ -284,16 +457,19 @@ export default function Dashboard() {
     };
   }, [activeTab, allRows, myRows, allTableSnapshot.rows, myTableSnapshot.rows]);
 
-  const loggedInName = session?.name || session?.user?.name || "";
-  const loggedInUserId =
-    session?.userId || session?.user?.userId || session?.user?.name || "";
+  // async function handleLogout() {
+  //   const { default: oktaAuth } = await import("../lib/okta");
+  //   await oktaAuth.signOut({
+  //     postLogoutRedirectUri: window.location.origin,
+  //     clearTokensBeforeRedirect: true,
+  //   });
+  // }
 
   async function handleLogout() {
-    const { default: oktaAuth } = await import("../lib/okta");
-    await oktaAuth.signOut({
-      postLogoutRedirectUri: window.location.origin,
-      clearTokensBeforeRedirect: true,
-    });
+    localStorage.removeItem("session");
+    //Trigger logout API to clear session
+    // logout();
+    router.replace("/");
   }
 
   return (
@@ -315,10 +491,10 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Ticket Type / GDS Region */}
-        <div className="mb-2 grid grid-cols-1 gap-3">
+        {/* Ticket Type / Filter Dropdowns */}
+        <div className="mb-3 grid grid-cols-1 gap-3">
           <div>
-            <div className="mt-1 inline-flex border border-black/10 overflow-hidden">
+            <div className="mt-1 inline-flex overflow-hidden border border-black/10">
               {TICKET_TYPES.map((type) => {
                 const isActive = ticketType === type;
 
@@ -327,13 +503,11 @@ export default function Dashboard() {
                     key={type}
                     type="button"
                     onClick={() => setTicketType(type)}
-                    className={`px-4 py-2 text-sm font-semibold transition
-            ${
-              isActive
-                ? "bg-brand-red text-white"
-                : "bg-white text-black/70 hover:bg-black/5 border border-1"
-            }
-          `}
+                    className={`px-4 py-2 text-sm font-semibold transition ${
+                      isActive
+                        ? "bg-brand-red text-white"
+                        : "border border-1 bg-white text-black/70 hover:bg-black/5"
+                    }`}
                   >
                     {type}
                   </button>
@@ -348,29 +522,43 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <div>
-            <div className="mb-2 inline-flex border border-black/10 overflow-hidden">
-              {GDS_TYPES.map((type) => {
-                const isActive = gdsType === type;
+          <div className="flex flex-col gap-3">
+            <MultiSelectDropdown
+              label="Region Types"
+              options={regionOptions}
+              selectedValues={gdsRegion}
+              onChange={setGdsRegion}
+              placeholder="Select Region Types"
+              // disabled={shouldLockRestrictedFilters}
+            />
 
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setGdsType(type)}
-                    className={`px-4 py-2 text-sm font-semibold transition
-            ${
-              isActive
-                ? "bg-brand-red text-white"
-                : "bg-white text-black/70 hover:bg-black/5 border border-1 "
-            }
-          `}
-                  >
-                    {type}
-                  </button>
-                );
-              })}
-            </div>
+            <MultiSelectDropdown
+              label="Brand"
+              options={brandOptions}
+              selectedValues={brandSelections}
+              onChange={setBrandSelections}
+              placeholder="Select Brand"
+              // disabled={shouldLockRestrictedFilters}
+            />
+
+            {showSubBrandDropdown ? (
+              <MultiSelectDropdown
+                label="Sub-brand"
+                options={SUB_BRAND_OPTIONS}
+                selectedValues={subBrandSelections}
+                onChange={setSubBrandSelections}
+                placeholder="Select Sub-brand"
+              />
+            ) : null}
+
+            <MultiSelectDropdown
+              label="POS"
+              options={posOptions}
+              selectedValues={posSelections}
+              onChange={setPosSelections}
+              placeholder="Select POS"
+              disabled={isPosDisabled}
+            />
           </div>
         </div>
 
@@ -380,47 +568,41 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => setActiveTab(TABS.ALL)}
-              className={`px-4 py-2 text-sm font-semibold transition
-            ${
-              activeTab === TABS.ALL
-                ? "bg-brand-red text-white"
-                : "bg-white text-black/70 hover:bg-black/5 border border-1"
-            }
-          `}
+              className={`px-4 py-2 text-sm font-semibold transition ${
+                activeTab === TABS.ALL
+                  ? "bg-brand-red text-white"
+                  : "border border-1 bg-white text-black/70 hover:bg-black/5"
+              }`}
               aria-selected={activeTab === TABS.ALL}
               role="tab"
               title="All Queue"
             >
-              All Queue {/* ({allCounts.total}) */}
+              All Queue
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab(TABS.MINE)}
-              className={`px-4 py-2 text-sm font-semibold transition
-            ${
-              activeTab === TABS.MINE
-                ? "bg-brand-red text-white"
-                : "bg-white text-black/70 hover:bg-black/5 border border-1 "
-            }
-          `}
+              className={`px-4 py-2 text-sm font-semibold transition ${
+                activeTab === TABS.MINE
+                  ? "bg-brand-red text-white"
+                  : "border border-1 bg-white text-black/70 hover:bg-black/5"
+              }`}
               aria-selected={activeTab === TABS.MINE}
               role="tab"
               title="My Queues"
             >
-              My Queues {/* ({myCounts.total}) */}
+              My Queues
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab(TABS.REPORTS)}
-              className={`px-4 py-2 text-sm font-semibold transition
-            ${
-              activeTab === TABS.REPORTS
-                ? "bg-brand-red text-white"
-                : "bg-white text-black/70 hover:bg-black/5 border border-1 "
-            }
-          `}
+              className={`px-4 py-2 text-sm font-semibold transition ${
+                activeTab === TABS.REPORTS
+                  ? "bg-brand-red text-white"
+                  : "border border-1 bg-white text-black/70 hover:bg-black/5"
+              }`}
               aria-selected={activeTab === TABS.REPORTS}
               role="tab"
               title="Reports"
@@ -435,8 +617,7 @@ export default function Dashboard() {
           <>
             {/* Chips */}
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              {/* ✅ NON-EMD (Refund / Reissue) */}
-              {ticketType !== "EMD" ? (
+              {ticketType !== "Ticketing" ? (
                 <>
                   <Chip
                     label={`All (${nonEmdCounts.total})`}
@@ -459,7 +640,6 @@ export default function Dashboard() {
                   />
                 </>
               ) : (
-                /* ✅ ORIGINAL EMD CHIPS */
                 <>
                   <Chip
                     label={`All (${counters.total})`}
@@ -517,6 +697,11 @@ export default function Dashboard() {
             <PNRTable
               ticketType={ticketType}
               gdsRegion={gdsRegion}
+              brandFilters={brandSelections}
+              subBrandFilters={subBrandSelections}
+              posFilters={posSelections}
+              // backward compatibility if downstream still expects pocFilters
+              pocFilters={posSelections}
               rows={rows}
               search={search}
               setSearch={setSearch}
@@ -546,7 +731,7 @@ export default function Dashboard() {
               loggedInUserId={loggedInUserId}
             />
 
-            {ticketType === "EMD" && (
+            {ticketType === "Ticketing" && (
               <PNRDetails
                 selected={selected}
                 onClose={() => setSelected(null)}

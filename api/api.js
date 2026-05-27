@@ -1,6 +1,3 @@
-import { getAccessToken } from "../lib/auth";
-import { logout } from "../api/userApi";
-
 let authToken = null;
 
 // Read base URL from env and remove trailing slashes
@@ -38,37 +35,6 @@ export function clearToken() {
 // Interceptor (middleware) registries
 const requestInterceptors = [];
 const responseInterceptors = [];
-
-let isLoggingOut = false;
-
-async function logoutAndRedirectOnce() {
-  // SSR/Node guard
-  if (typeof window === "undefined") return;
-
-  if (isLoggingOut) return;
-  isLoggingOut = true;
-
-  try {
-    // Clear any in-memory token your wrapper tracks
-    clearToken();
-
-    // Clear your local session marker (you already do this in logout(), but harmless)
-    localStorage.removeItem("session");
-
-    // Trigger Okta signout (this should redirect to origin per your code)
-    // Don't "await" if you want to avoid hanging due to navigation
-    void logout();
-  } catch {
-    // Fallback: if okta signOut fails for some reason, force a hard redirect
-    window.location.assign("/");
-  } finally {
-    // If Okta redirect doesn't happen (blocked/pop-up rules/etc), ensure we land at root
-    // (Optional) You can keep this as a last resort.
-    setTimeout(() => {
-      if (window.location.pathname !== "/") window.location.assign("/");
-    }, 250);
-  }
-}
 
 /*
  * Register a request interceptor.
@@ -141,12 +107,8 @@ function buildHeaders(extra = {}, body) {
   ) {
     headers["Content-Type"] = "application/json";
   }
-  // if (authToken) {
-  //   headers["Authorization"] = `Bearer ${authToken}`;
-  // }
-  const token = getAccessToken();
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
   }
   return headers;
 }
@@ -166,25 +128,6 @@ useResponse(async ({ response, request }) => {
     }
   } catch {
     // ignore parse error
-  }
-
-  const detail = payload?.detail || payload?.message || payload?.error || "";
-  const isExpiredSignature =
-    typeof detail === "string" &&
-    detail.includes("Invalid token: Signature has expired.");
-
-  const isAuthError = response.status === 401 || response.status === 403;
-
-  // If token expired (or generally unauthorized), logout + redirect
-  if (isAuthError && (isExpiredSignature || /expired/i.test(detail))) {
-    await logoutAndRedirectOnce();
-
-    // Optionally throw a consistent error (UI can ignore if redirect happens)
-    throw new ApiError("Session expired. Redirecting to login.", {
-      status: response.status,
-      data: payload,
-      url: request?.url,
-    });
   }
 
   const message =

@@ -130,492 +130,6 @@ export default function PNRTable({
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  const USE_MOCK_PNR_QUEUE = true;
-  const MOCK_USER_GDS_FILTERS = {
-    "ticketer1@email.com": null,
-    "ticketer2@email.com": "AMADEUS",
-  };
-
-  const MOCK_PNR_QUEUE_RESPONSE = useMemo(() => {
-    const tomorrow = new Date();
-    tomorrow.setHours(0, 0, 0, 0);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const dayAfter = new Date();
-    dayAfter.setHours(0, 0, 0, 0);
-    dayAfter.setDate(dayAfter.getDate() + 2);
-
-    const toDateOnly = (value) => {
-      const yyyy = value.getFullYear();
-      const mm = String(value.getMonth() + 1).padStart(2, "0");
-      const dd = String(value.getDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
-    };
-
-    const base = {
-      page: 1,
-      pageSize: 10,
-      totalRecords: 10,
-      totalPages: 1,
-      items: [
-        {
-          pnrId: "S10109",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-23T01:01:09.369845Z",
-          queueArrival: "2026-05-23T01:01:09.369848Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "a8a648ff-88d0-44aa-be8c-bb14dbdc2725",
-        },
-        {
-          pnrId: "S11156",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-23T01:11:56.957815Z",
-          queueArrival: "2026-05-23T01:11:56.957819Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "afaf5852-f249-4fc3-8963-987cd5e6f173",
-        },
-        {
-          pnrId: "S03242",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-23T00:32:42.698318Z",
-          queueArrival: "2026-05-23T00:32:42.698320Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "d29f7f52-f95f-483b-a7ec-e584aa154114",
-        },
-        {
-          pnrId: "S04840",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-23T00:48:40.801422Z",
-          queueArrival: "2026-05-23T00:48:40.801424Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "7f283f3d-8d58-412e-9d35-616d77c761a2",
-        },
-        {
-          pnrId: "S04330",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-23T00:43:30.614880Z",
-          queueArrival: "2026-05-23T00:43:30.614882Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "e8201d81-7d2b-4e46-9de1-a1fa8b5febb0",
-        },
-        {
-          pnrId: "S10349",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-23T01:03:49.872533Z",
-          queueArrival: "2026-05-23T01:03:49.872537Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "b2c7f80a-fccc-4f5f-a1dd-18b3f8400421",
-        },
-        {
-          pnrId: "S92920",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-24T09:29:20.640186Z",
-          queueArrival: "2026-05-24T09:29:20.640189Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "afaf5852-f249-4fc3-8963-987cd5e6f173",
-        },
-        {
-          pnrId: "S93721",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-24T09:37:21.266652Z",
-          queueArrival: "2026-05-24T09:37:21.266654Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "afaf5852-f249-4fc3-8963-987cd5e6f173",
-        },
-        {
-          pnrId: "S93233",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-24T09:32:33.604763Z",
-          queueArrival: "2026-05-24T09:32:33.604765Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "afaf5852-f249-4fc3-8963-987cd5e6f173",
-        },
-        {
-          pnrId: "S92355",
-          status: "PROCESSING",
-          stage: null,
-          lastUpdated: "2026-05-24T09:23:55.621156Z",
-          queueArrival: "2026-05-24T09:23:55.621158Z",
-          ttl: null,
-          humanError: null,
-          errorDetails: null,
-          assignedTo: null,
-          actionRequired: null,
-          brand: null,
-          gds: "SABRE",
-          pcc: null,
-          documentType: "EMD",
-          passengerNames: null,
-          departureDate: null,
-          correlationId: "afaf5852-f249-4fc3-8963-987cd5e6f173",
-        },
-      ],
-    };
-
-    const gdsSequence = [
-      "SABRE",
-      "AMADEUS",
-      "TRAVELPORT",
-      "SABRE",
-      "AMADEUS",
-      "TRAVELPORT",
-      "SABRE",
-      "AMADEUS",
-      "TRAVELPORT",
-      "SABRE",
-    ];
-    const brandSequence = [
-      "FC",
-      "CT",
-      "FC",
-      "CT",
-      "FC",
-      "CT",
-      "FC",
-      "CT",
-      "FC",
-      "CT",
-    ];
-    const ttlByIndex = {
-      1: toDateOnly(tomorrow),
-      4: toDateOnly(dayAfter),
-    };
-
-    return {
-      ...base,
-      items: base.items.map((item, index) => ({
-        ...item,
-        gds: gdsSequence[index] ?? item.gds,
-        brand: brandSequence[index] ?? item.brand,
-        ttl: ttlByIndex[index] ?? item.ttl,
-      })),
-    };
-  }, []);
-
-  const mockAssignedOverridesRef = useRef(new Map());
-  const mockTtlOverridesRef = useRef(new Map());
-
-  const currentLoggedInIdentity = useMemo(() => {
-    return String(loggedInUserName ?? "")
-      .trim()
-      .toLowerCase();
-  }, [loggedInUserName]);
-
-  const applyMockUserFilter = (items) => {
-    const allowedGds = MOCK_USER_GDS_FILTERS[currentLoggedInIdentity];
-    if (!allowedGds) return items;
-    return items.filter(
-      (item) => String(item?.gds ?? "").toUpperCase() === allowedGds,
-    );
-  };
-
-  const normalizeDateOnlyForCompare = (value) => {
-    if (!value) return null;
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    return new Date(
-      Date.UTC(
-        parsed.getUTCFullYear(),
-        parsed.getUTCMonth(),
-        parsed.getUTCDate(),
-      ),
-    );
-  };
-
-  const isTtlUrgent = (value) => {
-    const ttlDate = normalizeDateOnlyForCompare(value);
-    if (!ttlDate) return false;
-
-    const now = new Date();
-    const todayUtc = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
-
-    const diffMs = ttlDate.getTime() - todayUtc.getTime();
-    const oneDayMs = 24 * 60 * 60 * 1000;
-
-    // Highlight rows already overdue or due within the next day.
-    return (diffMs) => oneDayMs;
-  };
-
-  const doesMockItemMatchQuery = (item, query) => {
-    const textMatches = (value, needle) => {
-      if (!needle) return true;
-      return includesCI(value, needle);
-    };
-
-    const itemAssigned = String(item?.assignedTo ?? "").trim();
-    const isItemUnassigned =
-      itemAssigned.length === 0 ||
-      itemAssigned === "-" ||
-      itemAssigned.toLowerCase() === "unassigned";
-
-    if (query.status) {
-      const normalizedItemStatus = String(item?.status ?? "").toUpperCase();
-      if (normalizedItemStatus !== String(query.status).toUpperCase())
-        return false;
-    }
-
-    if (query.assignTo) {
-      if (String(query.assignTo).toLowerCase() === "unassigned") {
-        if (!isItemUnassigned) return false;
-      } else if (!includesCI(itemAssigned, query.assignTo)) {
-        return false;
-      }
-    }
-
-    if (!textMatches(item?.pnrId, query.pnr)) return false;
-    if (!textMatches(item?.brand, query.brand)) return false;
-    if (!textMatches(item?.gds, query.gds)) return false;
-    if (!textMatches(item?.pcc, query.pcc)) return false;
-    if (!textMatches(item?.documentType, query.documentType)) return false;
-    if (!textMatches(item?.passengerNames, query.passengerNames)) return false;
-    if (!textMatches(item?.errorDetails, query.errorDetails)) return false;
-
-    const inRange = (value, from, to) => {
-      if (!from && !to) return true;
-      if (!value) return false;
-      const ts = new Date(value).getTime();
-      if (Number.isNaN(ts)) return false;
-      if (from) {
-        const fromTs = new Date(from).getTime();
-        if (!Number.isNaN(fromTs) && ts < fromTs) return false;
-      }
-      if (to) {
-        const toTs = new Date(to).getTime();
-        if (!Number.isNaN(toTs) && ts > toTs) return false;
-      }
-      return true;
-    };
-
-    if (
-      !inRange(
-        item?.departureDate,
-        query.departureDateFrom,
-        query.departureDateTo,
-      )
-    )
-      return false;
-    if (!inRange(item?.lastUpdated, query.lastUpdatedFrom, query.lastUpdatedTo))
-      return false;
-    if (
-      !inRange(item?.queueArrival, query.queueArrivalFrom, query.queueArrivalTo)
-    )
-      return false;
-    if (!inRange(item?.ttl, query.ttlFrom, query.ttlTo)) return false;
-
-    return true;
-  };
-
-  const sortMockItems = (items, sortParam) => {
-    const [field = "departureDate", dir = "desc"] = String(
-      sortParam ?? "departureDate:desc",
-    ).split(":");
-    const direction = String(dir).toLowerCase() === "asc" ? 1 : -1;
-
-    const readValue = (item) => {
-      switch (field) {
-        case "pnrId":
-          return item?.pnrId ?? "";
-        case "brand":
-          return item?.brand ?? "";
-        case "gds":
-          return item?.gds ?? "";
-        case "pcc":
-          return item?.pcc ?? "";
-        case "documentType":
-          return item?.documentType ?? "";
-        case "status":
-          return item?.status ?? "";
-        case "passengerNames":
-          return item?.passengerNames ?? "";
-        case "departureDate":
-          return item?.departureDate ?? "";
-        case "lastUpdated":
-          return item?.lastUpdated ?? "";
-        case "queueArrival":
-          return item?.queueArrival ?? "";
-        case "ttl":
-          return item?.ttl ?? item?.ttlUtc ?? "";
-        case "humanError":
-          return item?.humanError ?? "";
-        case "errorDetails":
-          return item?.errorDetails ?? "";
-        case "assignTo":
-          return item?.assignedTo ?? "";
-        default:
-          return item?.departureDate ?? "";
-      }
-    };
-
-    const compare = (left, right) => {
-      const asDate = (value) => {
-        if (!value) return Number.NaN;
-        const ts = new Date(value).getTime();
-        return ts;
-      };
-
-      const leftDate = asDate(left);
-      const rightDate = asDate(right);
-      if (!Number.isNaN(leftDate) || !Number.isNaN(rightDate)) {
-        const safeLeft = Number.isNaN(leftDate) ? -Infinity : leftDate;
-        const safeRight = Number.isNaN(rightDate) ? -Infinity : rightDate;
-        if (safeLeft === safeRight) return 0;
-        return safeLeft > safeRight ? 1 : -1;
-      }
-
-      const a = String(left ?? "").toLowerCase();
-      const b = String(right ?? "").toLowerCase();
-      if (a === b) return 0;
-      return a > b ? 1 : -1;
-    };
-
-    return [...items].sort((a, b) => {
-      const primary = compare(readValue(a), readValue(b));
-      if (primary !== 0) return primary * direction;
-      return String(a?.pnrId ?? "").localeCompare(String(b?.pnrId ?? ""));
-    });
-  };
-
-  const getMockPnrQueueList = (query) => {
-    const sourceItems = Array.isArray(MOCK_PNR_QUEUE_RESPONSE?.items)
-      ? MOCK_PNR_QUEUE_RESPONSE.items
-      : [];
-
-    let items = sourceItems.map((item) => {
-      const assignedOverride = mockAssignedOverridesRef.current.get(item.pnrId);
-      const ttlOverride = mockTtlOverridesRef.current.get(item.pnrId);
-
-      return {
-        ...item,
-        assignedTo: assignedOverride ?? item.assignedTo,
-        ttl: ttlOverride ?? item.ttl,
-      };
-    });
-
-    items = applyMockUserFilter(items);
-    items = items.filter((item) => doesMockItemMatchQuery(item, query));
-    items = sortMockItems(items, query.sort);
-
-    const safePageSize = Math.min(
-      100,
-      Math.max(1, Number(query.pageSize) || 10),
-    );
-    const totalRecords = items.length;
-    const totalPages = Math.max(1, Math.ceil(totalRecords / safePageSize));
-    const requestedPage = Math.max(1, Number(query.page) || 1);
-    const safePage = Math.min(requestedPage, totalPages);
-    const start = (safePage - 1) * safePageSize;
-    const pagedItems = items.slice(start, start + safePageSize);
-
-    return {
-      page: safePage,
-      pageSize: safePageSize,
-      totalRecords,
-      totalPages,
-      items: pagedItems,
-    };
-  };
-
   // Convert TTL input (date-only or datetime-local) to UTC ISO string for the API
   const ttlInputToUtcIso = (value) => {
     const s = String(value ?? "").trim();
@@ -896,25 +410,14 @@ export default function PNRTable({
   const filteredRows = useMemo(() => {
     let rowsToFilter = effectiveRows;
 
-    // USER-BASED GDS FILTER (FIX HERE)
-    const userKey = String(loggedInUserName ?? "")
-      .trim()
-      .toLowerCase();
-
-    if (userKey === "ticketer2@email.com") {
-      rowsToFilter = rowsToFilter.filter(
-        (r) => String(r.gds ?? "").toUpperCase() === "AMADEUS",
-      );
-    }
-
-    // MY QUEUE FILTER
+    // ✅ MY QUEUE FILTER
     if (assignedToOverride) {
       rowsToFilter = rowsToFilter.filter(
         (r) => r.assigned === assignedToOverride,
       );
     }
 
-    // REFUND / REISSUE
+    // ✅ REFUND / REISSUE
     if (ticketType !== "Ticketing") {
       if (statusFilter === "assigned") {
         return rowsToFilter.filter((r) => isAssigned(r.assigned));
@@ -927,7 +430,7 @@ export default function PNRTable({
       return rowsToFilter;
     }
 
-    // EMD (existing)
+    // ✅ EMD (existing)
     if (statusFilter !== "all") {
       rowsToFilter = rowsToFilter.filter((r) => r.status === statusFilter);
     }
@@ -1185,23 +688,11 @@ export default function PNRTable({
 
   const applyLocalSecondarySort = (rowsToSort) => {
     // Always enforce:
-    // 1) TTL desc for rows with TTL values (rows without TTL go after rows with TTL)
-    // 2) Departure Date desc
-    // 3) Status priority: error -> human -> processing -> processed
-    // 4) Queue Arrival desc (latest first)
+    // 1) Status priority: error -> human -> processing -> processed
+    // 2) Queue Arrival desc (latest first)
+    // 3) Departure Date desc
     // Tie-breaker: PNR
     return [...rowsToSort].sort((a, b) => {
-      const ta = a.ttl ? new Date(a.ttl).getTime() : -Infinity;
-      const tb = b.ttl ? new Date(b.ttl).getTime() : -Infinity;
-      const aHasTtl = Number.isFinite(ta);
-      const bHasTtl = Number.isFinite(tb);
-
-      if (aHasTtl !== bHasTtl) return bHasTtl - aHasTtl;
-      if (aHasTtl && bHasTtl && ta !== tb) return tb - ta;
-
-      const d = compareDatesDesc(a.departureDate, b.departureDate);
-      if (d !== 0) return d;
-
       const ra = STATUS_RANK[a.status] ?? 99;
       const rb = STATUS_RANK[b.status] ?? 99;
       if (ra !== rb) return ra - rb;
@@ -1213,6 +704,9 @@ export default function PNRTable({
         ? new Date(b.queueArrival).getTime()
         : -Infinity;
       if (qa !== qb) return qb - qa;
+
+      const d = compareDatesDesc(a.departureDate, b.departureDate);
+      if (d !== 0) return d;
 
       return String(a.pnr ?? "").localeCompare(String(b.pnr ?? ""));
     });
@@ -1232,9 +726,8 @@ export default function PNRTable({
 
     try {
       const query = buildQueryParams();
-      const data = USE_MOCK_PNR_QUEUE
-        ? getMockPnrQueueList(query)
-        : ((res) => res?.data ?? res)(await getPnrQueueList(query));
+      const res = await getPnrQueueList(query);
+      const data = res?.data ?? res;
 
       // Safety: ignore out-of-order responses
       if (seq !== requestSeqRef.current) {
@@ -1437,7 +930,6 @@ export default function PNRTable({
    * -----------------------------
    */
   const [ttlLocalMap, setTtlLocalMap] = useState(() => new Map());
-  const [assignedLocalMap, setAssignedLocalMap] = useState(() => new Map());
 
   useEffect(() => {
     setTtlLocalMap((prev) => {
@@ -1450,20 +942,7 @@ export default function PNRTable({
     });
   }, [pageRows]);
 
-  useEffect(() => {
-    setAssignedLocalMap((prev) => {
-      const next = new Map();
-      const has = new Set(pageRows.map((r) => r.pnr));
-      for (const [pnr, val] of prev) {
-        if (has.has(pnr)) next.set(pnr, val);
-      }
-      return next;
-    });
-  }, [pageRows]);
-
   const getTTLForRow = (row) => ttlLocalMap.get(row.pnr) || row.ttl || null;
-  const getAssignedForRow = (row) =>
-    assignedLocalMap.get(row.pnr) || row.assigned || null;
 
   const [ttlModal, setTtlModal] = useState({
     open: false,
@@ -1584,19 +1063,7 @@ export default function PNRTable({
         assignTo,
       };
 
-      if (!USE_MOCK_PNR_QUEUE) {
-        await patchAssignPnr(pnrId, payload);
-      }
-
-      if (USE_MOCK_PNR_QUEUE) {
-        mockAssignedOverridesRef.current.set(pnrId, assignTo);
-      }
-
-      setAssignedLocalMap((prev) => {
-        const next = new Map(prev);
-        next.set(pnrId, assignTo);
-        return next;
-      });
+      await patchAssignPnr(pnrId, payload);
 
       // Apply local UI update for that PNR immediately
       setApiRows((prev) =>
@@ -2238,22 +1705,14 @@ export default function PNRTable({
               const selectable = isSelectable(row);
               const isChecked = selectable && selectedPNRs.has(row.pnr);
               const ttlForRow = getTTLForRow(row);
-              const assignedForRow = getAssignedForRow(row);
-              const rowIsUrgent = isTtlUrgent(ttlForRow);
 
               return (
                 <tr
                   key={row.pnr}
                   onClick={() => (!isNonEmdTicket ? onSelect(row) : "")}
-                  className={`${!isNonEmdTicket ? "cursor-pointer" : "cursor-default"} ${
-                    rowIsUrgent
-                      ? "bg-red-100/80 hover:bg-red-100/90"
-                      : "hover:bg-black/5"
-                  } ${
+                  className={`${!isNonEmdTicket ? "cursor-pointer hover:bg-black/5" : "cursor-default"} ${
                     !isNonEmdTicket && selected?.pnr === row.pnr
-                      ? rowIsUrgent
-                        ? "bg-red-100/80"
-                        : "bg-black/10"
+                      ? "bg-black/10"
                       : ""
                   }`}
                 >
@@ -2380,7 +1839,7 @@ export default function PNRTable({
 
                   {/* Assigned */}
                   <td className="w-[240px] text-black/80 truncate">
-                    {String(assignedForRow ?? "").trim() || "-"}
+                    {String(row.assigned ?? "").trim() || "-"}
                   </td>
 
                   {/* Action */}
@@ -2591,11 +2050,7 @@ export default function PNRTable({
             };
 
             // Call the new Set TLL endpoint
-            if (!USE_MOCK_PNR_QUEUE) {
-              await patchTtlPnr(ttlModal.pnr, payload_utc);
-            } else {
-              mockTtlOverridesRef.current.set(ttlModal.pnr, ttlUtc);
-            }
+            await patchTtlPnr(ttlModal.pnr, payload_utc);
 
             // Backward compatibility: still notify parent if provided
             const payload = {
