@@ -1,13 +1,52 @@
-const map = {
-  processed: { label: 'Processed', color: 'bg-green-500/20 text-green-700 border-green-500/40', icon: 'fa-solid fa-circle-check' },
-  processing: { label: 'Processing', color: 'bg-yellow-500/20 text-yellow-700 border-yellow-500/40', icon: 'fa-solid fa-spinner' },
-  error: { label: 'Error on Processing', color: 'bg-red-500/20 text-red-700 border-red-500/40', icon: 'fa-solid fa-triangle-exclamation' },
-  human: { label: 'Human Input Required', color: 'bg-gray-500/20 text-gray-700 border-gray-500/40', icon: 'fa-solid fa-user-pen' },
+function normalizeStatus(v) {
+  return (v ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
 }
 
 export default function StatusBadge({ status }) {
-  const { label, color, icon } = map[status] || map['processing'];
+  const raw = status ?? "";
+  const normalized = normalizeStatus(raw);
+
+  let className =
+    "inline-flex items-center gap-1 border rounded-md px-3 py-2 text-xs w-[180px] justify-center";
+  let icon = null;
+  let label = raw || "—";
+
+  // IMPORTANT: check error-like statuses BEFORE processing
+  if (normalized === "sent to oasis queue" || normalized === "sent to oasis") {
+    className += " bg-red-50 text-red-700 border-red-200";
+    icon = <i className="fa-solid fa-circle-exclamation" />;
+    label = "Sent to Oasis Queue";
+  } else if (normalized.includes("error")) {
+    className += " bg-red-50 text-red-700 border-red-200";
+    icon = <i className="fa-solid fa-triangle-exclamation" />;
+    label = "Error on processing";
+  } else if (normalized === "human" || normalized === "human input required") {
+    className += " bg-slate-200 text-slate-700 border-slate-200";
+    icon = <i className="fa-solid fa-user-pen" />;
+    label = "Human Input Required";
+  } else if (normalized === "processed") {
+    className += " bg-green-100 text-green-700 border-green-200";
+    icon = <i className="fa-solid fa-circle-check" />;
+    label = "Processed";
+  } else if (normalized === "processing") {
+    className += " bg-amber-50 text-amber-700 border-amber-200";
+    icon = <i className="fa-solid fa-spinner fa-spin" />;
+    label = "Processing";
+  } else {
+    className += " bg-black/5 text-black/70 border-black/10";
+    icon = <i className="fa-regular fa-circle" />;
+    label = raw || "—";
+  }
+
   return (
-    <span className={`inline-flex items-center gap-1 border rounded-md px-3 py-2 text-xs w-[180px] justify-center ${color}`}><i className={icon}></i> {label}</span>
-  )
+    <span className={className}>
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
 }

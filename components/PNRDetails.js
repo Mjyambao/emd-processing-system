@@ -230,31 +230,59 @@ function coerceKnowledgeSources(value) {
     const s = normalize(u);
     return s ? s : null;
   };
-  const toItem = (v) => {
-    if (typeof v.source_article === "string") {
-      const url = normalizeUrl(v.source_article);
-      return url ? { title: url, url } : null;
-    }
-    if (v && typeof v === "object") {
-      const url = normalizeUrl(v.source_url || v.source_link);
-      const title = normalize(v.source_article);
-      return url ? { title: title || url, url } : null;
-    }
-    return null;
+
+  const toItem = (entry) => {
+    if (!entry || typeof entry !== "object") return null;
+
+    const url = normalizeUrl(
+      entry.full_path ||
+        entry.url ||
+        entry.href ||
+        entry.link ||
+        entry.uri ||
+        entry.source_article_url ||
+        entry.source_url ||
+        entry.source_link ||
+        entry.value,
+    );
+
+    const title = normalize(
+      entry.document_name ||
+        entry.source_article ||
+        entry.source_title ||
+        entry.title ||
+        entry.label ||
+        entry.name ||
+        entry.text,
+    );
+
+    if (!url && !title) return null;
+    return {
+      title: title || url || "Knowledge source",
+      url: url || null,
+    };
   };
-  const arr = Array.isArray(value) ? value : [];
-  const out = [];
-  for (const v of arr) {
-    const item = toItem(v.source_article);
-    if (item) out.push(item);
-  }
-  // de-dupe by url
+
+  const rawItems = Array.isArray(value)
+    ? value
+    : Array.isArray(value?.knowledge_source)
+      ? value.knowledge_source
+      : Array.isArray(value?.knowledgeSources)
+        ? value.knowledgeSources
+        : Array.isArray(value?.sources)
+          ? value.sources
+          : [];
+
   const seen = new Set();
-  return out.filter((it) => {
-    if (seen.has(it.url)) return false;
-    seen.add(it.url);
-    return true;
-  });
+  return rawItems
+    .map((entry) => toItem(entry))
+    .filter(Boolean)
+    .filter((item) => {
+      const key = `${item.url || ""}::${item.title || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function pickOtherInfoFromApi(pnrApi) {
@@ -293,7 +321,9 @@ function mapApiToPnrDetails(pnrApi) {
     contactEmail: passengersRaw?.[0]?.primaryEmail || "—",
     contactPhone: passengersRaw?.[0]?.primaryPhoneNumber || "—",
     otherInfo: pickOtherInfoFromApi(pnrApi),
-    errorDesc: pnrApi?.errorDetails || null,
+    errorDetails: pnrApi?.errorDetails || null,
+    humanError: pnrApi?.humanError || null,
+    errorDesc: pnrApi?.errorDetails || pnrApi?.humanError || null,
     documentType: header?.documentType || "—",
     brand: header?.brandCode || "—",
     gds: header?.gds || "—",
@@ -352,9 +382,14 @@ function mapApiToPnrDetails(pnrApi) {
       const rfisc = item?.rfisc || "";
       const emdDesc = item?.emdDesc || item?.commercialName || "";
 
+      const emdStatus =
+        normalize(item?.emdStatusCode) && normalize(item?.emdStatusName)
+          ? `${item.emdStatusCode} - ${item.emdStatusName}`
+          : item?.emdStatusName || item?.emdStatusCode || "—";
+
       const emd = {
         emdNo,
-        emdStatus: item?.emdStatusName || item?.emdStatusCode || "—",
+        emdStatus,
         emdTotal,
         rfic,
         rfisc,
@@ -379,6 +414,7 @@ function mapApiToPnrDetails(pnrApi) {
         isCommissionable: item?.isCommissionable,
         flightApplicabilityType: item?.flightApplicabilityType,
         emdStatusCode: item?.emdStatusCode,
+        emdStatusName: item?.emdStatusName,
         subtotalAmount: item?.subtotalAmount,
         taxesAmount: item?.taxesAmount,
         totalAmount: item?.totalAmount,
@@ -482,11 +518,17 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
     const next = deepClone(prev);
 
     // Update top-level fields to reflect latest server state
-    next.status = fresh.status ?? next.status;
+
+    if (fresh.status) {
+      next.status = fresh.status; //
+    }
+
     next.stage = fresh.stage ?? next.stage;
     next.actionRequired = fresh.actionRequired ?? next.actionRequired;
     next.assignedTo = fresh.assignedTo ?? next.assignedTo;
     next.assignedBy = fresh.assignedBy ?? next.assignedBy;
+    next.errorDetails = fresh.errorDetails ?? next.errorDetails;
+    next.humanError = fresh.humanError ?? next.humanError;
     next.errorDesc = fresh.errorDesc ?? next.errorDesc;
     next.otherInfo = fresh.otherInfo ?? next.otherInfo;
     next.header = fresh.header ?? next.header;
@@ -519,6 +561,17 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
         emd.aeBuiltUtc = fe.aeBuiltUtc ?? emd.aeBuiltUtc;
         emd.aeBuiltBy = fe.aeBuiltBy ?? emd.aeBuiltBy;
         emd.errorDesc = fe.errorDesc ?? emd.errorDesc;
+        emd.aiSuggestions = fe.aiSuggestions ?? emd.aiSuggestions;
+        emd.buildFeedback = fe.buildFeedback ?? emd.buildFeedback;
+        emd.reviewedBy = fe.reviewedBy ?? emd.reviewedBy;
+        emd.reviewedAtUtc = fe.reviewedAtUtc ?? emd.reviewedAtUtc;
+        emd.emdStatus = fe.emdStatus ?? emd.emdStatus;
+        emd.emdStatusCode = fe.emdStatusCode ?? emd.emdStatusCode;
+        emd.emdStatusName = fe.emdStatusName ?? emd.emdStatusName;
+        emd.totalAmount = fe.totalAmount ?? emd.totalAmount;
+        emd.currencyCode = fe.currencyCode ?? emd.currencyCode;
+        emd.emdTotal = fe.emdTotal ?? emd.emdTotal;
+        emd.otherInfo = fe.otherInfo ?? emd.otherInfo;
 
         // If the server changed identifiers or other non-editable metadata
         emd.emdNo = fe.emdNo ?? emd.emdNo;
@@ -608,6 +661,11 @@ export default function PNRDetails({
       setPnrDetailsAndRef((prev) =>
         mergePnrDetailsSilently(prev, fresh, selected?.status || prev?.status),
       );
+
+      const freshComparable = statusToComparable(fresh?.status ?? "");
+      if (freshComparable && freshComparable !== "processing") {
+        setStatusUiOverride(null);
+      }
     } catch (e) {
       if (e?.name !== "AbortError") {
         console.warn("Silent PNR details refetch failed", e);
@@ -686,23 +744,69 @@ export default function PNRDetails({
   };
 
   // Status helpers
-  const statusSource = pnrDetails?.status ?? selected?.status ?? "";
-  const statusComparable = statusToComparable(statusSource);
+  const [statusUiOverride, setStatusUiOverride] = useState(null);
+
+  // Canonical server statuses from parent row + details API
+  const selectedStatusSource = selected?.status ?? "";
+  const detailsStatusSource = pnrDetails?.status ?? "";
+
+  const selectedStatusComparable = statusToComparable(selectedStatusSource);
+  const detailsStatusComparable = statusToComparable(detailsStatusSource);
+
+  // Resolve the best non-local status first.
+  // Priority rule:
+  // 1. Non-processing details status wins
+  // 2. Non-processing selected/table status wins
+  // 3. Otherwise fall back to whatever exists
+  const resolvedServerStatus =
+    detailsStatusComparable && detailsStatusComparable !== "processing"
+      ? detailsStatusSource
+      : selectedStatusComparable && selectedStatusComparable !== "processing"
+        ? selectedStatusSource
+        : detailsStatusSource || selectedStatusSource || "";
+
+  const isSamePnr =
+    Boolean(statusUiOverride?.pnr && selected?.pnr) &&
+    statusUiOverride.pnr === selected.pnr;
+
+  // Only show UI override when no real non-processing status has arrived yet
+  const shouldShowProcessingOverride =
+    isSamePnr && statusToComparable(resolvedServerStatus) === "processing";
+
+  const displayStatusSource = shouldShowProcessingOverride
+    ? statusUiOverride.status
+    : resolvedServerStatus;
+
+  const statusComparable = statusToComparable(displayStatusSource);
 
   const isHumanRequired =
     statusComparable === "human" || statusComparable === "human input required";
   const isProcessed = statusComparable === "processed";
+  const isProcessing = statusComparable === "processing";
   const isError = statusComparable.includes("error");
+  const isSentToOasisQueue =
+    statusComparable === "sent to oasis queue" ||
+    statusComparable === "sent to oasis";
 
-  // Error details text
-  const errorDetailsText =
+  const showAiAssistSection = isHumanRequired || isProcessed;
+
+  const issueDetailsText =
+    pnrDetails?.errorDetails ||
+    pnrDetails?.humanError ||
+    pnrDetails?.actionRequired ||
+    pnrDetails?.errorDesc ||
     selected?.errorDetails ||
     selected?.errorDesc ||
-    pnrDetails?.errorDetails ||
-    pnrDetails?.errorDesc ||
+    selected?.error ||
     "";
 
-  const showErrorPanel = isError && !!normalize(errorDetailsText);
+  const issueDetailsLabel = isSentToOasisQueue ? "Reason" : "Error Details";
+  const issueModalTitle = isSentToOasisQueue
+    ? "Detailed Reason"
+    : "Detailed Error";
+
+  const showIssuePanel =
+    (isError || isSentToOasisQueue) && !!normalize(issueDetailsText);
 
   // -------------------------
   // Load details
@@ -1165,29 +1269,32 @@ export default function PNRDetails({
       return;
     }
 
+    const currentComparable = statusToComparable(
+      pnrDetails?.status ?? selected?.status ?? "",
+    );
+
+    const canShowProcessing =
+      currentComparable === "human" ||
+      currentComparable === "human input required";
+
     setIsProcessSubmitting(true);
+
     try {
+      if (canShowProcessing) {
+        setStatusUiOverride({ pnr: pnrId, status: "Processing" });
+      }
+
       await postProcessPNR(pnrId);
 
-      setPnrDetailsAndRef((prev) => {
-        if (!prev) return prev;
-        const next = deepClone(prev);
-        next.status = "Processing";
-        if (Array.isArray(next.passengers)) {
-          next.passengers = next.passengers.map((p) => ({
-            ...p,
-            status: "Processing",
-          }));
-        }
-        return next;
-      });
+      // Pull server truth immediately after the action
+      await regetPnrDetailsSilently(pnrId);
 
       callbacks.processPNR({
         pnr: pnrId,
-        passengers: pnrDetails.passengers,
+        passengers: pnrDetails?.passengers ?? [],
       });
 
-      const first = pnrDetails.passengers?.[0]?.emds?.[0];
+      const first = pnrDetails?.passengers?.[0]?.emds?.[0];
       if (first && onApprove) {
         onApprove({
           pnr: pnrId,
@@ -1203,26 +1310,13 @@ export default function PNRDetails({
         title: `PNR ${pnrId} processed`,
       });
     } catch (e) {
+      setStatusUiOverride(null);
+
       const msg = `Failed to Process PNR: ${e?.message || "Unknown error"}`;
       showToast({ variant: "error", ariaLabel: msg, title: msg });
     } finally {
       setIsProcessSubmitting(false);
     }
-  }
-
-  function requestRemoveFromQueue() {
-    setIsRemoveConfirmOpen(true);
-  }
-
-  function confirmRemoveFromQueue() {
-    setIsRemoveConfirmOpen(false);
-    callbacks.removeFromQueue(selected.pnr);
-
-    showToast({
-      variant: "info",
-      ariaLabel: `PNR ${selected.pnr} removed from list`,
-      title: `PNR ${selected.pnr} removed from list`,
-    });
   }
 
   function cancelRemoveFromQueue() {
@@ -1325,12 +1419,30 @@ export default function PNRDetails({
   const openErrorDetails = () => {
     console.log("Open");
     setIsErrorModalOpen(true);
-    if (!normalize(errorDetailsText)) return;
+    if (!normalize(issueDetailsText)) return;
   };
 
   const closeErrorDetails = () => {
     setIsErrorModalOpen(false);
   };
+
+  // Reset temporary override when user switches to another PNR
+  useEffect(() => {
+    setStatusUiOverride(null);
+  }, [selected?.pnr]);
+
+  // Retire the temporary override as soon as a real non-processing status arrives
+  useEffect(() => {
+    if (!selected?.pnr) return;
+
+    const comparable = statusToComparable(
+      pnrDetails?.status ?? selected?.status ?? "",
+    );
+
+    if (comparable && comparable !== "processing") {
+      setStatusUiOverride(null);
+    }
+  }, [selected?.pnr, pnrDetails?.status, selected?.status]);
 
   if (!selected) return null;
 
@@ -1364,8 +1476,8 @@ export default function PNRDetails({
           <div className="text-[13px] text-black/60 flex flex-col items-end gap-2 w-full md:w-auto">
             <div>
               <span className="mr-2">Current Status: </span>
-              <StatusBadge status={selected.status} />
-              {isError ? (
+              <StatusBadge status={displayStatusSource} />
+              {showIssuePanel ? (
                 <>
                   <FadeIn as="div" className="mt-2">
                     <div className="text-left mb-[-20px] ml-[-20px]">
@@ -1384,7 +1496,10 @@ export default function PNRDetails({
                     </div>
 
                     <PNRDetailsActionBar
-                      errorDetails={selected.error}
+                      errorDetails={issueDetailsText}
+                      detailsLabel={issueDetailsLabel}
+                      disableActions={isSentToOasisQueue}
+                      blockedActionText="Actions are blocked while this PNR is in Sent to Oasis Queue status."
                       onRetry={() => callbacks.retry(selected.pnr)}
                       onRemoveFromQueue={() => requestRemoveFromQueue()}
                       onSendToQueue={({
@@ -1692,10 +1807,10 @@ export default function PNRDetails({
                                               </>
                                             }
                                             v={
-                                              emd.emdStatusCode != null &&
-                                              emd.emdStatusName != null
+                                              normalize(emd.emdStatusCode) &&
+                                              normalize(emd.emdStatusName)
                                                 ? `${emd.emdStatusCode} - ${emd.emdStatusName}`
-                                                : "—"
+                                                : emd.emdStatus || "—"
                                             }
                                           />
                                           <Field
@@ -1705,7 +1820,11 @@ export default function PNRDetails({
                                                 EMD Total
                                               </>
                                             }
-                                            v={emd.totalAmount || "—"}
+                                            v={
+                                              emd.emdTotal ||
+                                              emd.totalAmount ||
+                                              "—"
+                                            }
                                           />
                                           <Field
                                             k={
@@ -1826,8 +1945,8 @@ export default function PNRDetails({
                                         </div>
                                       </FadeIn>
 
-                                      {/* Notes / Suggestions (Human Input Required only) */}
-                                      {isHumanRequired && (
+                                      {/* AI Suggestions / LLM Metrics / Knowledge Source */}
+                                      {showAiAssistSection && (
                                         <div className="mt-2">
                                           <div
                                             className={`rounded p-2 border ${
@@ -1954,96 +2073,48 @@ export default function PNRDetails({
                                                     </div>
 
                                                     {(() => {
-                                                      const ai =
-                                                        emd?.aiSuggestions;
-                                                      const ks =
-                                                        ai?.knowledge_source;
+                                                      const sources =
+                                                        coerceKnowledgeSources(
+                                                          emd?.aiSuggestions,
+                                                        );
 
-                                                      const pickHref = (u) => {
-                                                        if (!u) return null;
-                                                        if (
-                                                          typeof u === "string"
-                                                        )
-                                                          return u;
-                                                        if (
-                                                          typeof u === "object"
-                                                        ) {
-                                                          return (
-                                                            u.url ||
-                                                            u.link ||
-                                                            u.href ||
-                                                            u.value ||
-                                                            u.uri ||
-                                                            null
-                                                          );
-                                                        }
-                                                        return null;
-                                                      };
-
-                                                      if (
-                                                        Array.isArray(ks) &&
-                                                        ks.length > 0
-                                                      ) {
-                                                        const valid = ks
-                                                          .map((item) => {
-                                                            const label =
-                                                              item?.source_article;
-                                                            if (!label)
-                                                              return null;
-                                                            const href =
-                                                              pickHref(
-                                                                item?.source_article_url,
-                                                              );
-                                                            return {
-                                                              label:
-                                                                String(label),
-                                                              href,
-                                                            };
-                                                          })
-                                                          .filter(Boolean);
-
-                                                        if (
-                                                          valid.length === 0
-                                                        ) {
-                                                          return (
-                                                            <div className="text-[12px] text-black/60">
-                                                              -
-                                                            </div>
-                                                          );
-                                                        }
-
+                                                      if (!sources.length) {
                                                         return (
-                                                          <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                                            {valid.map(
-                                                              (src, idx2) =>
-                                                                src.href ? (
-                                                                  <a
-                                                                    key={`${src.label}-${idx2}`}
-                                                                    href={
-                                                                      src.href
-                                                                    }
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px] whitespace-nowrap"
-                                                                  >
-                                                                    {src.label}
-                                                                  </a>
-                                                                ) : (
-                                                                  <span
-                                                                    key={`${src.label}-${idx2}`}
-                                                                    className="text-[12px] text-black/60 whitespace-nowrap"
-                                                                  >
-                                                                    {src.label}
-                                                                  </span>
-                                                                ),
-                                                            )}
+                                                          <div className="text-[12px] text-black/60">
+                                                            -
                                                           </div>
                                                         );
                                                       }
 
                                                       return (
-                                                        <div className="text-[12px] text-black/60">
-                                                          -
+                                                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                                          {sources.map(
+                                                            (src, idx2) =>
+                                                              src.url ? (
+                                                                <a
+                                                                  key={`${src.title}-${idx2}`}
+                                                                  href={src.url}
+                                                                  target="_blank"
+                                                                  rel="noreferrer"
+                                                                  className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px] break-all"
+                                                                  title={
+                                                                    src.title
+                                                                  }
+                                                                >
+                                                                  {src.title}
+                                                                </a>
+                                                              ) : (
+                                                                <span
+                                                                  key={`${src.title}-${idx2}`}
+                                                                  className="text-[12px] text-black/60 break-all"
+                                                                  title={
+                                                                    src.title
+                                                                  }
+                                                                >
+                                                                  {src.title}
+                                                                </span>
+                                                              ),
+                                                          )}
                                                         </div>
                                                       );
                                                     })()}
@@ -2485,7 +2556,7 @@ export default function PNRDetails({
             style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
           >
             <div className="flex items-center justify-between gap-2">
-              <h5 className="text-lg font-semibold">Detailed Error</h5>
+              <h5 className="text-lg font-semibold">{issueModalTitle}</h5>
               <button
                 className="btn h-8 px-2"
                 onClick={closeErrorDetails}
@@ -2497,7 +2568,7 @@ export default function PNRDetails({
             </div>
             <div className="mt-3">
               <pre className="bg-red-50 border border-red-200 p-3 rounded max-h-[60vh] overflow-auto text-xs leading-relaxed whitespace-pre-wrap break-words">
-                {errorDetailsText || "—"}
+                {issueDetailsText || "—"}
               </pre>
             </div>
           </div>

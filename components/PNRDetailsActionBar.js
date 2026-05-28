@@ -6,6 +6,11 @@ export default function PNRDetailsActionBar({
   onRetry,
   onRemoveFromQueue,
   onSendToQueue,
+  detailsLabel = "Error Details",
+  actionLabel = "Action",
+  actionButtonLabel = "Select Action",
+  disableActions = false,
+  blockedActionText = "Actions are not available for this status.",
 }) {
   const [open, setOpen] = useState(false);
   const [oasisOpen, setOasisOpen] = useState(false);
@@ -15,26 +20,34 @@ export default function PNRDetailsActionBar({
   return (
     <div>
       <div className="text-sm w-[250px] mb-2">
-        <span className="text-black/60 mr-1">Error Details:</span>
+        <span className="text-black/60 mr-1">{detailsLabel}:</span>
         <strong className="font-semibold">
           {errorDetails != "" ? errorDetails : "-"}
         </strong>
       </div>
 
       <div>
-        <span className="text-black/60 mr-2">Action:</span>
+        <span className="text-black/60 mr-2">{actionLabel}:</span>
         <button
           type="button"
-          className="btn btn-secondary h-8 w-[140px] text-black/50"
-          onClick={() => setOpen((v) => !v)}
+          className="btn btn-secondary h-8 w-[140px] text-black/50 disabled:opacity-60 disabled:cursor-not-allowed"
+          onClick={() => !disableActions && setOpen((v) => !v)}
           aria-haspopup="menu"
-          aria-expanded={open}
+          aria-expanded={!disableActions && open}
+          disabled={disableActions}
+          title={disableActions ? blockedActionText : actionButtonLabel}
         >
-          Select Action
-          <i className={`fa-solid fa-chevron-${open ? "up" : "down"} ml-4`} />
+          {disableActions ? "Blocked" : actionButtonLabel}
+          <i
+            className={`fa-solid fa-chevron-${open && !disableActions ? "up" : "down"} ml-4`}
+          />
         </button>
 
-        {open && (
+        {disableActions && (
+          <div className="text-xs text-black/50 mt-1">{blockedActionText}</div>
+        )}
+
+        {!disableActions && open && (
           <div className="absolute right-25 w-[220px] bg-white border border-black/10 rounded shadow-lg z-[120]">
             <button
               className="w-full text-left px-3 py-2 hover:bg-black/5 text-sm"
@@ -83,7 +96,7 @@ export default function PNRDetailsActionBar({
 }
 
 function OasisQueueModal({ open, onClose, names = [], onSubmit }) {
-  const [queueType, setQueueType] = useState("main"); // 'main' | 'personal'
+  const [queueType, setQueueType] = useState("main");
   const [selected, setSelected] = useState("");
 
   const canSubmit =

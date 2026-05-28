@@ -494,7 +494,7 @@ export default function PNRTable({
    *  Polling
    * --------
    */
-  const POLL_INTERVAL_MS = 30_000; //miliseconds (30 seconds)
+  const POLL_INTERVAL_MS = 5_000; //miliseconds (5 seconds)
 
   // Latest snapshots for diffing
   const apiRowsRef = useRef([]);
