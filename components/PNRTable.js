@@ -103,16 +103,32 @@ export default function PNRTable({
     const s = String(raw ?? "")
       .trim()
       .toLowerCase();
+
     if (!s) return "";
-    if (s === "error" || s.includes("error")) return "error";
+
+    if (s === "error" || s === "error on processing" || s.includes("error")) {
+      return "error";
+    }
+
     if (
       s.includes("human") ||
       s.includes("input_required") ||
       s.includes("input required")
-    )
+    ) {
       return "human";
+    }
+
+    if (
+      s.includes("sent back to oasis") ||
+      s.includes("sent_back_to_oasis") ||
+      s.includes("sentbacktooasis")
+    ) {
+      return "sent_back_to_oasis";
+    }
+
     if (s.includes("processing")) return "processing";
     if (s.includes("processed") || s.includes("completed")) return "processed";
+
     return s;
   };
 
@@ -123,12 +139,31 @@ export default function PNRTable({
         return "ERROR";
       case "human":
         return "HUMAN_INPUT_REQUIRED";
+      case "sent_back_to_oasis":
+        return "SENT_BACK_TO_OASIS";
       case "processing":
         return "PROCESSING";
       case "processed":
         return "PROCESSED";
       default:
         return s || undefined;
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (String(status ?? "").toLowerCase()) {
+      case "error":
+        return "Error on Processing";
+      case "human":
+        return "Human Input Required";
+      case "sent_back_to_oasis":
+        return "Sent back to Oasis";
+      case "processing":
+        return "Processing";
+      case "processed":
+        return "Processed";
+      default:
+        return String(status ?? "") || "Unknown";
     }
   };
 
@@ -147,10 +182,79 @@ export default function PNRTable({
     if (!value) return "";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+
     const yyyy = d.getUTCFullYear();
     const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
     const dd = String(d.getUTCDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getUtcStartOfDayMs = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  };
+
+  const compareDatesAsc = (a, b) => {
+    const da = getUtcStartOfDayMs(a);
+    const db = getUtcStartOfDayMs(b);
+
+    if (da == null && db == null) return 0;
+    if (da == null) return 1;
+    if (db == null) return -1;
+
+    return da - db;
+  };
+
+  const compareDatesDesc = (a, b) => {
+    const da = getUtcStartOfDayMs(a);
+    const db = getUtcStartOfDayMs(b);
+
+    if (da == null && db == null) return 0;
+    if (da == null) return 1;
+    if (db == null) return -1;
+
+    return db - da;
+  };
+
+  const getPriorityDateForRow = (row, ttlValueOverride) => {
+    return ttlValueOverride || row?.ttl || row?.departureDate || null;
+  };
+
+  const getDaysFromToday = (value) => {
+    const dateMs = getUtcStartOfDayMs(value);
+    if (dateMs == null) return null;
+
+    const now = new Date();
+    const todayMs = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+
+    return Math.floor((dateMs - todayMs) / 86400000);
+  };
+
+  const getUrgencyRowClass = (row, ttlValueOverride) => {
+    const daysFromToday = getDaysFromToday(
+      getPriorityDateForRow(row, ttlValueOverride),
+    );
+
+    if (daysFromToday == null) return "";
+
+    // overdue
+    if (daysFromToday < 0) {
+      return "bg-red-50 hover:bg-red-100";
+    }
+
+    // 2 days and below
+    if (daysFromToday <= 3) {
+      return "bg-red-100 hover:bg-red-200";
+    }
+
+    return "";
   };
 
   // Convert TTL input (date-only or datetime-local) to UTC ISO string for the API
@@ -260,22 +364,17 @@ export default function PNRTable({
   const isSelectable = (row) =>
     row.status === "error" || row.status === "human";
 
-  // Status priority: Error, Human, Processing, Processed
+  // Status priority: Error, Human, Sent back to Oasis, Processing, Processed
   const STATUS_RANK = useMemo(
     () => ({
       error: 0,
       human: 1,
-      processing: 2,
-      processed: 3,
+      sent_back_to_oasis: 2,
+      processing: 3,
+      processed: 4,
     }),
     [],
   );
-
-  const compareDatesDesc = (a, b) => {
-    const da = a ? new Date(a).getTime() : -Infinity;
-    const db = b ? new Date(b).getTime() : -Infinity;
-    return db - da;
-  };
 
   /**
    * -----------------------------
@@ -399,15 +498,15 @@ export default function PNRTable({
    * -----------------------------
    * Sorting (server + local tie-break)
    * -----------------------------
-   * Default: Departure Date desc, then Status priority
+   * Default: TTL ASC, then Status priority and departure date desc
    */
-  const [sort, setSort] = useState({ key: "departureDate", dir: "desc" });
+  const [sort, setSort] = useState({ key: "ttl", dir: "asc" });
 
   const toggleSort = (key) => {
     setSort((prev) => {
       if (prev.key !== key) return { key, dir: "asc" };
       if (prev.dir === "asc") return { key, dir: "desc" };
-      return { key: "departureDate", dir: "desc" }; // revert to default
+      return { key: "ttl", dir: "asc" }; // revert to new default
     });
   };
 
@@ -462,9 +561,22 @@ export default function PNRTable({
   }, [effectiveRows, statusFilter, ticketType, assignedToOverride]);
 
   const statusOptions = useMemo(() => {
-    const set = new Set(filteredRows.map((r) => r.status).filter(Boolean));
-    const opts = Array.from(set);
-    return opts.length ? opts : ["processed", "processing", "error", "human"];
+    const defaults = [
+      "error",
+      "human",
+      "sent_back_to_oasis",
+      "processing",
+      "processed",
+    ];
+
+    const set = new Set(
+      [
+        ...defaults,
+        ...filteredRows.map((r) => r.status).filter(Boolean),
+      ].filter(Boolean),
+    );
+
+    return Array.from(set);
   }, [filteredRows]);
 
   const assigneeOptions = assignees.length
@@ -710,16 +822,41 @@ export default function PNRTable({
   };
 
   const applyLocalSecondarySort = (rowsToSort) => {
-    // Always enforce:
-    // 1) Status priority: error -> human -> processing -> processed
-    // 2) Queue Arrival desc (latest first)
-    // 3) Departure Date desc
-    // Tie-breaker: PNR
+    // Final order:
+    // 1) TTL date asc (rows with TTL come first and earlier TTLs are prioritized)
+    // 2) Status priority:
+    //    Error on Processing -> Human Input Required -> Sent back to Oasis -> Processing -> Processed
+    // 3) Departure Date asc
+    // 4) Queue Arrival desc
+    // 5) PNR
     return [...rowsToSort].sort((a, b) => {
+      const aHasTtl = getUtcStartOfDayMs(a.ttl) != null;
+      const bHasTtl = getUtcStartOfDayMs(b.ttl) != null;
+
+      // Rows with TTL should sort before rows without TTL
+      if (aHasTtl !== bHasTtl) {
+        return aHasTtl ? -1 : 1;
+      }
+
+      // If both rows have TTL, sort by TTL first
+      if (aHasTtl && bHasTtl) {
+        const ttlCompare = compareDatesAsc(a.ttl, b.ttl);
+        if (ttlCompare !== 0) return ttlCompare;
+      }
+
+      // Then status priority
       const ra = STATUS_RANK[a.status] ?? 99;
       const rb = STATUS_RANK[b.status] ?? 99;
       if (ra !== rb) return ra - rb;
 
+      // Then departure date
+      const departureCompare = compareDatesAsc(
+        a.departureDate,
+        b.departureDate,
+      );
+      if (departureCompare !== 0) return departureCompare;
+
+      // Preserve previous queue behavior only as an extra tie-breaker
       const qa = a.queueArrival
         ? new Date(a.queueArrival).getTime()
         : -Infinity;
@@ -727,9 +864,6 @@ export default function PNRTable({
         ? new Date(b.queueArrival).getTime()
         : -Infinity;
       if (qa !== qb) return qb - qa;
-
-      const d = compareDatesDesc(a.departureDate, b.departureDate);
-      if (d !== 0) return d;
 
       return String(a.pnr ?? "").localeCompare(String(b.pnr ?? ""));
     });
@@ -1408,9 +1542,10 @@ export default function PNRTable({
                         onChange={(e) => updateFilter("status", e.target.value)}
                       >
                         <option value="">All</option>
+
                         {statusOptions.map((s) => (
                           <option key={s} value={s}>
-                            {s}
+                            {getStatusLabel(s)}
                           </option>
                         ))}
                       </select>
@@ -1710,11 +1845,18 @@ export default function PNRTable({
                 <tr
                   key={row.pnr}
                   onClick={() => (!isNonEmdTicket ? onSelect(row) : "")}
-                  className={`${!isNonEmdTicket ? "cursor-pointer hover:bg-black/5" : "cursor-default"} ${
+                  className={[
+                    !isNonEmdTicket ? "cursor-pointer" : "cursor-default",
+                    getUrgencyRowClass(row, ttlForRow),
+                    !getUrgencyRowClass(row, ttlForRow) && !isNonEmdTicket
+                      ? "hover:bg-black/5"
+                      : "",
                     !isNonEmdTicket && selected?.pnr === row.pnr
                       ? "bg-black/10"
-                      : ""
-                  }`}
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
                   <td
                     onClick={(e) => e.stopPropagation()}

@@ -165,6 +165,20 @@ export function postProcessPNR(pnrId, payload = {}) {
 }
 
 /*
+ * Error Queue Actions
+ * POST /api/v1/pnrs/{pnr_id}/queue-action
+ *
+ * @param {string} pnrId
+ * @param {Object} payload
+ */
+export function postQueueActions(pnrId, payload = {}) {
+  return api.post(
+    `/api/v1/pnrs/${encodeURIComponent(pnrId)}/queue-action`,
+    payload,
+  );
+}
+
+/*
  * Log UI action
  * POST /api/v1/logs/ui-actions.
  */

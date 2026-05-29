@@ -6,6 +6,7 @@ import {
   postProcessPNR,
   patchEmdFeedback,
   getEmdFeedbackId,
+  postQueueActions,
 } from "../api/pnrApi";
 
 // Components
@@ -489,7 +490,7 @@ function decorateMappedDetails(mapped, selectedStatus) {
 
   if (mapped?.passengers?.length) {
     mapped.passengers.forEach((pax) => {
-      (pax.emds || []).forEach((emd) => {
+      getPassengerEmdCollection(pax).forEach((emd) => {
         const aeStatus = safeUpper(emd?.aeBuildStatus);
         if (!emd.baseline) {
           emd.baseline = {
@@ -508,6 +509,24 @@ function decorateMappedDetails(mapped, selectedStatus) {
 function getEmdKey(emd) {
   const key = emd?.emdItemId ?? emd?.ancillaryItemId ?? emd?.emdNo ?? "";
   return normalize(key);
+}
+
+function getPassengerEmdCollection(pax) {
+  if (!pax || typeof pax !== "object") return [];
+
+  const emdItems = Array.isArray(pax?.emdItems) ? pax.emdItems : [];
+  const emds = Array.isArray(pax?.emds) ? pax.emds : [];
+  const source = emdItems.length >= emds.length ? emdItems : emds;
+
+  pax.emdItems = source;
+  pax.emds = source;
+
+  return source;
+}
+
+function getPassengerEmdAt(pax, emdIndex) {
+  const emds = getPassengerEmdCollection(pax);
+  return Array.isArray(emds) ? emds?.[emdIndex] : undefined;
 }
 
 function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
@@ -543,7 +562,7 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
     // Build map of latest EMDs from server
     const freshEmdMap = new Map();
     fresh.passengers.forEach((pax) => {
-      (pax?.emds || []).forEach((emd) => {
+      getPassengerEmdCollection(pax).forEach((emd) => {
         const k = getEmdKey(emd);
         if (k) freshEmdMap.set(k, emd);
       });
@@ -551,7 +570,7 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
 
     // Patch only status-ish fields (avoid clobbering local input values)
     next.passengers.forEach((pax) => {
-      (pax?.emds || []).forEach((emd) => {
+      getPassengerEmdCollection(pax).forEach((emd) => {
         const k = getEmdKey(emd);
         if (!k) return;
         const fe = freshEmdMap.get(k);
@@ -628,6 +647,13 @@ export default function PNRDetails({
 
   // Remove from Queue confirmation
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
+  const [isRemoveSubmitting, setIsRemoveSubmitting] = useState(false);
+
+  // Error action confirmation
+  const [isErrorActionConfirmOpen, setIsErrorActionConfirmOpen] =
+    useState(false);
+  const [isErrorActionSubmitting, setIsErrorActionSubmitting] = useState(false);
+  const [pendingErrorAction, setPendingErrorAction] = useState("");
 
   // View PNR JSON modal
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -807,6 +833,30 @@ export default function PNRDetails({
 
   const showIssuePanel =
     (isError || isSentToOasisQueue) && !!normalize(issueDetailsText);
+
+  const resolvePnrId = () =>
+    selected?.pnr_id ??
+    selected?.pnrId ??
+    pnrDetailsRef.current?.raw?.pnrId ??
+    pnrDetailsRef.current?.pnrId ??
+    pnrDetailsRef.current?.pnr ??
+    selected?.pnr ??
+    null;
+
+  const toActionText = (value) => {
+    if (typeof value === "string") return normalize(value);
+    if (value && typeof value === "object") {
+      return normalize(
+        value?.action ??
+          value?.label ??
+          value?.value ??
+          value?.text ??
+          value?.selectedOptionText ??
+          value?.target?.value,
+      );
+    }
+    return "";
+  };
 
   // -------------------------
   // Load details
@@ -1134,20 +1184,10 @@ export default function PNRDetails({
       const pax = next?.passengers?.[passengerIndex];
       if (!pax) return prev;
 
-      if (Array.isArray(pax?.emdItems) && !Array.isArray(pax?.emds))
-        pax.emds = pax.emdItems;
-      if (Array.isArray(pax?.emds) && !Array.isArray(pax?.emdItems))
-        pax.emdItems = pax.emds;
+      const emds = getPassengerEmdCollection(pax);
+      if (!Array.isArray(emds) || !emds[emdIndex]) return prev;
 
-      const patch = (arr) => {
-        if (Array.isArray(arr) && arr[emdIndex]) {
-          arr[emdIndex][field] = value;
-        }
-      };
-
-      patch(pax.emdItems);
-      patch(pax.emds);
-
+      emds[emdIndex][field] = value;
       return next;
     });
   }
@@ -1262,7 +1302,7 @@ export default function PNRDetails({
   async function processPNR() {
     if (!allEmdsBuilt) return;
 
-    const pnrId = selected?.pnr ?? pnrDetails?.pnr;
+    const pnrId = resolvePnrId();
     if (!pnrId) {
       const msg = "Cannot process PNR: missing PNR Id";
       showToast({ variant: "error", ariaLabel: msg, title: msg });
@@ -1294,7 +1334,7 @@ export default function PNRDetails({
         passengers: pnrDetails?.passengers ?? [],
       });
 
-      const first = pnrDetails?.passengers?.[0]?.emds?.[0];
+      const first = getPassengerEmdAt(pnrDetails?.passengers?.[0], 0);
       if (first && onApprove) {
         onApprove({
           pnr: pnrId,
@@ -1319,6 +1359,82 @@ export default function PNRDetails({
     }
   }
 
+  function requestRemoveFromQueue() {
+    setIsRemoveConfirmOpen(true);
+  }
+
+  async function confirmRemoveFromQueue() {
+    const pnrId = resolvePnrId();
+    if (!pnrId) {
+      const msg = "Cannot remove from queue: missing PNR Id";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+
+    setIsRemoveSubmitting(true);
+    try {
+      await callbacks.removeFromQueue(pnrId);
+      setIsRemoveConfirmOpen(false);
+      showToast({
+        variant: "success",
+        ariaLabel: `PNR ${pnrId} removed from queue`,
+        title: `PNR ${pnrId} removed from queue`,
+      });
+    } catch (e) {
+      const msg = `Failed to remove from queue: ${e?.message || "Unknown error"}`;
+      showToast({ variant: "error", ariaLabel: msg, title: msg, ttl: 4500 });
+    } finally {
+      setIsRemoveSubmitting(false);
+    }
+  }
+
+  function requestErrorAction(actionInput) {
+    const action = toActionText(actionInput);
+    if (!action) return;
+    setPendingErrorAction(action);
+    setIsErrorActionConfirmOpen(true);
+  }
+
+  function cancelErrorAction() {
+    setIsErrorActionConfirmOpen(false);
+    setPendingErrorAction("");
+  }
+
+  async function confirmErrorAction() {
+    const pnrId = resolvePnrId();
+    const action = normalize(pendingErrorAction);
+
+    if (!pnrId) {
+      const msg = "Cannot submit queue action: missing PNR Id";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+
+    if (!action) {
+      const msg = "Please select an error action first.";
+      showToast({ variant: "error", ariaLabel: msg, title: msg });
+      return;
+    }
+
+    setIsErrorActionSubmitting(true);
+    try {
+      await postQueueActions(pnrId, { action });
+      await regetPnrDetailsSilently(pnrId);
+      setIsErrorActionConfirmOpen(false);
+      setPendingErrorAction("");
+      showToast({
+        variant: "success",
+        ariaLabel: `Action "${action}" submitted for PNR ${pnrId}`,
+        title: `Action "${action}" submitted for PNR ${pnrId}`,
+      });
+    } catch (e) {
+      const msg = `Failed to submit queue action: ${e?.message || "Unknown error"}`;
+      showToast({ variant: "error", ariaLabel: msg, title: msg, ttl: 4500 });
+    } finally {
+      setIsErrorActionSubmitting(false);
+    }
+  }
+
   function cancelRemoveFromQueue() {
     setIsRemoveConfirmOpen(false);
   }
@@ -1332,7 +1448,10 @@ export default function PNRDetails({
     const { passengerIndex, emdIndex } = admTargetRef.current;
     if (passengerIndex < 0 || emdIndex < 0) return;
 
-    const emd = pnrDetails?.passengers?.[passengerIndex]?.emds?.[emdIndex];
+    const emd = getPassengerEmdAt(
+      pnrDetails?.passengers?.[passengerIndex],
+      emdIndex,
+    );
     const emdId = getEmdFeedbackId(emd);
     if (!emdId) {
       const msg = "Cannot submit feedback: missing EMD identifier (emdItemId)";
@@ -1354,8 +1473,12 @@ export default function PNRDetails({
       await patchEmdFeedback(emdId, payload);
 
       setPnrDetailsAndRef((prev) => {
+        if (!prev) return prev;
         const next = deepClone(prev);
-        const target = next.passengers[passengerIndex].emds[emdIndex];
+        const pax = next?.passengers?.[passengerIndex];
+        const target = getPassengerEmdAt(pax, emdIndex);
+        if (!target) return prev;
+
         target.adm = target.adm || {
           isAdm: false,
           feedback: "",
@@ -1509,6 +1632,11 @@ export default function PNRDetails({
                       }) =>
                         callbacks.sendToQueue({ pnr, queueType, assigneeName })
                       }
+                      onErrorActionSelect={requestErrorAction}
+                      onErrorActionChange={requestErrorAction}
+                      onQueueActionSelect={requestErrorAction}
+                      onActionSelect={requestErrorAction}
+                      onSelectErrorAction={requestErrorAction}
                     />
                   </FadeIn>
                 </>
@@ -2179,15 +2307,28 @@ export default function PNRDetails({
                                                       onClick={(e) =>
                                                         e.stopPropagation()
                                                       }
+                                                      onMouseDownCapture={(e) =>
+                                                        e.stopPropagation()
+                                                      }
                                                       onChange={() => {
                                                         setPnrDetailsAndRef(
                                                           (prev) => {
+                                                            if (!prev)
+                                                              return prev;
                                                             const next =
                                                               deepClone(prev);
-                                                            const target =
-                                                              next.passengers[
+                                                            const pax =
+                                                              next
+                                                                ?.passengers?.[
                                                                 passengerIndex
-                                                              ].emds[emdIndex];
+                                                              ];
+                                                            const target =
+                                                              getPassengerEmdAt(
+                                                                pax,
+                                                                emdIndex,
+                                                              );
+                                                            if (!target)
+                                                              return prev;
                                                             if (!target.adm) {
                                                               target.adm = {
                                                                 isAdm: false,
@@ -2218,15 +2359,28 @@ export default function PNRDetails({
                                                       onClick={(e) =>
                                                         e.stopPropagation()
                                                       }
+                                                      onMouseDownCapture={(e) =>
+                                                        e.stopPropagation()
+                                                      }
                                                       onChange={() => {
                                                         setPnrDetailsAndRef(
                                                           (prev) => {
+                                                            if (!prev)
+                                                              return prev;
                                                             const next =
                                                               deepClone(prev);
-                                                            const target =
-                                                              next.passengers[
+                                                            const pax =
+                                                              next
+                                                                ?.passengers?.[
                                                                 passengerIndex
-                                                              ].emds[emdIndex];
+                                                              ];
+                                                            const target =
+                                                              getPassengerEmdAt(
+                                                                pax,
+                                                                emdIndex,
+                                                              );
+                                                            if (!target)
+                                                              return prev;
                                                             if (!target.adm) {
                                                               target.adm = {
                                                                 isAdm: false,
@@ -2251,18 +2405,34 @@ export default function PNRDetails({
                                                     type="text"
                                                     className="input h-8 px-2 flex-1"
                                                     placeholder="Optional feedback"
+                                                    data-stop-collapse
                                                     value={
                                                       emd?.adm?.feedback ?? ""
+                                                    }
+                                                    onClick={(e) =>
+                                                      e.stopPropagation()
+                                                    }
+                                                    onMouseDownCapture={(e) =>
+                                                      e.stopPropagation()
                                                     }
                                                     onChange={(ev) =>
                                                       setPnrDetailsAndRef(
                                                         (prev) => {
+                                                          if (!prev)
+                                                            return prev;
                                                           const next =
                                                             deepClone(prev);
-                                                          const target =
-                                                            next.passengers[
+                                                          const pax =
+                                                            next?.passengers?.[
                                                               passengerIndex
-                                                            ].emds[emdIndex];
+                                                            ];
+                                                          const target =
+                                                            getPassengerEmdAt(
+                                                              pax,
+                                                              emdIndex,
+                                                            );
+                                                          if (!target)
+                                                            return prev;
                                                           if (!target.adm) {
                                                             target.adm = {
                                                               isAdm: false,
@@ -2454,6 +2624,59 @@ export default function PNRDetails({
           </div>
         )}
 
+        {/* Error Action Confirmation */}
+        {isErrorActionConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200"
+              onClick={cancelErrorAction}
+              style={{
+                animation: "fadeInUp 200ms ease-out forwards",
+                transform: "none",
+              }}
+            ></div>
+            <div
+              className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
+              style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
+            >
+              <h5 className="text-lg font-semibold mb-3">
+                Confirm Error Action
+              </h5>
+              <div className="text-sm text-black/70">
+                <span className="font-medium">
+                  {pendingErrorAction == "SendToOasis"
+                    ? "Send to Oasis queue"
+                    : pendingErrorAction == "RemoveFromQueue"
+                      ? "Remove from queue"
+                      : "Retry"}
+                </span>{" "}
+                for PNR{" "}
+                <span className="font-medium">
+                  {resolvePnrId() || selected?.pnr || "—"}
+                </span>
+                ?
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  className="btn btn-secondary"
+                  onClick={cancelErrorAction}
+                  disabled={isErrorActionSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={confirmErrorAction}
+                  disabled={isErrorActionSubmitting}
+                >
+                  {isErrorActionSubmitting ? <Spinner size="sm" /> : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Remove from Queue Confirmation */}
         {isRemoveConfirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -2485,8 +2708,9 @@ export default function PNRDetails({
                 <button
                   className="btn btn-danger"
                   onClick={confirmRemoveFromQueue}
+                  disabled={isRemoveSubmitting}
                 >
-                  Remove
+                  {isRemoveSubmitting ? <Spinner size="sm" /> : "Remove"}
                 </button>
               </div>
             </div>
