@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -313,7 +313,6 @@ const MODAL_CONFIG = {
     ],
   },
   "Avg Completion Time": {
-    statuses: ["processed"],
     columns: [
       "pnr",
       "airline",
@@ -331,7 +330,6 @@ const MODAL_CONFIG = {
     ],
   },
   "Error Rate": {
-    statuses: ["error", "human"],
     columns: [
       "pnr",
       "airline",
@@ -348,7 +346,6 @@ const MODAL_CONFIG = {
     ],
   },
   Exceptions: {
-    statuses: ["error", "human"],
     columns: [
       "pnr",
       "airline",
@@ -376,7 +373,6 @@ const MODAL_CONFIG = {
     ],
   },
   "AI vs Human corrections": {
-    statuses: ["processed"],
     columns: [
       "pnr",
       "airline",
@@ -394,7 +390,6 @@ const MODAL_CONFIG = {
     ],
   },
   "End-to-end completion time": {
-    statuses: ["processed"],
     columns: [
       "pnr",
       "airline",
@@ -455,7 +450,6 @@ const MODAL_CONFIG = {
     columns: ["pnr", "emdNumber", "assigned", "feedbackText"],
   },
   "LLM metrics (avg in range)": {
-    statuses: ["processed"],
     columns: [
       "pnr",
       "airline",
@@ -467,7 +461,6 @@ const MODAL_CONFIG = {
     ],
   },
   "LLM metrics trend over time": {
-    statuses: ["processed"],
     columns: [
       "pnr",
       "airline",
@@ -1506,7 +1499,6 @@ export default function ReportsModule({ onOpenPNR }) {
   });
 
   // Modal performance controls (pagination / virtualization)
-  const deferredDetailSearch = useDeferredValue(detailSearch);
   const [detailRenderMode, setDetailRenderMode] = useState("paged"); // paged | virtual
   const [detailPageSize, setDetailPageSize] = useState(50);
   const [detailPage, setDetailPage] = useState(1);
@@ -1815,12 +1807,6 @@ export default function ReportsModule({ onOpenPNR }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subTab, from, to]);
 
-  // initial load and range changes
-  useEffect(() => {
-    loadTabData(subTab, { start_date: from, end_date: to });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to]);
-
   // ------------------------------
   // Derived values for UI
   // ------------------------------
@@ -2001,7 +1987,7 @@ export default function ReportsModule({ onOpenPNR }) {
       .filter(Boolean);
     openDetailModal({
       title: "Throughput",
-      subtitle: `PNRs created in range • ${dashKpis.throughputCount} items`,
+      subtitle: `PNRs created in range • ${rows.length} rows`,
       rows,
     });
   };
@@ -2012,7 +1998,7 @@ export default function ReportsModule({ onOpenPNR }) {
       .filter(Boolean);
     openDetailModal({
       title: "Avg Completion Time",
-      subtitle: `Rows contributing to avg • ${rows.length} items`,
+      subtitle: `Rows contributing to avg • ${rows.length} rows`,
       rows,
     });
   };
@@ -2021,7 +2007,7 @@ export default function ReportsModule({ onOpenPNR }) {
     const rows = dashKpis.errorItems.map(mapErrorRateItemToRow).filter(Boolean);
     openDetailModal({
       title: "Error Rate",
-      subtitle: `${dashKpis.errorCount} errors • ${dashKpis.hilCount} HIL`,
+      subtitle: `${rows.length} rows • ${dashKpis.errorCount} errors • ${dashKpis.hilCount} HIL`,
       rows,
     });
   };
@@ -2032,7 +2018,7 @@ export default function ReportsModule({ onOpenPNR }) {
       .filter(Boolean);
     openDetailModal({
       title: "Exceptions",
-      subtitle: `${dashKpis.slaCount} SLA • ${dashKpis.admCount} ADM • ${dashKpis.withFeedbackCount} with feedback`,
+      subtitle: `${rows.length} rows • ${dashKpis.slaCount} SLA • ${dashKpis.admCount} ADM • ${dashKpis.withFeedbackCount} with feedback`,
       rows,
     });
   };
@@ -2202,7 +2188,7 @@ export default function ReportsModule({ onOpenPNR }) {
   }, [detailRows]);
 
   const filteredDetailRows = useMemo(() => {
-    const q = (deferredDetailSearch || "").trim().toLowerCase();
+    const q = (detailSearch || "").trim().toLowerCase();
     let rows = detailRows.filter((r) => {
       if (detailFilters.status !== "All" && r.status !== detailFilters.status)
         return false;
@@ -2257,7 +2243,7 @@ export default function ReportsModule({ onOpenPNR }) {
   useEffect(() => {
     // Reset paging when filters/search/sort change
     setDetailPage(1);
-  }, [deferredDetailSearch, detailFilters, detailSortKey, detailSortDir]);
+  }, [detailSearch, detailFilters, detailSortKey, detailSortDir]);
 
   const activeModalColumns = useMemo(
     () => getModalColumnDefs(detailTitle, openPnrDetails),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   getPnrDetails,
@@ -38,6 +38,37 @@ function statusToComparable(v) {
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isHumanRequiredStatusComparable(v) {
+  const comparable = statusToComparable(v);
+  return comparable === "human" || comparable === "human input required";
+}
+
+function isProcessingStatusComparable(v) {
+  return statusToComparable(v) === "processing";
+}
+
+function isProcessedStatusComparable(v) {
+  return statusToComparable(v) === "processed";
+}
+
+function isSentToOasisStatusComparable(v) {
+  const comparable = statusToComparable(v);
+  return comparable === "sent to oasis queue" || comparable === "sent to oasis";
+}
+
+function isErrorStatusComparable(v) {
+  return statusToComparable(v).includes("error");
+}
+
+function shouldKeepProcessingUiOverride(v) {
+  const comparable = statusToComparable(v);
+  return (
+    !comparable ||
+    isHumanRequiredStatusComparable(comparable) ||
+    isProcessingStatusComparable(comparable)
+  );
 }
 
 function getEmdDiff(current, baseline) {
@@ -664,9 +695,6 @@ export default function PNRDetails({
   // Error Details modal
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
 
-  // Accordion open passenger index
-  const [openPassengerIndex, setOpenPassengerIndex] = useState(-1);
-
   // Silent refetch (used after actions like Build AE)
   const silentRefetchControllerRef = useRef(null);
 
@@ -689,7 +717,7 @@ export default function PNRDetails({
       );
 
       const freshComparable = statusToComparable(fresh?.status ?? "");
-      if (freshComparable && freshComparable !== "processing") {
+      if (!shouldKeepProcessingUiOverride(freshComparable)) {
         setStatusUiOverride(null);
       }
     } catch (e) {
@@ -705,46 +733,47 @@ export default function PNRDetails({
   const [toasts, setToasts] = useState([]);
   const toastTimersRef = useRef({});
 
-  const dismissToast = (id) => {
+  const dismissToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
     if (toastTimersRef.current[id]) {
       clearTimeout(toastTimersRef.current[id]);
       delete toastTimersRef.current[id];
     }
-  };
+  }, []);
 
-  const pushToast = ({ type = "info", message = "", ttl = 3000 }) => {
-    const id =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const pushToast = useCallback(
+    ({ type = "info", message = "", ttl = 3000 }) => {
+      const id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-    setToasts((prev) => [...prev, { id, type, message }]);
+      setToasts((prev) => [...prev, { id, type, message }]);
 
-    if (ttl > 0) {
-      toastTimersRef.current[id] = setTimeout(() => {
-        dismissToast(id);
-      }, ttl);
-    }
+      if (ttl > 0) {
+        toastTimersRef.current[id] = setTimeout(() => {
+          dismissToast(id);
+        }, ttl);
+      }
 
-    return id;
-  };
+      return id;
+    },
+    [dismissToast],
+  );
 
-  const showToast = ({
-    variant = "info",
-    ariaLabel = "",
-    title = "",
-    ttl = 3000,
-  }) => {
-    const type =
-      variant === "error"
-        ? "error"
-        : variant === "success"
-          ? "success"
-          : "info";
-    const message = title || ariaLabel || "";
-    return pushToast({ type, message, ttl });
-  };
+  const showToast = useCallback(
+    ({ variant = "info", ariaLabel = "", title = "", ttl = 3000 }) => {
+      const type =
+        variant === "error"
+          ? "error"
+          : variant === "success"
+            ? "success"
+            : "info";
+      const message = title || ariaLabel || "";
+      return pushToast({ type, message, ttl });
+    },
+    [pushToast],
+  );
 
   useEffect(() => {
     return () => {
@@ -795,9 +824,14 @@ export default function PNRDetails({
     Boolean(statusUiOverride?.pnr && selected?.pnr) &&
     statusUiOverride.pnr === selected.pnr;
 
-  // Only show UI override when no real non-processing status has arrived yet
+  const overrideComparable = statusToComparable(statusUiOverride?.status);
+
+  // Keep showing local "Processing" while the freshest server value is still empty,
+  // Human Input Required, or Processing. Retire it only when a terminal / next status arrives.
   const shouldShowProcessingOverride =
-    isSamePnr && statusToComparable(resolvedServerStatus) === "processing";
+    isSamePnr &&
+    overrideComparable === "processing" &&
+    shouldKeepProcessingUiOverride(resolvedServerStatus);
 
   const displayStatusSource = shouldShowProcessingOverride
     ? statusUiOverride.status
@@ -805,14 +839,11 @@ export default function PNRDetails({
 
   const statusComparable = statusToComparable(displayStatusSource);
 
-  const isHumanRequired =
-    statusComparable === "human" || statusComparable === "human input required";
-  const isProcessed = statusComparable === "processed";
-  const isProcessing = statusComparable === "processing";
-  const isError = statusComparable.includes("error");
-  const isSentToOasisQueue =
-    statusComparable === "sent to oasis queue" ||
-    statusComparable === "sent to oasis";
+  const isHumanRequired = isHumanRequiredStatusComparable(statusComparable);
+  const isProcessed = isProcessedStatusComparable(statusComparable);
+  const isProcessing = isProcessingStatusComparable(statusComparable);
+  const isError = isErrorStatusComparable(statusComparable);
+  const isSentToOasisQueue = isSentToOasisStatusComparable(statusComparable);
 
   const showAiAssistSection = isHumanRequired || isProcessed;
 
@@ -861,12 +892,14 @@ export default function PNRDetails({
   // -------------------------
   // Load details
   // -------------------------
+  const selectedPnr = selected?.pnr ?? null;
+
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
 
     async function load() {
-      if (!selected) {
+      if (!selectedPnr) {
         setPnrDetailsAndRef(null);
         setIsDetailsLoading(false);
         return;
@@ -876,24 +909,24 @@ export default function PNRDetails({
       setPnrDetailsAndRef(null);
 
       try {
-        const api = await getPnrDetails(selected.pnr, {
+        const api = await getPnrDetails(selectedPnr, {
           signal: controller.signal,
         });
         if (!active) return;
+
         const mapped = mapApiToPnrDetails(api);
-
         decorateMappedDetails(mapped, selected?.status);
-
         setPnrDetailsAndRef(mapped);
         setIsDetailsLoading(false);
         return;
       } catch (e) {
+        if (e?.name === "AbortError") return;
         console.warn("PNR details API load failed; falling back to mock.", e);
       }
 
       // Fallback mock behavior
       try {
-        if (selected.pnr === "GLEBNY") {
+        if (selectedPnr === "GLEBNY") {
           const res = await fetch("/data/sabre-booking.json", {
             signal: controller.signal,
           });
@@ -910,7 +943,7 @@ export default function PNRDetails({
           const ssr = (data?.specialServices || [])[0] || {};
 
           const common = {
-            pnr: data?.request?.confirmationId || selected.pnr,
+            pnr: data?.request?.confirmationId || selectedPnr,
             bookingId: data?.bookingId,
             isTicketed: data?.isTicketed,
             agencyIata: data?.creationDetails?.agencyIataNumber,
@@ -938,73 +971,44 @@ export default function PNRDetails({
           const pax1Name =
             `${traveler?.givenName || ""} ${traveler?.middleName || ""} ${traveler?.surname || ""}`
               .replace(/\s+/g, " ")
-              .trim() || "DOE/JOHN";
-          const pax1Ticket = ticket0?.number || "0167489825830";
+              .trim() || "Traveler 1";
+          const pax1Ticket =
+            ticket0?.value || traveler?.ticketNumber || "0167489825830";
 
           const emd1 = {
-            emdNo:
-              anc?.electronicMiscellaneousDocumentNumber || "6074333222111",
-            emdStatus: anc?.statusName || "Confirmed",
+            emdNo: anc?.documentNumber || anc?.emdNumber || "6074333222111",
+            emdStatus: anc?.status || "Confirmed",
             emdTotal:
-              `${emdTotals?.total || "128.00"} ${emdTotals?.currencyCode || "USD"}`.trim(),
-            rfic: anc?.reasonForIssuanceCode || "C",
-            rfisc: anc?.subcode || "05Z",
-            emdDesc: anc?.commercialName || "UPTO33LB 15KG BAGGAGE",
-            baseline: null,
+              emdTotals?.grandTotal && emdTotals?.currencyCode
+                ? `${emdTotals.grandTotal} ${emdTotals.currencyCode}`
+                : "128.00 USD",
+            rfic: anc?.rfic || "C",
+            rfisc: anc?.rfisc || "05Z",
+            emdDesc:
+              anc?.commercialName ||
+              anc?.description ||
+              "UPTO33LB 15KG BAGGAGE",
+            baseline: {
+              rfic: anc?.rfic || "C",
+              rfisc: anc?.rfisc || "05Z",
+              emdDesc:
+                anc?.commercialName ||
+                anc?.description ||
+                "UPTO33LB 15KG BAGGAGE",
+            },
             built: true,
             editable: false,
             notes: "",
+            aeBuildStatus: "DONE",
+            aiSuggestions: [],
+            ssrCode: ssr?.code || "",
+            otherInfo: "-",
             adm: { isAdm: false, feedback: "", submitted: false },
-          };
-          emd1.baseline = {
-            rfic: emd1.rfic,
-            rfisc: emd1.rfisc,
-            emdDesc: emd1.emdDesc,
-          };
-
-          const pax2Name = "Jane Smith";
-          const pax2Ticket = "0167489825831";
-
-          const emd2a = {
-            emdNo: "6074333222112",
-            emdStatus: "On Hold",
-            emdTotal: "45.00 USD",
-            rfic: "C",
-            rfisc: "07B",
-            emdDesc: "PREPAID SEAT 17B",
-            baseline: null,
-            built: false,
-            editable: true,
-            notes: "",
-            adm: { isAdm: false, feedback: "", submitted: false },
-          };
-          emd2a.baseline = {
-            rfic: emd2a.rfic,
-            rfisc: emd2a.rfisc,
-            emdDesc: emd2a.emdDesc,
-          };
-
-          const emd2b = {
-            emdNo: "6074333222113",
-            emdStatus: "On Hold",
-            emdTotal: "30.00 USD",
-            rfic: "C",
-            rfisc: "0BG",
-            emdDesc: "EXTRA BAG 10KG",
-            baseline: null,
-            built: false,
-            editable: true,
-            notes: "",
-            adm: { isAdm: false, feedback: "", submitted: false },
-          };
-          emd2b.baseline = {
-            rfic: emd2b.rfic,
-            rfisc: emd2b.rfisc,
-            emdDesc: emd2b.emdDesc,
           };
 
           setPnrDetailsAndRef({
             ...common,
+            status: selected?.status || "Processed",
             passengers: [
               {
                 name: pax1Name,
@@ -1012,19 +1016,13 @@ export default function PNRDetails({
                 travelerName: pax1Name,
                 ...common,
                 emds: [emd1],
-              },
-              {
-                name: pax2Name,
-                ticketNo: pax2Ticket,
-                travelerName: pax2Name,
-                ...common,
-                emds: [emd2a, emd2b],
+                emdItems: [emd1],
               },
             ],
           });
         } else {
           const common = {
-            pnr: selected.pnr,
+            pnr: selectedPnr,
             bookingId: "1SXXX1A2B3C4D",
             isTicketed: true,
             agencyIata: "99119911",
@@ -1033,118 +1031,93 @@ export default function PNRDetails({
             contactEmail: "travel@sabre.com",
             contactPhone: "+1-555-123-4567",
             otherInfo: "Unassisted minor international",
-            errorDesc: selected?.errorDesc,
-            flightNo: "AA 123",
-            operating: "UA 321",
-            route: "DFW → HNL",
-            dep: "2024-07-09 09:25",
-            arr: "2024-07-09 12:38",
-            seat: "13A",
-            ssrCode: "WCHR",
+            errorDesc: normalize(
+              selected?.errorDetails || selected?.errorDesc || selected?.error,
+            ),
             documentType: "EMD",
             brand: "ECO FLEX",
             gds: "SABRE",
+            status: selected?.status || "Human Input Required",
           };
 
-          const pax1 = {
-            name: selected.passenger || "DOE/JOHN",
-            ticketNo: "0167489825830",
-            travelerName: selected.passenger || "DOE/JOHN",
+          const emdA = {
+            emdNo: "6074333222111",
+            emdStatus: "Confirmed",
+            emdTotal: "128.00 USD",
+            rfic: "C",
+            rfisc: "05Z",
+            emdDesc: "UPTO33LB 15KG BAGGAGE",
+            baseline: {
+              rfic: "C",
+              rfisc: "05Z",
+              emdDesc: "UPTO33LB 15KG BAGGAGE",
+            },
+            built: false,
+            editable: true,
+            notes: "",
+            aeBuildStatus: "PENDING",
+            aiSuggestions: [],
+            ssrCode: "XBAG",
+            otherInfo: "-",
+            adm: { isAdm: false, feedback: "", submitted: false },
+          };
+
+          setPnrDetailsAndRef({
             ...common,
-            emds: [
+            passengers: [
               {
-                emdNo: "6074333222111",
-                emdStatus: "Confirmed",
-                emdTotal: "128.00 USD",
-                rfic: "C",
-                rfisc: "05Z",
-                emdDesc: "UPTO33LB 15KG BAGGAGE",
-                baseline: {
-                  rfic: "C",
-                  rfisc: "05Z",
-                  emdDesc: "UPTO33LB 15KG BAGGAGE",
-                },
-                built: true,
-                editable: false,
-                notes: "",
-                adm: { isAdm: false, feedback: "", submitted: false },
+                name: selected?.passenger || "DOE/JOHN",
+                ticketNo: "0167489825830",
+                travelerName: selected?.passenger || "DOE/JOHN",
+                ...common,
+                flightNo: "PR 123",
+                operating: "PR 123",
+                route: "MNL → CEB",
+                dep: "2024-01-10 10:00",
+                arr: "2024-01-10 11:30",
+                seat: "12A",
+                emds: [emdA],
+                emdItems: [emdA],
               },
             ],
-          };
-
-          const pax2 = {
-            name: "Jane Smith",
-            ticketNo: "0167489825831",
-            travelerName: "Jane Smith",
-            ...common,
-            emds: [
-              {
-                emdNo: "6074333222112",
-                emdStatus: "On Hold",
-                emdTotal: "45.00 USD",
-                rfic: "C",
-                rfisc: "07B",
-                emdDesc: "PREPAID SEAT 17B",
-                baseline: {
-                  rfic: "C",
-                  rfisc: "07B",
-                  emdDesc: "PREPAID SEAT 17B",
-                },
-                built: false,
-                editable: true,
-                notes: "",
-                adm: { isAdm: false, feedback: "", submitted: false },
-              },
-              {
-                emdNo: "6074333222113",
-                emdStatus: "On Hold",
-                emdTotal: "30.00 USD",
-                rfic: "C",
-                rfisc: "0BG",
-                emdDesc: "EXTRA BAG 10KG",
-                baseline: {
-                  rfic: "C",
-                  rfisc: "0BG",
-                  emdDesc: "EXTRA BAG 10KG",
-                },
-                built: false,
-                editable: true,
-                notes: "",
-                adm: { isAdm: false, feedback: "", submitted: false },
-              },
-            ],
-          };
-
-          setPnrDetailsAndRef({ ...common, passengers: [pax1, pax2] });
+          });
         }
+      } catch (mockError) {
+        if (!active || mockError?.name === "AbortError") return;
+        const msg = `Failed to load PNR details: ${mockError?.message || "Unknown error"}`;
+        setPnrDetailsAndRef(null);
         setIsDetailsLoading(false);
-      } catch (e) {
-        const msg = `Failed to load details: ${e?.message || "Unknown error"}`;
         showToast({ variant: "error", ariaLabel: msg, title: msg });
+        return;
       }
+
+      if (active) setIsDetailsLoading(false);
     }
 
     load();
+
     return () => {
       active = false;
       controller.abort();
     };
-  }, [selected]);
+  }, [selectedPnr]);
 
-  // Auto-expand the passenger that needs attention (Human Input Required only)
-  useEffect(() => {
-    if (!pnrDetails?.passengers) return;
+  const defaultPassengerIndex = useMemo(() => {
+    if (!pnrDetails?.passengers?.length) return -1;
 
-    // Only auto-open for Human Input Required; do NOT force-close while users interact
-    if (!isHumanRequired) return;
-
-    const idx = pnrDetails.passengers.findIndex((passenger) =>
-      (passenger.emdItems || []).some((emd) => emd.aeBuildStatus === "PENDING"),
+    const idx = pnrDetails.passengers.findIndex((p) =>
+      (p?.emdItems || []).some(
+        (emd) => (emd?.aeBuildStatus || "").toUpperCase() === "PENDING",
+      ),
     );
 
-    // If user already opened an accordion, don't override their selection
-    setOpenPassengerIndex((prev) => (prev >= 0 ? prev : idx >= 0 ? idx : 0));
-  }, [pnrDetails, isHumanRequired]);
+    return idx >= 0 ? idx : 0;
+  }, [pnrDetails]);
+
+  // Accordion open passenger index
+  const [openPassengerIndex, setOpenPassengerIndex] = useState(-1);
+  const resolvedOpenPassengerIndex =
+    openPassengerIndex >= 0 ? openPassengerIndex : defaultPassengerIndex;
 
   const inputsNeeded = useMemo(() => {
     if (!isHumanRequired || !pnrDetails?.passengers?.length) return [];
@@ -1313,15 +1286,25 @@ export default function PNRDetails({
       pnrDetails?.status ?? selected?.status ?? "",
     );
 
-    const canShowProcessing =
-      currentComparable === "human" ||
-      currentComparable === "human input required";
+    const shouldOptimisticallyShowProcessing =
+      isHumanRequiredStatusComparable(currentComparable) || !currentComparable;
 
     setIsProcessSubmitting(true);
 
     try {
-      if (canShowProcessing) {
-        setStatusUiOverride({ pnr: pnrId, status: "Processing" });
+      if (shouldOptimisticallyShowProcessing) {
+        setStatusUiOverride({
+          pnr: selected?.pnr ?? pnrId,
+          status: "Processing",
+        });
+        setPnrDetailsAndRef((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "Processing",
+              }
+            : prev,
+        );
       }
 
       await postProcessPNR(pnrId);
@@ -1331,23 +1314,15 @@ export default function PNRDetails({
 
       callbacks.processPNR({
         pnr: pnrId,
-        passengers: pnrDetails?.passengers ?? [],
+        passengers:
+          pnrDetailsRef.current?.passengers ?? pnrDetails?.passengers ?? [],
+        status: "Processing",
       });
-
-      const first = getPassengerEmdAt(pnrDetails?.passengers?.[0], 0);
-      if (first && onApprove) {
-        onApprove({
-          pnr: pnrId,
-          rfic: first.rfic,
-          rfisc: first.rfisc,
-          emdDesc: first.emdDesc,
-        });
-      }
 
       showToast({
         variant: "success",
-        ariaLabel: `PNR ${pnrId} processed`,
-        title: `PNR ${pnrId} processed`,
+        ariaLabel: `PNR ${pnrId} Processed`,
+        title: `PNR ${pnrId} Processed`,
       });
     } catch (e) {
       setStatusUiOverride(null);
@@ -1554,18 +1529,19 @@ export default function PNRDetails({
     setStatusUiOverride(null);
   }, [selected?.pnr]);
 
-  // Retire the temporary override as soon as a real non-processing status arrives
+  // Retire the temporary override only when the server has moved past
+  // Human Input Required / Processing into its next real state.
   useEffect(() => {
-    if (!selected?.pnr) return;
+    if (!selected?.pnr || !statusUiOverride) return;
 
     const comparable = statusToComparable(
       pnrDetails?.status ?? selected?.status ?? "",
     );
 
-    if (comparable && comparable !== "processing") {
+    if (!shouldKeepProcessingUiOverride(comparable)) {
       setStatusUiOverride(null);
     }
-  }, [selected?.pnr, pnrDetails?.status, selected?.status]);
+  }, [selected?.pnr, pnrDetails?.status, selected?.status, statusUiOverride]);
 
   if (!selected) return null;
 
@@ -1766,7 +1742,7 @@ export default function PNRDetails({
                     (passenger.emdItems || []).some(
                       (emd) => emd.aeBuildStatus === "PENDING",
                     );
-                  const isOpen = openPassengerIndex === passengerIndex;
+                  const isOpen = resolvedOpenPassengerIndex === passengerIndex;
 
                   return (
                     <div
@@ -2652,7 +2628,7 @@ export default function PNRDetails({
                 </span>{" "}
                 for PNR{" "}
                 <span className="font-medium">
-                  {resolvePnrId() || selected?.pnr || "—"}
+                  {selected?.pnr || pnrDetails?.pnr || "—"}
                 </span>
                 ?
               </div>
