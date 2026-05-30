@@ -55,7 +55,9 @@ function isProcessedStatusComparable(v) {
 
 function isSentToOasisStatusComparable(v) {
   const comparable = statusToComparable(v);
-  return comparable === "sent to oasis queue" || comparable === "sent to oasis";
+  return (
+    comparable === "sent_back_to_oasis" || comparable === "sent back to oasis"
+  );
 }
 
 function isErrorStatusComparable(v) {

@@ -17,8 +17,11 @@ export default function StatusBadge({ status }) {
   let label = raw || "—";
 
   // IMPORTANT: check error-like statuses BEFORE processing
-  if (normalized === "sent to oasis queue" || normalized === "sent to oasis") {
-    className += " bg-red-50 text-red-700 border-red-200";
+  if (
+    normalized === "sent_back_to_oasis" ||
+    normalized === "sent back to oasis"
+  ) {
+    className += " bg-blue-100 text-blue-800 border-blue-200 ";
     icon = <i className="fa-solid fa-circle-exclamation" />;
     label = "Sent to Oasis Queue";
   } else if (normalized.includes("error")) {

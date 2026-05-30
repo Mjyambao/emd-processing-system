@@ -725,15 +725,16 @@ export default function PNRTable({
   const buildQueryParams = () => {
     const f = colFilters;
 
-    const apiStatusFilter =
-      statusFilter === "assigned" || statusFilter === "unassigned"
-        ? "all"
-        : statusFilter;
+    const effectiveStatus =
+      colFilters.status ||
+      (statusFilter !== "assigned" && statusFilter !== "unassigned"
+        ? statusFilter
+        : "");
 
-    const status =
-      apiStatusFilter === "all"
-        ? undefined
-        : uiStatusToApiStatus(apiStatusFilter);
+    // Map to API
+    const status = effectiveStatus
+      ? uiStatusToApiStatus(effectiveStatus)
+      : undefined;
 
     // assignTo base logic (existing behavior), unless assignedToOverride is provided.
     let assignTo;
@@ -1537,12 +1538,11 @@ export default function PNRTable({
                   {filterOpen.status && (
                     <div className="mt-1">
                       <select
-                        className="input h-7 text-xs w-full"
                         value={colFilters.status}
                         onChange={(e) => updateFilter("status", e.target.value)}
+                        className="w-full min-w-[140px] h-9 px-2 border border-gray-300 rounded-md bg-white text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 z-50 relative"
                       >
                         <option value="">All</option>
-
                         {statusOptions.map((s) => (
                           <option key={s} value={s}>
                             {getStatusLabel(s)}
@@ -1911,7 +1911,10 @@ export default function PNRTable({
                         onClick={(e) => e.stopPropagation()}
                         aria-label={`Status: ${row.status}. Stage: ${row.stage ? String(row.stage) : "—"}`}
                       >
-                        <StatusBadge status={row.status} />
+                        <StatusBadge
+                          status={row.status}
+                          label={getStatusLabel(row.status)}
+                        />
                       </button>
                     </td>
                   )}
