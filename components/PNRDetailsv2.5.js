@@ -31,53 +31,6 @@ function safeUpper(v) {
   return normalize(v).toUpperCase();
 }
 
-function sanitizeAlphaNumericValue(value, maxLength) {
-  const sanitized = (value ?? "")
-    .toString()
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, maxLength ?? Infinity);
-  return sanitized;
-}
-
-function sanitizeAlphaNumericText(value, maxLength) {
-  const sanitized = (value ?? "")
-    .toString()
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .replace(/\s+/g, " ")
-    .slice(0, maxLength ?? Infinity);
-  return sanitized;
-}
-
-function sanitizeFeedbackText(value, maxLength) {
-  const sanitized = (value ?? "")
-    .toString()
-    .replace(/[^a-zA-Z0-9,. ]/g, "")
-    .replace(/\s+/g, " ")
-    .slice(0, maxLength ?? Infinity);
-  return sanitized;
-}
-
-function sanitizeEditableEmdField(field, value) {
-  if (field === "rfic") {
-    return (value ?? "")
-      .toString()
-      .replace(/[^a-zA-Z]/g, "") // letters only
-      .slice(0, 1) // max 1 char
-      .toUpperCase();
-  }
-
-  if (field === "rfisc") {
-    return sanitizeAlphaNumericValue(value, 3).toUpperCase(); // ✅ max 3 chars
-  }
-
-  if (field === "emdDesc") {
-    return sanitizeAlphaNumericText(value);
-  }
-
-  return value;
-}
-``;
-
 function statusToComparable(v) {
   // supports: HUMAN_INPUT_REQUIRED, Human Input Required, human_input_required
   return normalize(v)
@@ -1199,8 +1152,6 @@ export default function PNRDetails({
   }, [pnrDetails]);
 
   function handleFieldChange(passengerIndex, emdIndex, field, value) {
-    const sanitizedValue = sanitizeEditableEmdField(field, value);
-
     setPnrDetailsAndRef((prev) => {
       if (!prev) return prev;
 
@@ -1211,7 +1162,7 @@ export default function PNRDetails({
       const emds = getPassengerEmdCollection(pax);
       if (!Array.isArray(emds) || !emds[emdIndex]) return prev;
 
-      emds[emdIndex][field] = sanitizedValue;
+      emds[emdIndex][field] = value;
       return next;
     });
   }
@@ -1274,10 +1225,10 @@ export default function PNRDetails({
     try {
       const payload = {
         emd_item_id: emdItemId,
-        rfic: sanitizeAlphaNumericValue(emd?.rfic || "", 2).toUpperCase(),
-        rfisc: sanitizeAlphaNumericValue(emd?.rfisc || "", 4).toUpperCase(),
-        rfic_name: sanitizeAlphaNumericText(emd?.emdDesc || ""),
-        feedback: sanitizeFeedbackText(buildNotes || ""),
+        rfic: emd?.rfic || "",
+        rfisc: emd?.rfisc || "",
+        rfic_name: emd?.emdDesc || "",
+        feedback: buildNotes || "",
       };
 
       await postBuildAeForEmd(pnrId, payload);
@@ -2020,9 +1971,6 @@ export default function PNRDetails({
                                               <input
                                                 className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
                                                 value={emd.rfic || ""}
-                                                maxLength={1}
-                                                inputMode="text"
-                                                autoComplete="off"
                                                 onChange={(ev) =>
                                                   handleFieldChange(
                                                     passengerIndex,
@@ -2054,9 +2002,6 @@ export default function PNRDetails({
                                               <input
                                                 className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
                                                 value={emd.rfisc || ""}
-                                                maxLength={3}
-                                                inputMode="text"
-                                                autoComplete="off"
                                                 onChange={(ev) =>
                                                   handleFieldChange(
                                                     passengerIndex,
@@ -2088,8 +2033,6 @@ export default function PNRDetails({
                                               <input
                                                 className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
                                                 value={emd.emdDesc || ""}
-                                                inputMode="text"
-                                                autoComplete="off"
                                                 onChange={(ev) =>
                                                   handleFieldChange(
                                                     passengerIndex,
@@ -2599,10 +2542,7 @@ export default function PNRDetails({
                   className="input w-full h-20"
                   placeholder="Add notes for this build (optional)"
                   value={buildNotes}
-                  autoComplete="off"
-                  onChange={(e) =>
-                    setBuildNotes(sanitizeFeedbackText(e.target.value))
-                  }
+                  onChange={(e) => setBuildNotes(e.target.value)}
                 />
               </div>
 

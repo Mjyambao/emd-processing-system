@@ -24,7 +24,10 @@ export default function Login() {
             <i className="fa-solid fa-plane"></i>
           </div>
           <div>
-            <h1 className="text-xl font-semibold">EMD Processing System</h1>
+            <h1 className="text-xl font-semibold">
+              EMD Processing System{" "}
+              <span className="text-xs text-black/30">v1.0</span>
+            </h1>
             <p className="text-black/60 text-sm">Sign in to continue</p>
           </div>
         </div>

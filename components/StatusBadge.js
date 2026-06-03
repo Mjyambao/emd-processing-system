@@ -23,7 +23,7 @@ export default function StatusBadge({ status }) {
   ) {
     className += " bg-blue-100 text-blue-800 border-blue-200 ";
     icon = <i className="fa-solid fa-circle-exclamation" />;
-    label = "Sent to Oasis Queue";
+    label = "Sent back to Oasis Queue";
   } else if (normalized.includes("error")) {
     className += " bg-red-50 text-red-700 border-red-200";
     icon = <i className="fa-solid fa-triangle-exclamation" />;
