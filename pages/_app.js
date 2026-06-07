@@ -5,12 +5,11 @@ import { registerResponseInterceptor } from "../api/api";
 export default function MyApp({ Component, pageProps }) {
   registerResponseInterceptor(async ({ response }) => {
     if (response.status === 401) {
-      // Only sign out if the token is actually invalid, not for other errors
-      const { default: oktaAuth } = await import("../lib/okta");
-      const isAuth = await oktaAuth.isAuthenticated();
-      if (!isAuth) {
+      const { default: msalInstance, getMsal } = await import("../lib/okta");
+      await getMsal();
+      if (msalInstance.getAllAccounts().length === 0) {
         localStorage.removeItem("session");
-        await oktaAuth.signOut({
+        await msalInstance.logoutRedirect({
           postLogoutRedirectUri: window.location.origin,
         });
       }

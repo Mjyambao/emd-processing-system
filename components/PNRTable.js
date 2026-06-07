@@ -66,6 +66,7 @@ export default function PNRTable({
    * Helpers
    * -----------------------------
    */
+  const canEditTTL = (row) => row.status === "error" || row.status === "human";
   const isNonEmdTicket = String(ticketType ?? "EMD") !== "EMD";
   const includesCI = (value, query) => {
     const v = String(value ?? "").toLowerCase();
@@ -1945,20 +1946,24 @@ export default function PNRTable({
                   </td>
 
                   {/* TTL */}
-
-                  <td className="w-[220px] text-black/80 whitespace-nowrap">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 underline-offset-2 text-black/80 hover:text-brand-red"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTTLModalForRow(row);
-                      }}
-                      title="Set Ticket Time Limit"
-                    >
-                      {ttlForRow ? toYYYYMMDD(ttlForRow) : "-"}
-                      <i className="fa-regular fa-calendar" />
-                    </button>
+                  <td
+                    onClick={(e) => {
+                      if (!canEditTTL(row)) return; // prevent action
+                      e.stopPropagation();
+                      openTTLModalForRow(row);
+                    }}
+                    title={
+                      canEditTTL(row)
+                        ? "Set Ticket Time Limit"
+                        : "TTL can only be set for Error or Human Input Required"
+                    }
+                    className={
+                      canEditTTL(row)
+                        ? "cursor-pointer"
+                        : "cursor-not-allowed text-gray-400"
+                    }
+                  >
+                    {ttlForRow ? toYYYYMMDD(ttlForRow) : "-"}
                   </td>
 
                   {/* Error Details */}

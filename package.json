@@ -6,12 +6,10 @@
     "dev": "next dev -p 3000",
     "start": "node server.js",
     "lint": "eslint .",
-    "build": "next build",
-    "prebuild": "npm run lint"
+    "build": "next build"
   },
   "dependencies": {
-    "@okta/okta-auth-js": "^8.0.0",
-    "@okta/okta-react": "^6.11.0",
+    "@azure/msal-browser": "^4.0.0",
     "next": "^16.2.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",

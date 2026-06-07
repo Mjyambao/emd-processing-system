@@ -340,7 +340,6 @@ const MODAL_CONFIG = {
       "createdAt",
       "slaStartTime",
       "processingMinutes",
-      "completionTimeAt",
       "errorClass",
       "resolutionStatus",
     ],
@@ -497,7 +496,7 @@ function StatusBadge({ status }) {
 }
 
 function getSlaMinutesForDocType(documentType) {
-  return documentType === "EMD-A" ? 3 : 5;
+  return documentType === "EMD-A" ? 2 : 4;
 }
 
 function getModalColumnDefs(modalTitle, onPnrClick) {
@@ -580,14 +579,15 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
   const completionCol = {
     key: "completionMinutes",
     header: "Completion Time",
-    render: (r) => minutesToHrs(r.completionMinutes),
+    render: (r) =>
+      r.completionMinutes != null ? r.completionMinutes + "m" : "-",
   };
 
   const slaCol = {
     key: "slaMinutes",
     header: "SLA",
     render: (r) =>
-      minutesToHrs(r.slaMinutes ?? getSlaMinutesForDocType(r.documentType)),
+      r.slaMinutes + "m" ?? getSlaMinutesForDocType(r.documentType) + "m",
   };
 
   const triageTimeCol = {
@@ -725,7 +725,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
 
   const aiRficCol = {
     key: "aiRFIC",
-    header: "AI-suggested RFIC",
+    header: "AI-inferred RFIC",
     render: (r) => (
       <span className="font-mono text-blue-700">{display(r.aiRFIC)}</span>
     ),
@@ -733,7 +733,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
 
   const aiRfiscCol = {
     key: "aiRFISC",
-    header: "AI-suggested RFISC",
+    header: "AI-inferred RFISC",
     render: (r) => (
       <span className="font-mono text-blue-700">{display(r.aiRFISC)}</span>
     ),
@@ -741,7 +741,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
 
   const aiEmdDescCol = {
     key: "aiEmdDesc",
-    header: "AI-suggested EMD Desc",
+    header: "AI-inferred EMD Desc",
     render: (r) => display(r.aiEmdDesc),
   };
 
@@ -834,7 +834,6 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       createdAtCol,
       slaStartTimeCol,
       processingTimeCol,
-      completionTimeCol,
       errorClassCol,
       resolutionStatusCol,
     ],
@@ -1233,7 +1232,7 @@ function mapCommonItemToRow(item) {
   return {
     id: item.emd_item_id || item.pnr_id || item.id,
     pnr: item.pnr_id || "-",
-    airline: item.airline_name || "-",
+    airline: item.airline_names || "-",
     documentType: item.document_type || item.emd_type || "-",
     status: item.status || "-",
     assigned: item.assigned_to || "-",
@@ -1246,13 +1245,15 @@ function mapCommonItemToRow(item) {
 function mapAvgCompletionItemToRow(item) {
   const base = mapCommonItemToRow(item) || {};
   // stage durations are ms in API; we display as minutes in modal
-  const triageMs = coerceNumber(item.triage_agent_ms);
-  const maskMs = coerceNumber(item.mask_check_agent_ms);
-  const dealMs = coerceNumber(item.deal_matching_agent_ms);
-  const issuanceMs = coerceNumber(item.issuance_agent_ms);
-  const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
-  // If server provides total_processing_minutes as a string, prefer it
-  const totalMins = coerceNumber(item.total_processing_minutes);
+  const triageMs = item.triage_total_completion_time;
+  const maskMs = item.mask_total_completion_time;
+  const dealMs = item.deal_matching_total_completion_time;
+  const issuanceMs = item.issuance_total_completion_time;
+  // const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
+  // If server provides completion_time as a string, prefer it
+  console.log("Comp: ", item.completion_time);
+  const totalMins = item.completion_time;
+  const slaMins = item.sla;
   return {
     ...base,
     status:
@@ -1261,12 +1262,16 @@ function mapAvgCompletionItemToRow(item) {
       normalizeStatus(base.status) === "complete"
         ? "processed"
         : normalizeStatus(base.status),
-    triageTime: msToMins(triageMs),
-    maskCheckTime: msToMins(maskMs),
-    dealMatchingTime: msToMins(dealMs),
-    issuanceTime: msToMins(issuanceMs),
+    // triageTime: msToMins(triageMs),
+    // maskCheckTime: msToMins(maskMs),
+    // dealMatchingTime: msToMins(dealMs),
+    // issuanceTime: msToMins(issuanceMs),
+    triageTime: triageMs,
+    maskCheckTime: maskMs,
+    dealMatchingTime: dealMs,
+    issuanceTime: issuanceMs,
     completionMinutes: totalMins,
-    slaMinutes: getSlaMinutesForDocType(base.documentType),
+    slaMinutes: slaMins,
   };
 }
 
@@ -1307,7 +1312,7 @@ function mapExceptionItemToRow(item) {
 
 function mapAiVsHumanItemToRow(item) {
   const base = mapCommonItemToRow(item) || {};
-  const completionMinutes = coerceNumber(item.completion_time_minutes);
+  const completionMinutes = item.completion_time_minutes;
   return {
     ...base,
     status:
@@ -1339,12 +1344,12 @@ function mapEndToEndItemToRow(item) {
         : normalizeStatus(base.status),
     createdAt: item.queue_arrival_utc || base.createdAt,
     emdNumber: item.emd_number || "-",
-    triageTime: coerceNumber(item.triage),
-    maskCheckTime: coerceNumber(item.mask_check),
-    dealMatchingTime: coerceNumber(item.deal_matching),
-    issuanceTime: coerceNumber(item.issuance),
-    completionMinutes: coerceNumber(item.completion_time),
-    slaMinutes: getSlaMinutesForDocType(base.documentType),
+    triageTime: item.triage_total_completion_time,
+    maskCheckTime: item.mask_total_completion_time,
+    dealMatchingTime: item.deal_matching_total_completion_time,
+    issuanceTime: item.issuance_total_completion_time,
+    completionMinutes: item.completion_time,
+    slaMinutes: item.sla ?? getSlaMinutesForDocType(base.documentType),
   };
 }
 
@@ -1524,8 +1529,6 @@ export default function ReportsModule({ onOpenPNR }) {
 
     let finalRows = Array.isArray(rows) ? rows : [];
     finalRows = applyStatusRules(finalRows);
-
-    // ✅ FIX: no truncation here — show ALL rows
 
     setDetailTitle(title || "Details");
     setDetailSubtitle(subtitle || "");
@@ -1813,7 +1816,7 @@ export default function ReportsModule({ onOpenPNR }) {
   const dashKpis = useMemo(() => {
     const s = dashSummary && dashSummary.success ? dashSummary : null;
     const throughputCount = coerceNumber(s?.throughput?.data?.count) ?? 0;
-    const avgMins = coerceNumber(s?.avgCompletionTime?.data?.avgMins) ?? 0;
+    const avgMins = s?.avgCompletionTime?.data?.avgMins ?? 0;
     const avgItems = Array.isArray(s?.avgCompletionTime?.data?.items)
       ? s.avgCompletionTime.data.items
       : [];
@@ -1942,11 +1945,11 @@ export default function ReportsModule({ onOpenPNR }) {
     return e2eListRows
       .map((r) => ({
         ...r,
-        slaMinutes: getSlaMinutesForDocType(r.documentType),
+        slaMinutes: r.slaMinutes ?? getSlaMinutesForDocType(r.documentType),
       }))
       .filter((r) => {
-        const c = coerceNumber(r.completionMinutes);
-        const sla = coerceNumber(r.slaMinutes);
+        const c = r.completionMinutes;
+        const sla = r.slaMinutes;
         if (c == null || sla == null) return false;
         return c > sla;
       });
@@ -2450,7 +2453,7 @@ export default function ReportsModule({ onOpenPNR }) {
 
         <Card
           title="Avg Completion Time"
-          value={minutesToHrs(dashKpis.avgMins)}
+          value={`${dashKpis.avgMins} mins`}
           sub={
             dashLoading
               ? "Loading dashboard summary…"
@@ -3221,13 +3224,12 @@ export default function ReportsModule({ onOpenPNR }) {
                     {
                       key: "sla",
                       header: "SLA",
-                      render: (r) =>
-                        minutesToHrs(getSlaMinutesForDocType(r.documentType)),
+                      render: (r) => r.slaMinutes + "m",
                     },
                     {
                       key: "completion",
                       header: "Completion",
-                      render: (r) => minutesToHrs(r.completionMinutes),
+                      render: (r) => r.completionMinutes + "m",
                     },
                   ]}
                   rows={slaBreachedRows.slice(0, 10)}
@@ -3469,15 +3471,6 @@ export default function ReportsModule({ onOpenPNR }) {
         onClose={() => setPnrModalOpen(false)}
         onOpenDashboard={onOpenPNR}
       />
-
-      {/* subtle global loading (optional) */}
-      {anyLoading ? (
-        <div className="fixed bottom-4 right-4 z-40 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs text-black/70 shadow">
-          <div className="flex items-center gap-2">
-            <Spinner size="sm" /> Fetching report data…
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

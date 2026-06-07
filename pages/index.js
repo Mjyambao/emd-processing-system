@@ -1,19 +1,23 @@
 import { useEffect } from "react";
 import { useRouter } from "next/router";
-import oktaAuth from "../lib/okta";
+import msalInstance, { getMsal, apiScopes } from "../lib/okta";
 
 export default function Login() {
   const router = useRouter();
 
   // If already authenticated, go straight to dashboard
   useEffect(() => {
-    oktaAuth.isAuthenticated().then((isAuth) => {
-      if (isAuth) router.replace("/dashboard");
+    getMsal().then(() => {
+      if (msalInstance.getAllAccounts().length > 0)
+        router.replace("/dashboard");
     });
   }, [router]);
 
-  function handleLogin() {
-    oktaAuth.signInWithRedirect({ originalUri: "/dashboard" });
+  async function handleLogin() {
+    await getMsal();
+    await msalInstance.loginRedirect({
+      scopes: ["openid", "profile", "email", ...apiScopes],
+    });
   }
 
   return (
@@ -26,7 +30,7 @@ export default function Login() {
           <div>
             <h1 className="text-xl font-semibold">
               EMD Processing System{" "}
-              <span className="text-xs text-black/30">v1.0</span>
+              <span className="text-xs text-black/30">v1.2</span>
             </h1>
             <p className="text-black/60 text-sm">Sign in to continue</p>
           </div>

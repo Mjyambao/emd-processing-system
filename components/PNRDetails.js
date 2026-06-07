@@ -485,6 +485,7 @@ function mapApiToPnrDetails(pnrApi) {
           submitted: item?.isAdm != null || item?.feedback != null,
         },
         emdItemId: item?.emdItemId,
+        emdType: item?.emdType,
         ancillaryItemId: item?.ancillaryItemId,
         commercialName: item?.commercialName,
         numberOfItems: item?.numberOfItems,
@@ -699,6 +700,7 @@ export default function PNRDetails({
   loggedInUserId,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
+  const [detailsError, setDetailsError] = useState(null);
   // Keep a synchronous reference of the latest PNR details (prevents stale reads in modals)
   const pnrDetailsRef = useRef(null);
   const setPnrDetailsAndRef = (updater) => {
@@ -961,182 +963,35 @@ export default function PNRDetails({
         const api = await getPnrDetails(selectedPnr, {
           signal: controller.signal,
         });
+
         if (!active) return;
 
         const mapped = mapApiToPnrDetails(api);
         decorateMappedDetails(mapped, selected?.status);
+
+        setDetailsError(null);
         setPnrDetailsAndRef(mapped);
         setIsDetailsLoading(false);
         return;
       } catch (e) {
         if (e?.name === "AbortError") return;
-        console.warn("PNR details API load failed; falling back to mock.", e);
-      }
 
-      // Fallback mock behavior
-      try {
-        if (selectedPnr === "GLEBNY") {
-          const res = await fetch("/data/sabre-booking.json", {
-            signal: controller.signal,
-          });
-          const data = await res.json();
-          if (!active) return;
+        console.error("PNR details API load failed", e);
 
-          const traveler = data?.travelers?.[0] || {};
-          const anc = traveler?.ancillaries?.[0] || {};
-          const flight = data?.flights?.[0] || {};
-          const emdTotals = anc?.totals || {};
-          const contactEmail = (data?.contactInfo?.emails || [])[0];
-          const contactPhone = (data?.contactInfo?.phones || [])[0];
-          const ticket0 = (data?.flightTickets || [])[0] || {};
-          const ssr = (data?.specialServices || [])[0] || {};
+        const msg = `Failed to load PNR details: ${e?.message || "Unknown error"}`;
 
-          const common = {
-            pnr: data?.request?.confirmationId || selectedPnr,
-            bookingId: data?.bookingId,
-            isTicketed: data?.isTicketed,
-            agencyIata: data?.creationDetails?.agencyIataNumber,
-            pcc: data?.creationDetails?.userWorkPcc,
-            created:
-              `${data?.creationDetails?.creationDate || ""} ${data?.creationDetails?.creationTime || ""}`.trim(),
-            contactEmail,
-            contactPhone,
-            otherInfo: "-",
-            errorDesc: data?.errors?.[0]?.description,
-            flightNo:
-              `${flight?.airlineCode || ""} ${flight?.flightNumber || ""}`.trim(),
-            operating:
-              `${flight?.operatingAirlineCode || ""} ${flight?.operatingFlightNumber || ""}`.trim(),
-            route: `${flight?.fromAirportCode || ""} → ${flight?.toAirportCode || ""}`,
-            dep: `${flight?.updatedDepartureDate || flight?.departureDate || ""} ${flight?.updatedDepartureTime || flight?.departureTime || ""}`.trim(),
-            arr: `${flight?.updatedArrivalDate || flight?.arrivalDate || ""} ${flight?.updatedArrivalTime || flight?.arrivalTime || ""}`.trim(),
-            seat: flight?.seats?.[0]?.number || "-",
-            ssrCode: ssr?.code || "",
-            documentType: "EMD",
-            brand: "ECO FLEX",
-            gds: "SABRE",
-          };
+        if (!active) return;
 
-          const pax1Name =
-            `${traveler?.givenName || ""} ${traveler?.middleName || ""} ${traveler?.surname || ""}`
-              .replace(/\s+/g, " ")
-              .trim() || "Traveler 1";
-          const pax1Ticket =
-            ticket0?.value || traveler?.ticketNumber || "0167489825830";
-
-          const emd1 = {
-            emdNo: anc?.documentNumber || anc?.emdNumber || "6074333222111",
-            emdStatus: anc?.status || "Confirmed",
-            emdTotal:
-              emdTotals?.grandTotal && emdTotals?.currencyCode
-                ? `${emdTotals.grandTotal} ${emdTotals.currencyCode}`
-                : "128.00 USD",
-            rfic: anc?.rfic || "C",
-            rfisc: anc?.rfisc || "05Z",
-            emdDesc:
-              anc?.commercialName ||
-              anc?.description ||
-              "UPTO33LB 15KG BAGGAGE",
-            baseline: {
-              rfic: anc?.rfic || "C",
-              rfisc: anc?.rfisc || "05Z",
-              emdDesc:
-                anc?.commercialName ||
-                anc?.description ||
-                "UPTO33LB 15KG BAGGAGE",
-            },
-            built: true,
-            editable: false,
-            notes: "",
-            aeBuildStatus: "DONE",
-            aiSuggestions: [],
-            ssrCode: ssr?.code || "",
-            otherInfo: "-",
-            adm: { isAdm: false, feedback: "", submitted: false },
-          };
-
-          setPnrDetailsAndRef({
-            ...common,
-            status: selected?.status || "Processed",
-            passengers: [
-              {
-                name: pax1Name,
-                ticketNo: pax1Ticket,
-                travelerName: pax1Name,
-                ...common,
-                emds: [emd1],
-                emdItems: [emd1],
-              },
-            ],
-          });
-        } else {
-          const common = {
-            pnr: selectedPnr,
-            bookingId: "1SXXX1A2B3C4D",
-            isTicketed: true,
-            agencyIata: "99119911",
-            pcc: "AB12",
-            created: "2024-01-09 15:00",
-            contactEmail: "travel@sabre.com",
-            contactPhone: "+1-555-123-4567",
-            otherInfo: "Unassisted minor international",
-            errorDesc: normalize(
-              selected?.errorDetails || selected?.errorDesc || selected?.error,
-            ),
-            documentType: "EMD",
-            brand: "ECO FLEX",
-            gds: "SABRE",
-            status: selected?.status || "Human Input Required",
-          };
-
-          const emdA = {
-            emdNo: "6074333222111",
-            emdStatus: "Confirmed",
-            emdTotal: "128.00 USD",
-            rfic: "C",
-            rfisc: "05Z",
-            emdDesc: "UPTO33LB 15KG BAGGAGE",
-            baseline: {
-              rfic: "C",
-              rfisc: "05Z",
-              emdDesc: "UPTO33LB 15KG BAGGAGE",
-            },
-            built: false,
-            editable: true,
-            notes: "",
-            aeBuildStatus: "PENDING",
-            aiSuggestions: [],
-            ssrCode: "XBAG",
-            otherInfo: "-",
-            adm: { isAdm: false, feedback: "", submitted: false },
-          };
-
-          setPnrDetailsAndRef({
-            ...common,
-            passengers: [
-              {
-                name: selected?.passenger || "DOE/JOHN",
-                ticketNo: "0167489825830",
-                travelerName: selected?.passenger || "DOE/JOHN",
-                ...common,
-                flightNo: "PR 123",
-                operating: "PR 123",
-                route: "MNL → CEB",
-                dep: "2024-01-10 10:00",
-                arr: "2024-01-10 11:30",
-                seat: "12A",
-                emds: [emdA],
-                emdItems: [emdA],
-              },
-            ],
-          });
-        }
-      } catch (mockError) {
-        if (!active || mockError?.name === "AbortError") return;
-        const msg = `Failed to load PNR details: ${mockError?.message || "Unknown error"}`;
         setPnrDetailsAndRef(null);
+        setDetailsError(msg);
         setIsDetailsLoading(false);
-        showToast({ variant: "error", ariaLabel: msg, title: msg });
+
+        showToast({
+          variant: "error",
+          ariaLabel: msg,
+          title: msg,
+        });
+
         return;
       }
 
@@ -1697,6 +1552,10 @@ export default function PNRDetails({
           <div className="flex items-center gap-2 text-black/70">
             <Spinner size="sm" /> Loading details…
           </div>
+        ) : detailsError ? (
+          <p className="text-red-800 text-sm bg-red-100 rounded-sm border border-1 border-black/20 mt-4 p-3">
+            Failed to fetch PNR details. Please try again.
+          </p>
         ) : pnrDetails ? (
           <div className="mt-4 space-y-4 text-[13px]">
             {/* PNR & Booking */}
@@ -2109,7 +1968,8 @@ export default function PNRDetails({
                                       </FadeIn>
 
                                       {/* AI Suggestions / LLM Metrics / Knowledge Source */}
-                                      {showAiAssistSection && (
+                                      {showAiAssistSection &&
+                                      emd.emdType === "1" ? (
                                         <div className="mt-2">
                                           <div
                                             className={`rounded p-2 border ${
@@ -2287,6 +2147,8 @@ export default function PNRDetails({
                                             })()}
                                           </div>
                                         </div>
+                                      ) : (
+                                        ""
                                       )}
 
                                       {/* Build AE per EMD */}
@@ -2468,6 +2330,7 @@ export default function PNRDetails({
                                                             );
                                                           if (!target)
                                                             return prev;
+
                                                           if (!target.adm) {
                                                             target.adm = {
                                                               isAdm: false,
@@ -2475,11 +2338,17 @@ export default function PNRDetails({
                                                               submitted: false,
                                                             };
                                                           }
+
+                                                          const sanitized =
+                                                            sanitizeFeedbackText(
+                                                              ev.target.value,
+                                                            );
+
                                                           target.adm.feedback =
-                                                            ev.target.value;
-                                                          // mirror top-level fields used elsewhere
+                                                            sanitized;
                                                           target.feedback =
-                                                            ev.target.value;
+                                                            sanitized; // keep mirror behavior
+
                                                           return next;
                                                         },
                                                       )

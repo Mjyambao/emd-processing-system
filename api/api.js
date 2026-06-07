@@ -142,13 +142,6 @@ function buildHeaders(extra = {}, body) {
   ) {
     headers["Content-Type"] = "application/json";
   }
-  // if (authToken) {
-  //   headers["Authorization"] = `Bearer ${authToken}`;
-  // }
-  const token = getAccessToken();
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
   return headers;
 }
 
@@ -223,6 +216,10 @@ export async function request(config) {
 
   const { url, method, query, headers, body, timeout, signal } = cfg;
   if (!url) throw new ApiError("Missing URL in request config");
+
+  // Attach Azure AD access token (async)
+  const token = await getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const fullUrl = buildUrl(url, query);
   const controller = new AbortController();

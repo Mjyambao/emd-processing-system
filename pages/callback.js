@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import oktaAuth from "../lib/okta";
+import msalInstance, { getMsal, getRedirectResult } from "../lib/okta";
 
 import { createChatSession } from "../api/chatApi";
 
@@ -11,32 +11,52 @@ export default function Callback() {
   useEffect(() => {
     async function handleCallback() {
       try {
-        // Parse tokens from the redirect URL
-        const { tokens } = await oktaAuth.token.parseFromUrl();
-        oktaAuth.tokenManager.setTokens(tokens);
+        // getMsal() runs handleRedirectPromise() and sets the active account.
+        await getMsal();
 
-        // Get user info and store in localStorage
-        const user = await oktaAuth.token.getUserInfo(
-          tokens.accessToken,
-          tokens.idToken,
-        );
+        // Prefer the redirect result; fall back to the active account / first
+        // account so a re-render or mount-order race can't lose the session.
+        const result = getRedirectResult();
+        const account =
+          result?.account ||
+          msalInstance.getActiveAccount() ||
+          msalInstance.getAllAccounts()[0] ||
+          null;
 
-        localStorage.setItem(
-          "session",
-          JSON.stringify({
-            email: user.email,
-            name: user.name || user.preferred_username,
-            agentId: user.preferred_username || user.sub,
-            userId: user.sub,
-          }),
-        );
+        if (account) {
+          msalInstance.setActiveAccount(account);
+          const claims = account.idTokenClaims || {};
+
+          const email =
+            claims.email ||
+            claims.preferred_username ||
+            claims.upn ||
+            (Array.isArray(claims.emails) ? claims.emails[0] : "") ||
+            "";
+          const name =
+            claims.name ||
+            [claims.given_name, claims.family_name].filter(Boolean).join(" ") ||
+            email ||
+            account.name ||
+            account.username ||
+            "";
+
+          localStorage.setItem(
+            "session",
+            JSON.stringify({
+              email,
+              name,
+              agentId: claims.preferred_username || claims.oid || account.username,
+              userId: claims.oid || claims.sub,
+            }),
+          );
+        } else {
+          console.warn("Callback: no MSAL account found after redirect.");
+        }
 
         try {
           const response = await createChatSession();
-
-          // Adjust based on your API response structure
           const conversationId = response?.conversation_id;
-
           if (conversationId) {
             localStorage.setItem("conversation_id", conversationId);
           }
@@ -52,22 +72,6 @@ export default function Callback() {
 
     handleCallback();
   }, [router]);
-
-  // if (error) {
-  //   return (
-  //     <main className="min-h-screen grid place-items-center p-4">
-  //       <div className="card p-6 text-center">
-  //         <p className="text-red-600 mb-4">Login failed: {error}</p>
-  //         <button
-  //           className="btn btn-primary"
-  //           onClick={() => router.replace("/")}
-  //         >
-  //           Try Again
-  //         </button>
-  //       </div>
-  //     </main>
-  //   );
-  // }
 
   return (
     <main className="min-h-screen grid place-items-center">

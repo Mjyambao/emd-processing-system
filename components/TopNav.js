@@ -8,12 +8,53 @@ export default function TopNav({ onLogout }) {
   useEffect(() => {
     setMounted(true);
 
-    try {
-      const raw = localStorage.getItem("session");
-      setSession(raw ? JSON.parse(raw) : {});
-    } catch {
-      setSession({});
-    }
+    (async () => {
+      // Read the signed-in user straight from MSAL (source of truth),
+      // falling back to the stored session blob if present.
+      try {
+        const { getMsal } = await import("../lib/okta");
+        const instance = await getMsal();
+        const account =
+          instance.getActiveAccount() || instance.getAllAccounts()[0] || null;
+
+        if (account) {
+          const claims = account.idTokenClaims || {};
+          const email =
+            claims.email ||
+            claims.preferred_username ||
+            claims.upn ||
+            (Array.isArray(claims.emails) ? claims.emails[0] : "") ||
+            account.username ||
+            "";
+          const name =
+            claims.name ||
+            [claims.given_name, claims.family_name].filter(Boolean).join(" ") ||
+            email ||
+            account.name ||
+            "";
+          const next = {
+            email,
+            name,
+            agentId:
+              claims.preferred_username || claims.oid || account.username || "",
+            userId: claims.oid || claims.sub || "",
+          };
+          setSession(next);
+          // keep localStorage in sync for any other code that reads it
+          localStorage.setItem("session", JSON.stringify(next));
+          return;
+        }
+      } catch {
+        // fall through to localStorage
+      }
+
+      try {
+        const raw = localStorage.getItem("session");
+        setSession(raw ? JSON.parse(raw) : {});
+      } catch {
+        setSession({});
+      }
+    })();
 
     // Start clock after mount
     const tick = () => setNow(new Date().toLocaleString());

@@ -221,10 +221,10 @@ export default function Dashboard() {
     session?.userId || session?.user?.userId || session?.user?.name || "";
 
   async function handleLogout() {
-    const { default: oktaAuth } = await import("../lib/okta");
-    await oktaAuth.signOut({
+    const { default: msalInstance, getMsal } = await import("../lib/okta");
+    await getMsal();
+    await msalInstance.logoutRedirect({
       postLogoutRedirectUri: window.location.origin,
-      clearTokensBeforeRedirect: true,
     });
   }
 

@@ -154,7 +154,7 @@ function BubbleButton({ title, iconClass, accentClass, onClick }) {
         "flex items-center justify-center",
         accentClass,
         "text-white hover:brightness-95",
-        "focus:outline-none focus:ring-2 focus:ring-brand-red/30",
+        "focus:outline-none focus:ring-1 focus:ring-black/30",
       )}
       aria-label={title}
       title={title}
@@ -230,7 +230,7 @@ function ConfirmModal({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-md px-3 py-2 text-[15px] font-semibold border border-black/30 bg-black/5 hover:bg-black/20 focus:outline-none focus:ring-2 focus:ring-brand-red/30"
+              className="rounded-md px-3 py-2 text-[15px] font-semibold border border-black/30 bg-black/5 hover:bg-black/20 focus:outline-none focus:ring-1 focus:ring-black/30"
             >
               {cancelText}
             </button>
@@ -517,7 +517,7 @@ function ChatPanel({
         <button
           type="button"
           onClick={onClearActive}
-          className="inline-flex items-center justify-center rounded-lg px-2 py-2 text-black/60 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-brand-red/30"
+          className="inline-flex items-center justify-center rounded-lg px-2 py-2 text-black/60 hover:bg-black/5 focus:outline-none focus:ring-1 focus:ring-black/30"
           aria-label="Clear chat"
           title="Clear chat"
         >
@@ -528,7 +528,7 @@ function ChatPanel({
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex items-center justify-center rounded-lg px-2 py-2 text-black/60 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-brand-red/30"
+          className="inline-flex items-center justify-center rounded-lg px-2 py-2 text-black/60 hover:bg-black/5 focus:outline-none focus:ring-1 focus:ring-black/30"
           aria-label="Close chat"
           title="Close"
         >
@@ -608,7 +608,7 @@ function ChatPanel({
             className={cx(
               "min-h-[42px] max-h-[140px] flex-1 resize-none rounded-xl",
               "border border-black/10 px-2 py-2 text-[13px]",
-              "focus:outline-none focus:ring-2 focus:ring-brand-red/30",
+              "focus:outline-none focus:ring-1 focus:ring-black/30",
             )}
             placeholder="Type a message…"
             value={input}
@@ -625,7 +625,7 @@ function ChatPanel({
               "inline-flex items-center justify-center rounded-xl px-3 py-2 text-[13px] font-semibold",
               sending || !input.trim()
                 ? "bg-black/10 text-black/40 cursor-not-allowed"
-                : "bg-brand-red text-white hover:brightness-95",
+                : "bg-green-600 text-white hover:brightness-95",
             )}
             title="Send"
           >
@@ -656,9 +656,9 @@ function ChatPanel({
           className={cx(
             "max-w-[88%] rounded-2xl px-3 py-2 text-[13px] whitespace-pre-wrap",
             isUser
-              ? "bg-brand-red text-white rounded-br-lg"
+              ? "bg-green-600 text-white rounded-br-lg"
               : "bg-black/5 text-black rounded-bl-lg",
-            msg.status === "error" && "ring-2 ring-red-300",
+            msg.status === "error" && "ring-1 ring-red-300",
           )}
         >
           <div className={cx(isPlaceholder && "animate-pulse")}>{msg.text}</div>
