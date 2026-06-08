@@ -185,6 +185,7 @@ async function fetchLlmMetricsTrendOverTime({
 // Display helpers (null -> "-")
 // --------------------------------------------------
 function display(v) {
+  console.log(v);
   if (v === null || v === undefined) return "-";
   if (typeof v === "string") {
     const s = v.trim();
@@ -353,7 +354,7 @@ const MODAL_CONFIG = {
       "assigned",
       "stage",
       "createdAt",
-      "exceptionType",
+      "slaBreached",
       "adm",
       "feedback",
       "errorClass",
@@ -620,7 +621,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     header: "Is ADM?",
     render: (r) => (
       <span className={r.adm ? "text-red-600 font-medium" : "text-black/50"}>
-        {r.adm ? "Yes" : "No"}
+        {r.adm ? "YES" : "NO"}
       </span>
     ),
   };
@@ -653,20 +654,16 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     render: (r) => display(r.emdNumber),
   };
 
-  const exceptionTypeCol = {
-    key: "exceptionType",
-    header: "Exception Type",
+  const slaBreachedCol = {
+    key: "slaBreached",
+    header: "Is SLA Breached?",
     render: (r) => {
-      const type = display(r.exceptionType);
-      const cls =
-        type === "ADM"
-          ? "bg-red-100 text-red-700"
-          : type === "SLA Breach"
-            ? "bg-yellow-100 text-yellow-700"
-            : "bg-gray-100 text-gray-600";
+      const type = display(r.slaBreached);
       return (
         <span
-          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
+          className={
+            type === "YES" ? "text-red-600 font-medium" : "text-black/50"
+          }
         >
           {type}
         </span>
@@ -845,7 +842,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       assignedCol,
       stageCol,
       createdAtCol,
-      exceptionTypeCol,
+      slaBreachedCol,
       admCol,
       feedbackCol,
       errorClassCol,
@@ -1296,13 +1293,9 @@ function mapExceptionItemToRow(item) {
       normalizeStatus(base.status) === "-"
         ? "error"
         : normalizeStatus(base.status),
-    exceptionType: isAdm
-      ? "ADM"
-      : display(item.exception_type) !== "-"
-        ? item.exception_type
-        : "SLA Breach",
+    slaBreached: item.sla_breached || "test",
     adm: isAdm,
-    feedbackText: item.feedback || "-",
+    feedbackText: item.feedback || "test ",
     feedback: item.feedback || "-",
     slaStartTime: item.sla_start_time_utc || null,
     processingMinutes: secondsToMinutes(item.processing_time_seconds),
@@ -1614,7 +1607,11 @@ export default function ReportsModule({ onOpenPNR }) {
 
   async function loadTabData(
     activeTab,
-    { start_date = from, end_date = to } = {},
+    {
+      start_date = from,
+      end_date = to,
+      includeDashboardSummary = activeTab === SUBTABS.OVERVIEW,
+    } = {},
   ) {
     // Per-tab lazy loading: only fetch what the active tab needs.
     // Abort previous request for this tab only
@@ -1634,7 +1631,7 @@ export default function ReportsModule({ onOpenPNR }) {
     const withRange = { start_date, end_date, signal };
 
     const needs = {
-      dash: activeTab === SUBTABS.OVERVIEW,
+      dash: includeDashboardSummary,
       throughputOT: activeTab === SUBTABS.OVERVIEW,
       aiHuman: activeTab === SUBTABS.OVERVIEW || activeTab === SUBTABS.AI,
       e2e: activeTab === SUBTABS.OPS || activeTab === SUBTABS.EXCEPTIONS,
@@ -1805,8 +1802,27 @@ export default function ReportsModule({ onOpenPNR }) {
   }
 
   // initial load and range changes + tab changes (lazy)
+  const prevFiltersRef = useRef({ subTab: null, from: null, to: null });
+
   useEffect(() => {
-    loadTabData(subTab, { start_date: from, end_date: to });
+    const prev = prevFiltersRef.current;
+
+    const tabChanged = prev.subTab !== null && prev.subTab !== subTab;
+    const dateChanged =
+      prev.from !== null &&
+      prev.to !== null &&
+      (prev.from !== from || prev.to !== to);
+
+    const isInitialLoad = prev.subTab === null;
+
+    loadTabData(subTab, {
+      start_date: from,
+      end_date: to,
+      includeDashboardSummary:
+        isInitialLoad || subTab === SUBTABS.OVERVIEW || dateChanged,
+    });
+
+    prevFiltersRef.current = { subTab, from, to };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subTab, from, to]);
 
@@ -1948,8 +1964,8 @@ export default function ReportsModule({ onOpenPNR }) {
         slaMinutes: r.slaMinutes ?? getSlaMinutesForDocType(r.documentType),
       }))
       .filter((r) => {
-        const c = r.completionMinutes;
-        const sla = r.slaMinutes;
+        const c = parseFloat(r.completionMinutes);
+        const sla = parseFloat(r.slaMinutes);
         if (c == null || sla == null) return false;
         return c > sla;
       });
