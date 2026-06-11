@@ -1232,7 +1232,8 @@ function mapCommonItemToRow(item) {
     airline: item.airline_names || "-",
     documentType: item.document_type || item.emd_type || "-",
     status: item.status || "-",
-    assigned: item.assigned_to || "-",
+    assigned:
+      item.assigned_to == null ? "Unassigned" : item.assigned_to || "null",
     stage: item.stage || "-",
     createdAt,
     errorClass: item.error_details || item.human_error || "-",
@@ -1910,7 +1911,7 @@ export default function ReportsModule({ onOpenPNR }) {
     const arr = Array.isArray(assignments.chart) ? assignments.chart : [];
     return arr
       .map((r) => ({
-        name: r.assignee || "-",
+        name: r.assignee || "null",
         count: coerceNumber(r.count) ?? 0,
         __raw: r,
       }))
