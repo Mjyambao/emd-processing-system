@@ -4,6 +4,7 @@ export default function TopNav({ onLogout }) {
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState("");
   const [session, setSession] = useState(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -63,6 +64,19 @@ export default function TopNav({ onLogout }) {
     return () => clearInterval(t);
   }, []);
 
+  const handleLogoutClick = async () => {
+    if (isLoggingOut) return; // guard
+
+    setIsLoggingOut(true);
+
+    try {
+      await onLogout(); // call your existing logout logic
+    } catch (err) {
+      console.error("Logout failed:", err);
+      setIsLoggingOut(false); // allow retry if it fails
+    }
+  };
+
   return (
     <header className="sticky top-0 z-[99999] border-b border-black/10 bg-white/80 backdrop-blur">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
@@ -90,8 +104,19 @@ export default function TopNav({ onLogout }) {
               </div>
             </>
           )}
-          <button className="btn btn-ghost" onClick={onLogout} title="Logout">
-            <i className="fa-solid fa-right-from-bracket"></i> Logout
+          <button
+            className="btn btn-ghost"
+            onClick={handleLogoutClick}
+            disabled={isLoggingOut}
+            title="Logout"
+            style={{
+              marginLeft: "10px",
+              opacity: isLoggingOut ? 0.6 : 1,
+              cursor: isLoggingOut ? "not-allowed" : "pointer",
+            }}
+          >
+            <i className="fa-solid fa-right-from-bracket"></i>{" "}
+            {isLoggingOut ? "Logging out..." : "Logout"}
           </button>
         </div>
       </div>

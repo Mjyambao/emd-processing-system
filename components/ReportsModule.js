@@ -24,7 +24,18 @@ import {
 import Spinner from "./Spinner";
 import PNRDetails from "./PNRDetails";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+import {
+  getDashboardSummary,
+  getThroughputOverTime,
+  getAiVsHumanCorrections,
+  getEndToEndAvgTime,
+  getAssignmentsToTicketers,
+  getErrorVisibilityClassification,
+  getHilPnrs,
+  getPnrAdm,
+  getLlmMetricsAvgInRange,
+  getLlmMetricsTrendOverTime,
+} from "../api/reportApi";
 
 const COLORS = {
   brand: "#b91c1c",
@@ -38,148 +49,6 @@ const COLORS = {
 
 const DATE_LOCALE = "en-US";
 const DATE_TZ = "UTC";
-
-// --------------------------------------------------
-// Fetch helpers (GET + start_date/end_date)
-// --------------------------------------------------
-function buildUrl(path, { start_date, end_date } = {}) {
-  const base = API_BASE ? `${API_BASE}${path}` : path;
-  if (start_date && end_date) {
-    const qs = `start_date=${encodeURIComponent(
-      start_date,
-    )}&end_date=${encodeURIComponent(end_date)}`;
-    return `${base}?${qs}`;
-  }
-  return base;
-}
-
-async function fetchJson(path, { start_date, end_date, signal } = {}) {
-  const url = buildUrl(path, { start_date, end_date });
-  const res = await fetch(url, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    signal,
-  });
-
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    // ignore
-  }
-
-  if (!res.ok) {
-    const msg = json?.message || `Request failed (${res.status})`;
-    throw new Error(msg);
-  }
-  if (json && json.success === false) {
-    throw new Error(json?.message || "Request returned success=false");
-  }
-  return json;
-}
-
-async function fetchDashboardSummary({ start_date, end_date, signal } = {}) {
-  return fetchJson("/api/v1/report/dashboard-summary", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchThroughputOverTime({ start_date, end_date, signal } = {}) {
-  return fetchJson("/api/v1/report/overview/throughput-over-time", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchAiVsHumanCorrections({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
-  return fetchJson("/api/v1/report/overview/ai-vs-human-corrections", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchEndToEndAvgTime({ start_date, end_date, signal } = {}) {
-  return fetchJson("/api/v1/report/operations/end-to-end-avg-time", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchAssignmentsToTicketers({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
-  return fetchJson("/api/v1/report/operations/assignment-to-ticketers", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchErrorVisibilityClassification({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
-  return fetchJson(
-    "/api/v1/report/operations/error-visibility-classification",
-    {
-      start_date,
-      end_date,
-      signal,
-    },
-  );
-}
-
-async function fetchHilPnrs({ start_date, end_date, signal } = {}) {
-  return fetchJson("/api/v1/report/quality/hil-pnrs", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchPnrAdm({ start_date, end_date, signal } = {}) {
-  return fetchJson("/api/v1/report/quality/pnr-adm", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchLlmMetricsAvgInRange({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
-  return fetchJson("/api/v1/report/ai-governance/llm-metrics-avg-in-range", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
-
-async function fetchLlmMetricsTrendOverTime({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
-  return fetchJson("/api/v1/report/ai-governance/llm-metrics-trend-over-time", {
-    start_date,
-    end_date,
-    signal,
-  });
-}
 
 // --------------------------------------------------
 // Display helpers (null -> "-")
@@ -348,13 +217,16 @@ const MODAL_CONFIG = {
   Exceptions: {
     columns: [
       "pnr",
+      "ancillaryId",
       "airline",
-      "documentType",
+      "emdType",
       "status",
       "assigned",
       "stage",
       "createdAt",
       "slaBreached",
+      "slaMinutes",
+      "processingTime",
       "adm",
       "feedback",
       "errorClass",
@@ -516,6 +388,21 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     ),
   };
 
+  const ancillaryIdCol = {
+    key: "ancillaryId",
+    header: "Ancillary ID",
+    render: (r) => (
+      <button
+        type="button"
+        className="text-black"
+        onClick={() => onPnrClick?.(r)}
+        title="Open PNR details"
+      >
+        {display(r.ancillaryId)}
+      </button>
+    ),
+  };
+
   const airlineCol = {
     key: "airline",
     header: "Airline",
@@ -534,6 +421,22 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
         }`}
       >
         {display(r.documentType)}
+      </span>
+    ),
+  };
+
+  const emdTypeCol = {
+    key: "emdType",
+    header: "EMD Type",
+    render: (r) => (
+      <span
+        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+          r.emdType === "EMD-A"
+            ? "bg-blue-100 text-blue-700"
+            : "bg-purple-100 text-purple-700"
+        }`}
+      >
+        {display(r.emdType)}
       </span>
     ),
   };
@@ -836,13 +739,16 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     ],
     Exceptions: [
       pnrCol,
+      ancillaryIdCol,
       airlineCol,
-      documentTypeCol,
+      emdTypeCol,
       statusCol,
       assignedCol,
       stageCol,
       createdAtCol,
       slaBreachedCol,
+      slaCol,
+      processingTimeCol,
       admCol,
       feedbackCol,
       errorClassCol,
@@ -1229,8 +1135,10 @@ function mapCommonItemToRow(item) {
   return {
     id: item.emd_item_id || item.pnr_id || item.id,
     pnr: item.pnr_id || "-",
+    ancillaryId: item.ancillary_item_id || "test",
     airline: item.airline_names || "-",
-    documentType: item.document_type || item.emd_type || "-",
+    documentType: item.document_type || "-",
+    emdType: item.emd_type || "-",
     status: item.status || "-",
     assigned:
       item.assigned_to == null ? "Unassigned" : item.assigned_to || "null",
@@ -1288,18 +1196,22 @@ function mapErrorRateItemToRow(item) {
 function mapExceptionItemToRow(item) {
   const base = mapCommonItemToRow(item) || {};
   const isAdm = Boolean(item.is_adm);
+
   return {
     ...base,
     status:
       normalizeStatus(base.status) === "-"
         ? "error"
         : normalizeStatus(base.status),
-    slaBreached: item.sla_breached || "test",
+    slaBreached: item.sla_breached || "-",
+    slaMinutes:
+      coerceNumber(item.sla) ??
+      getSlaMinutesForDocType(item.document_type || base.documentType),
     adm: isAdm,
-    feedbackText: item.feedback || "test ",
+    feedbackText: item.feedback || "-",
     feedback: item.feedback || "-",
     slaStartTime: item.sla_start_time_utc || null,
-    processingMinutes: secondsToMinutes(item.processing_time_seconds),
+    processingMinutes: item.processing_time,
     completionTimeAt: item.completion_time_utc || null,
   };
 }
@@ -1687,34 +1599,34 @@ export default function ReportsModule({ onOpenPNR }) {
 
     const requests = [];
     if (needs.dash)
-      requests.push({ k: "dash", p: fetchDashboardSummary(withRange) });
+      requests.push({ k: "dash", p: getDashboardSummary(withRange) });
     if (needs.throughputOT)
       requests.push({
         k: "throughputOT",
-        p: fetchThroughputOverTime(withRange),
+        p: getThroughputOverTime(withRange),
       });
     if (needs.aiHuman)
-      requests.push({ k: "aiHuman", p: fetchAiVsHumanCorrections(withRange) });
+      requests.push({ k: "aiHuman", p: getAiVsHumanCorrections(withRange) });
     if (needs.e2e)
-      requests.push({ k: "e2e", p: fetchEndToEndAvgTime(withRange) });
+      requests.push({ k: "e2e", p: getEndToEndAvgTime(withRange) });
     if (needs.assignments)
       requests.push({
         k: "assignments",
-        p: fetchAssignmentsToTicketers(withRange),
+        p: getAssignmentsToTicketers(withRange),
       });
     if (needs.errorVis)
       requests.push({
         k: "errorVis",
-        p: fetchErrorVisibilityClassification(withRange),
+        p: getErrorVisibilityClassification(withRange),
       });
-    if (needs.hil) requests.push({ k: "hil", p: fetchHilPnrs(withRange) });
-    if (needs.pnrAdm) requests.push({ k: "pnrAdm", p: fetchPnrAdm(withRange) });
+    if (needs.hil) requests.push({ k: "hil", p: getHilPnrs(withRange) });
+    if (needs.pnrAdm) requests.push({ k: "pnrAdm", p: getPnrAdm(withRange) });
     if (needs.llmAvg)
-      requests.push({ k: "llmAvg", p: fetchLlmMetricsAvgInRange(withRange) });
+      requests.push({ k: "llmAvg", p: getLlmMetricsAvgInRange(withRange) });
     if (needs.llmTrend)
       requests.push({
         k: "llmTrend",
-        p: fetchLlmMetricsTrendOverTime(withRange),
+        p: getLlmMetricsTrendOverTime(withRange),
       });
 
     const settled = await Promise.allSettled(requests.map((r) => r.p));

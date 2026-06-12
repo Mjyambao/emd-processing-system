@@ -4,10 +4,7 @@ import { logout } from "../api/userApi";
 let authToken = null;
 
 // Read base URL from env and remove trailing slashes
-const BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(
-  /\/+$/,
-  "",
-);
+const BASE_URL = "";
 
 // Default timeout (ms) for API requests. (20 secs)
 const DEFAULT_TIMEOUT = 20000;
@@ -49,21 +46,19 @@ async function logoutAndRedirectOnce() {
   isLoggingOut = true;
 
   try {
-    // Clear any in-memory token your wrapper tracks
+    // Clear any in-memory token
     clearToken();
 
-    // Clear your local session marker (you already do this in logout(), but harmless)
+    // Clear local session marker
     localStorage.removeItem("session");
 
-    // Trigger Okta signout (this should redirect to origin per your code)
-    // Don't "await" if you want to avoid hanging due to navigation
+    // Trigger Okta signout
     void logout();
   } catch {
     // Fallback: if okta signOut fails for some reason, force a hard redirect
     window.location.assign("/");
   } finally {
     // If Okta redirect doesn't happen (blocked/pop-up rules/etc), ensure we land at root
-    // (Optional) You can keep this as a last resort.
     setTimeout(() => {
       if (window.location.pathname !== "/") window.location.assign("/");
     }, 250);
@@ -86,7 +81,6 @@ export function registerResponseInterceptor(fn) {
   responseInterceptors.push(fn);
 }
 
-
 /*
  * Request configuration object
  * @typedef {Object} RequestConfig
@@ -107,7 +101,7 @@ function toQueryString(params = {}) {
     if (Array.isArray(value)) {
       value.forEach((v) => search.append(key, String(v)));
     } else if (typeof value === "object") {
-      // Flatten simple objects as JSON strings; adjust if your backend expects different
+      // Flatten simple objects as JSON strings
       search.append(key, JSON.stringify(value));
     } else {
       search.append(key, String(value));
@@ -117,7 +111,7 @@ function toQueryString(params = {}) {
   return qs ? `?${qs}` : "";
 }
 
-// Build full URL using BASE_URL + path (if path is relative)
+// Build full URL using BASE_URL + path
 function buildUrl(pathOrUrl, query) {
   const isAbsolute = /^https?:\/\//i.test(pathOrUrl);
   const prefix = isAbsolute ? "" : BASE_URL;
@@ -173,7 +167,7 @@ registerResponseInterceptor(async ({ response, request }) => {
   if (isAuthError && (isExpiredSignature || /expired/i.test(detail))) {
     await logoutAndRedirectOnce();
 
-    // Optionally throw a consistent error (UI can ignore if redirect happens)
+    // Optionally throw a consistent error
     throw new ApiError("Session expired. Redirecting to login.", {
       status: response.status,
       data: payload,
@@ -304,3 +298,5 @@ export const api = {
     request({ url, method: "PATCH", body, ...options }),
   delete: (url, options = {}) => request({ url, method: "DELETE", ...options }),
 };
+
+export default api;

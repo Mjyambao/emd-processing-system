@@ -1,44 +1,118 @@
-import { api } from "./api";
-import { generateReportSampleData } from "../lib/reportSampleData";
+import api from "./api";
 
-/*
- * Report Dashboard Summaries
- *
- * GET /api/v1/report/dashboard-summary
- *
- */
-export function getReportDashboardSummary(payload) {
-  return api.post("/api/v1/report/dashboard-summary", payload);
+// ------------------------------
+// Dashboard
+// ------------------------------
+export function getDashboardSummary({ start_date, end_date } = {}) {
+  api.get("/api/v1/report/dashboard-summary", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
 }
 
-/*
- * Throughout over time
- *
- * GET /api/v1/report/overview/throughput-over-time
- *
- */
-export function getReportThroughputOverTime(payload) {
-  return api.post("/api/v1/report/overview/throughput-over-time", payload);
+// ------------------------------
+// Overview
+// ------------------------------
+export function getThroughputOverTime({ start_date, end_date } = {}) {
+  return api.get("/api/v1/report/overview/throughput-over-time", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
 }
 
-/*
- * AI vs Human Corrections
- *
- * GET /api/v1/report/overview/ai-vs-human-corrections
- *
- */
-export function getReportAiVsHumanCorrections(payload) {
-  return api.post("/api/v1/report/overview/ai-vs-human-corrections", payload);
+export function getAiVsHumanCorrections({ start_date, end_date } = {}) {
+  return api.get("/api/v1/report/overview/ai-vs-human-corrections", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
 }
 
-export async function fetchReportingDataset({ from, to } = {}) {
-  // Simulate latency
-  await new Promise((r) => setTimeout(r, 250));
+// ------------------------------
+// Operations
+// ------------------------------
+export function getEndToEndAvgTime({ start_date, end_date } = {}) {
+  return api.get("/api/v1/report/operations/end-to-end-avg-time", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
+}
 
-  // const res = await fetch(`/api/reports?from=${from}&to=${to}`, { headers: { ... } });
-  // if (!res.ok) throw new Error("Failed to fetch reports");
-  // return await res.json();
+export function getAssignmentsToTicketers({
+  start_date,
+  end_date,
+  signal,
+} = {}) {
+  return api.get("/api/v1/report/operations/assignment-to-ticketers", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
+}
 
-  // For now: return sample dataset
-  return generateReportSampleData({ days: 60, itemsPerDay: 8 });
+export function getErrorVisibilityClassification({
+  start_date,
+  end_date,
+  signal,
+} = {}) {
+  return api.get("/api/v1/report/operations/error-visibility-classification", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
+}
+
+// ------------------------------
+// Quality
+// ------------------------------
+export function getHilPnrs({ start_date, end_date, signal } = {}) {
+  return api.get("/api/v1/report/quality/hil-pnrs", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
+}
+
+export function getPnrAdm({ start_date, end_date, signal } = {}) {
+  return api.get("/api/v1/report/quality/pnr-adm", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
+}
+
+// ------------------------------
+// AI Governance
+// ------------------------------
+export function getLlmMetricsAvgInRange({ start_date, end_date, signal } = {}) {
+  return api.get("/api/v1/report/ai-governance/llm-metrics-avg-in-range", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
+}
+
+export function getLlmMetricsTrendOverTime({
+  start_date,
+  end_date,
+  signal,
+} = {}) {
+  return api.get("/api/v1/report/ai-governance/llm-metrics-trend-over-time", {
+    query: {
+      start_date,
+      end_date,
+    },
+  });
 }

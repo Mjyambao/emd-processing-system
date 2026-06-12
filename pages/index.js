@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import msalInstance, { getMsal, apiScopes } from "../lib/okta";
 
 export default function Login() {
   const router = useRouter();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // If already authenticated, go straight to dashboard
   useEffect(() => {
@@ -14,10 +15,24 @@ export default function Login() {
   }, [router]);
 
   async function handleLogin() {
-    await getMsal();
-    await msalInstance.loginRedirect({
-      scopes: ["openid", "profile", "email", ...apiScopes],
-    });
+    if (isLoggingIn) return; // prevent spam clicks
+
+    setIsLoggingIn(true);
+
+    try {
+      await getMsal();
+
+      await msalInstance.loginRedirect({
+        scopes: ["openid", "profile", "email", ...apiScopes],
+      });
+
+      // NOTE:
+      // No need to reset isLoggingIn = false
+      // because redirect will unload the page
+    } catch (err) {
+      console.error("Login failed:", err);
+      setIsLoggingIn(false); // allow retry if something breaks
+    }
   }
 
   return (
@@ -30,7 +45,7 @@ export default function Login() {
           <div>
             <h1 className="text-xl font-semibold">
               EMD Processing System{" "}
-              <span className="text-xs text-black/30">v1.2</span>
+              <span className="text-xs text-black/30">v1.1</span>
             </h1>
             <p className="text-black/60 text-sm">Sign in to continue</p>
           </div>
@@ -39,8 +54,14 @@ export default function Login() {
         <button
           className="btn btn-primary w-full justify-center"
           onClick={handleLogin}
+          disabled={isLoggingIn}
+          style={{
+            opacity: isLoggingIn ? 0.6 : 1,
+            cursor: isLoggingIn ? "not-allowed" : "pointer",
+          }}
         >
-          <i className="fa-solid fa-right-to-bracket"></i> Sign in with Okta
+          <i className="fa-solid fa-right-to-bracket"></i>{" "}
+          {isLoggingIn ? "Signing in..." : "Sign in with Okta"}
         </button>
       </div>
     </main>
