@@ -2351,8 +2351,7 @@ export default function ReportsModule({ onOpenPNR }) {
   const switchReportSubTab = (tab) => {
     appLogger.info("REPORTS_SUBTAB_CLICKED", {
       component: "Reports",
-      from: activeTab,
-      to: tab,
+      tab,
     });
 
     setSubTab(tab);
