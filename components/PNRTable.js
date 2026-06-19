@@ -623,6 +623,13 @@ export default function PNRTable({
     totalPages: 0,
   });
 
+  // Keep the latest externally active/selected PNR row and select callback.
+  // This lets the polling fetch trigger a PNR Details refresh when the
+  // active table row receives updated column values, without depending on
+  // stale interval closures.
+  const activeSelectedRowRef = useRef(selected);
+  const onSelectRef = useRef(onSelect);
+
   // Keep latest selected PNRs for pin-locking during polling
   const selectedPNRsRef = useRef(new Set());
   useEffect(() => {
@@ -631,6 +638,14 @@ export default function PNRTable({
   useEffect(() => {
     apiMetaRef.current = apiMeta;
   }, [apiMeta]);
+
+  useEffect(() => {
+    activeSelectedRowRef.current = selected;
+  }, [selected]);
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   // Prevent overlap
   const inFlightRef = useRef(false);
@@ -658,9 +673,58 @@ export default function PNRTable({
       prev.queueArrival !== next.queueArrival ||
       prev.lastUpdated !== next.lastUpdated ||
       prev.error !== next.error ||
+      prev.errorDetailed !== next.errorDetailed ||
       prev.assigned !== next.assigned ||
-      prev.action !== next.action
+      prev.action !== next.action ||
+      prev.correlationId !== next.correlationId ||
+      prev.oasisQueueId !== next.oasisQueueId ||
+      prev.queueName !== next.queueName
     );
+  };
+
+  const notifyActivePnrDetailsRefreshIfPollingChanged = ({
+    reason,
+    prevRows,
+    nextRows,
+  }) => {
+    // Only the background polling path should auto-refresh the active PNR
+    // Details pane. Manual/filter/page fetches already represent intentional
+    // user actions and should not unexpectedly re-select a row.
+    if (reason !== "poll") return;
+
+    const activePnr = activeSelectedRowRef.current?.pnr;
+    if (!activePnr) return;
+
+    const prevActiveRow = prevRows?.find?.((r) => r?.pnr === activePnr);
+    const nextActiveRow = nextRows?.find?.((r) => r?.pnr === activePnr);
+
+    // If the active row is no longer on the current API page/filter result,
+    // do not clear or overwrite the parent selection. Preserve current UX.
+    if (!nextActiveRow) return;
+
+    // Trigger details refresh only when the active row's API-backed values
+    // changed as part of polling.
+    if (!hasRowChanged(prevActiveRow, nextActiveRow)) return;
+
+    appLogger.info("PNR_ACTIVE_DETAILS_REFETCH_TRIGGERED", {
+      component: "PNRTable",
+      pnr: activePnr,
+      reason,
+    });
+
+    try {
+      // Existing parent behavior is retained: the same onSelect contract is
+      // used, but with the freshly polled row object. If the parent fetches
+      // details on selection change, this refreshes the PNR Details panel for
+      // the active PNR without requiring another click.
+      onSelectRef.current?.(nextActiveRow);
+    } catch (e) {
+      appLogger.error("PNR_ACTIVE_DETAILS_REFETCH_FAILED", {
+        component: "PNRTable",
+        pnr: activePnr,
+        message: e?.message || "Unknown error",
+      });
+    }
   };
 
   const mergeRowsPreserveIdentity = (prevRows, nextRows, opts = {}) => {
@@ -976,6 +1040,16 @@ export default function PNRTable({
       //  Only update state if necessary
       if (rowsChanged) setApiRows(merged);
       if (metaChanged) setApiMeta(nextMeta);
+
+      // If silent polling updated the currently active row, notify the parent
+      // with the updated row so PNR Details can refetch without another click.
+      if (rowsChanged) {
+        notifyActivePnrDetailsRefreshIfPollingChanged({
+          reason,
+          prevRows,
+          nextRows: merged,
+        });
+      }
 
       // Always clear error on success (even for silent polling)
       setApiError("");
