@@ -11,9 +11,7 @@ import ToastViewport from "../components/ToastViewport";
 import Spinner from "../components/Spinner";
 import Chip from "../components/Chip";
 
-// Utils
-import { refreshStatuses } from "../lib/sampleData";
-import { generateReportSampleData } from "../lib/reportSampleData";
+// lib
 import { requireAuth } from "../lib/auth";
 
 // Client-only components to avoid hydration mismatches
@@ -39,6 +37,15 @@ const AIAgentsDockPortal = dynamic(
 export default function Dashboard() {
   const router = useRouter();
 
+  const refreshStatuses = (list) => {
+    const states = ["processed", "processing", "error", "human"];
+    return list.map((row) => ({
+      ...row,
+      status: states[Math.floor(Math.random() * states.length)],
+      action: row.status === "processed" ? "NA" : row.action,
+    }));
+  };
+
   // Tabs
   const TABS = { ALL: "all", MINE: "mine", REPORTS: "reports" };
   const [activeTab, setActiveTab] = useState(TABS.ALL);
@@ -49,11 +56,6 @@ export default function Dashboard() {
   const [allSelected, setAllSelected] = useState(null);
   const [allRefreshing, setAllRefreshing] = useState(false);
   const [allStatus, setAllStatus] = useState("all"); // 'all'|'processed'|'processing'|'error'|'human'
-
-  // Reports sample
-  const [reportData] = useState(() =>
-    generateReportSampleData({ days: 30, itemsPerDay: 8 }),
-  );
 
   // My Queue (legacy local sample state kept for other UI behaviors)
   const [myRows, setMyRows] = useState([]);
