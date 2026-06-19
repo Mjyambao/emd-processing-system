@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { appLogger } from "../utils/appLogger";
 
 import {
   getPnrDetails,
@@ -959,6 +960,11 @@ export default function PNRDetails({
       setIsDetailsLoading(true);
       setPnrDetailsAndRef(null);
 
+      appLogger.info("PNR_DETAILS_LOAD_STARTED", {
+        component: "PNRDetails",
+        pnr: selectedPnr,
+      });
+
       try {
         const api = await getPnrDetails(selectedPnr, {
           signal: controller.signal,
@@ -972,11 +978,23 @@ export default function PNRDetails({
         setDetailsError(null);
         setPnrDetailsAndRef(mapped);
         setIsDetailsLoading(false);
+
+        appLogger.info("PNR_DETAILS_LOAD_SUCCESS", {
+          component: "PNRDetails",
+          pnr: selectedPnr,
+          status: mapped?.status,
+          passengerCount: mapped?.passengers?.length || 0,
+        });
+
         return;
       } catch (e) {
         if (e?.name === "AbortError") return;
 
-        console.error("PNR details API load failed", e);
+        appLogger.error("PNR_DETAILS_LOAD_FAILED", {
+          component: "PNRDetails",
+          pnr: selectedPnr,
+          message: e?.message || "Unknown error",
+        });
 
         const msg = `Failed to load PNR details: ${e?.message || "Unknown error"}`;
 
@@ -1135,7 +1153,21 @@ export default function PNRDetails({
         feedback: sanitizeFeedbackText(buildNotes || ""),
       };
 
+      appLogger.info("BUILD_AE_SUBMIT_STARTED", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        passengerIndex,
+        emdIndex,
+      });
+
       await postBuildAeForEmd(pnrId, payload);
+
+      appLogger.info("BUILD_AE_SUBMIT_SUCCESS", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        emdItemId,
+        passengerId,
+      });
 
       setPnrDetailsAndRef((prev) => {
         const next = deepClone(prev);
@@ -1171,6 +1203,14 @@ export default function PNRDetails({
 
       buildTargetRef.current = { passengerIndex: -1, emdIndex: -1 };
     } catch (e) {
+      appLogger.error("BUILD_AE_SUBMIT_FAILED", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        emdItemId,
+        passengerId,
+        message: e?.message || "Unknown error",
+      });
+
       const msg = `Failed to build AE: ${e?.message || "Unknown error"}`;
       showToast({ variant: "error", ariaLabel: msg, title: msg, ttl: 4500 });
     } finally {
@@ -1187,6 +1227,13 @@ export default function PNRDetails({
       showToast({ variant: "error", ariaLabel: msg, title: msg });
       return;
     }
+
+    appLogger.info("PROCESS_PNR_STARTED", {
+      component: "PNRDetails",
+      pnr: pnrId,
+      allEmdsBuilt,
+      currentStatus: pnrDetails?.status || selected?.status || "",
+    });
 
     const currentComparable = statusToComparable(
       pnrDetails?.status ?? selected?.status ?? "",
@@ -1215,6 +1262,11 @@ export default function PNRDetails({
 
       await postProcessPNR(pnrId);
 
+      appLogger.info("PROCESS_PNR_SUCCESS", {
+        component: "PNRDetails",
+        pnr: pnrId,
+      });
+
       // Pull server truth immediately after the action
       await regetPnrDetailsSilently(pnrId);
 
@@ -1233,6 +1285,12 @@ export default function PNRDetails({
     } catch (e) {
       setStatusUiOverride(null);
 
+      appLogger.error("PROCESS_PNR_FAILED", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        message: e?.message || "Unknown error",
+      });
+
       const msg = `Failed to Process PNR: ${e?.message || "Unknown error"}`;
       showToast({ variant: "error", ariaLabel: msg, title: msg });
     } finally {
@@ -1242,6 +1300,11 @@ export default function PNRDetails({
 
   function requestRemoveFromQueue() {
     setIsRemoveConfirmOpen(true);
+
+    appLogger.info("REMOVE_FROM_QUEUE_MODAL_OPENED", {
+      component: "PNRDetails",
+      pnr: resolvePnrId(),
+    });
   }
 
   async function confirmRemoveFromQueue() {
@@ -1256,12 +1319,24 @@ export default function PNRDetails({
     try {
       await callbacks.removeFromQueue(pnrId);
       setIsRemoveConfirmOpen(false);
+
+      appLogger.info("REMOVE_FROM_QUEUE_SUCCESS", {
+        component: "PNRDetails",
+        pnr: pnrId,
+      });
+
       showToast({
         variant: "success",
         ariaLabel: `PNR ${pnrId} removed from queue`,
         title: `PNR ${pnrId} removed from queue`,
       });
     } catch (e) {
+      appLogger.error("REMOVE_FROM_QUEUE_FAILED", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        message: e?.message || "Unknown error",
+      });
+
       const msg = `Failed to remove from queue: ${e?.message || "Unknown error"}`;
       showToast({ variant: "error", ariaLabel: msg, title: msg, ttl: 4500 });
     } finally {
@@ -1274,6 +1349,12 @@ export default function PNRDetails({
     if (!action) return;
     setPendingErrorAction(action);
     setIsErrorActionConfirmOpen(true);
+
+    appLogger.info("ERROR_ACTION_MODAL_OPENED", {
+      component: "PNRDetails",
+      pnr: resolvePnrId(),
+      action,
+    });
   }
 
   function cancelErrorAction() {
@@ -1300,6 +1381,13 @@ export default function PNRDetails({
     setIsErrorActionSubmitting(true);
     try {
       await postQueueActions(pnrId, { action });
+
+      appLogger.info("ERROR_ACTION_SUBMIT_SUCCESS", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        action,
+      });
+
       await regetPnrDetailsSilently(pnrId);
       setIsErrorActionConfirmOpen(false);
       setPendingErrorAction("");
@@ -1309,6 +1397,13 @@ export default function PNRDetails({
         title: `Action "${action}" submitted for PNR ${pnrId}`,
       });
     } catch (e) {
+      appLogger.error("ERROR_ACTION_SUBMIT_FAILED", {
+        component: "PNRDetails",
+        pnr: pnrId,
+        action,
+        message: e?.message || "Unknown error",
+      });
+
       const msg = `Failed to submit queue action: ${e?.message || "Unknown error"}`;
       showToast({ variant: "error", ariaLabel: msg, title: msg, ttl: 4500 });
     } finally {
@@ -1323,6 +1418,13 @@ export default function PNRDetails({
   function openAdmConfirm(passengerIndex, emdIndex) {
     admTargetRef.current = { passengerIndex, emdIndex };
     setIsAdmConfirmOpen(true);
+
+    appLogger.info("ADM_CONFIRM_MODAL_OPENED", {
+      component: "PNRDetails",
+      pnr: selected?.pnr || pnrDetails?.pnr,
+      passengerIndex,
+      emdIndex,
+    });
   }
 
   const confirmSubmitADM = async () => {
@@ -1352,6 +1454,13 @@ export default function PNRDetails({
       };
 
       await patchEmdFeedback(emdId, payload);
+
+      appLogger.info("ADM_FEEDBACK_SUBMIT_SUCCESS", {
+        component: "PNRDetails",
+        pnr: selected?.pnr || pnrDetails?.pnr,
+        emdId,
+        isAdm: payload.isAdm,
+      });
 
       setPnrDetailsAndRef((prev) => {
         if (!prev) return prev;
@@ -1383,6 +1492,13 @@ export default function PNRDetails({
 
       admTargetRef.current = { passengerIndex: -1, emdIndex: -1 };
     } catch (e) {
+      appLogger.error("ADM_FEEDBACK_SUBMIT_FAILED", {
+        component: "PNRDetails",
+        pnr: selected?.pnr || pnrDetails?.pnr,
+        emdId,
+        message: e?.message || "Unknown error",
+      });
+
       const msg = `Failed to submit feedback: ${e?.message || "Unknown error"}`;
       showToast({ variant: "error", ariaLabel: msg, title: msg });
     } finally {
@@ -1400,18 +1516,28 @@ export default function PNRDetails({
     setIsViewLoading(true);
     setIsViewModalOpen(true);
 
+    appLogger.info("VIEW_PNR_SNAPSHOT_OPENED", {
+      component: "PNRDetails",
+      pnr: selected?.pnr || pnrDetails?.pnr,
+    });
+
     try {
       if (selected?.pnr) {
         const json = await getPnrDetails(selected.pnr);
         setViewJson(json);
+        appLogger.info("VIEW_PNR_SNAPSHOT_LOADED", {
+          component: "PNRDetails",
+          pnr: selected?.pnr || pnrDetails?.pnr,
+        });
         return;
       }
-
-      const res = await fetch("/data/sabre-booking.json");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setViewJson(json);
     } catch (e) {
+      appLogger.error("VIEW_PNR_SNAPSHOT_FAILED", {
+        component: "PNRDetails",
+        pnr: selected?.pnr || pnrDetails?.pnr,
+        message: e?.message || "Unknown error",
+      });
+
       const msg = `Failed to load PNR snapshot: ${e?.message || "Unknown error"}`;
       setViewError(msg);
       showToast({ variant: "error", ariaLabel: msg, title: msg });
@@ -1421,8 +1547,14 @@ export default function PNRDetails({
   }
 
   const openErrorDetails = () => {
-    console.log("Open");
     setIsErrorModalOpen(true);
+
+    appLogger.info("ERROR_DETAILS_MODAL_OPENED", {
+      component: "PNRDetails",
+      pnr: selected?.pnr || pnrDetails?.pnr,
+      hasIssueDetails: Boolean(normalize(issueDetailsText)),
+    });
+
     if (!normalize(issueDetailsText)) return;
   };
 

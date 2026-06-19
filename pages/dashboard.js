@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
+import { appLogger } from "../utils/appLogger";
 
 // Components
 import TopNav from "../components/TopNav";
@@ -104,6 +105,24 @@ export default function Dashboard() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!hasMounted) return;
+
+    appLogger.info("DASHBOARD_VIEWED", {
+      component: "Dashboard",
+      activeTab,
+    });
+  }, [activeTab, hasMounted]);
+
+  useEffect(() => {
+    if (!hasMounted) return;
+
+    appLogger.info("DASHBOARD_TAB_CHANGED", {
+      component: "Dashboard",
+      activeTab,
+    });
+  }, [activeTab, hasMounted]);
+
   /**
    * Counters for chips
    */
@@ -136,10 +155,51 @@ export default function Dashboard() {
 
   // Handlers: All
   async function refreshAll() {
+    appLogger.info("ALL_QUEUE_REFRESH_CLICKED", {
+      component: "Dashboard",
+    });
+
     setAllRefreshing(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setAllRows((p) => refreshStatuses(p));
-    setAllRefreshing(false);
+
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+      setAllRows((p) => refreshStatuses(p));
+
+      appLogger.info("ALL_QUEUE_REFRESH_COMPLETED", {
+        component: "Dashboard",
+      });
+    } catch (err) {
+      appLogger.error("ALL_QUEUE_REFRESH_FAILED", {
+        component: "Dashboard",
+        message: err?.message || "Unknown error",
+      });
+    } finally {
+      setAllRefreshing(false);
+    }
+  }
+
+  async function refreshMine() {
+    appLogger.info("MY_QUEUE_REFRESH_CLICKED", {
+      component: "Dashboard",
+    });
+
+    setMyRefreshing(true);
+
+    try {
+      await new Promise((r) => setTimeout(r, 800));
+      setMyRows((p) => refreshStatuses(p));
+
+      appLogger.info("MY_QUEUE_REFRESH_COMPLETED", {
+        component: "Dashboard",
+      });
+    } catch (err) {
+      appLogger.error("MY_QUEUE_REFRESH_FAILED", {
+        component: "Dashboard",
+        message: err?.message || "Unknown error",
+      });
+    } finally {
+      setMyRefreshing(false);
+    }
   }
 
   // Handlers: Mine
@@ -221,12 +281,40 @@ export default function Dashboard() {
     session?.userId || session?.user?.userId || session?.user?.name || "";
 
   async function handleLogout() {
-    const { default: msalInstance, getMsal } = await import("../lib/okta");
-    await getMsal();
-    await msalInstance.logoutRedirect({
-      postLogoutRedirectUri: window.location.origin,
+    appLogger.info("LOGOUT_STARTED", {
+      component: "Dashboard",
     });
+
+    try {
+      const { default: msalInstance, getMsal } = await import("../lib/okta");
+      await getMsal();
+
+      appLogger.info("LOGOUT_REDIRECT_STARTED", {
+        component: "Dashboard",
+      });
+
+      await msalInstance.logoutRedirect({
+        postLogoutRedirectUri: window.location.origin,
+      });
+    } catch (err) {
+      appLogger.error("LOGOUT_REDIRECT_FAILED", {
+        component: "Dashboard",
+        message: err?.message || "Unknown error",
+      });
+
+      throw err;
+    }
   }
+
+  const switchTab = (tab) => {
+    appLogger.info("DASHBOARD_TAB_CLICKED", {
+      component: "Dashboard",
+      from: activeTab,
+      to: tab,
+    });
+
+    setActiveTab(tab);
+  };
 
   return (
     <div className="min-h-screen">
@@ -252,7 +340,7 @@ export default function Dashboard() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setActiveTab(TABS.ALL)}
+              onClick={() => switchTab(TABS.ALL)}
               className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
                 activeTab === TABS.ALL
                   ? "border-brand-red text-brand-red bg-red-50"
@@ -269,7 +357,7 @@ export default function Dashboard() {
 
             <button
               type="button"
-              onClick={() => setActiveTab(TABS.MINE)}
+              onClick={() => switchTab(TABS.MINE)}
               className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
                 activeTab === TABS.MINE
                   ? "border-brand-red text-brand-red bg-red-50"
@@ -286,7 +374,7 @@ export default function Dashboard() {
 
             <button
               type="button"
-              onClick={() => setActiveTab(TABS.REPORTS)}
+              onClick={() => switchTab(TABS.REPORTS)}
               className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
                 activeTab === TABS.REPORTS
                   ? "border-brand-red text-brand-red bg-red-50"
@@ -347,7 +435,7 @@ export default function Dashboard() {
         {activeTab === TABS.REPORTS ? (
           <ReportsModule
             onOpenPNR={(pnr) => {
-              setActiveTab(TABS.ALL);
+              switchTab(TABS.ALL);
               const found = allRows.find((r) => r.pnr === pnr);
               if (found) setAllSelected(found);
             }}

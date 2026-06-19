@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { appLogger } from "../utils/appLogger";
 
 function AssignModal({
   open,
@@ -16,10 +17,18 @@ function AssignModal({
   // Reset local selection each time the modal opens
   useEffect(() => {
     if (open) {
+      appLogger.info("ASSIGN_MODAL_VIEWED", {
+        component: "AssignModal",
+        selectedCount,
+        assigneeCount: assignees.length,
+      });
+
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDistributeEvenly(false);
       setSelectedIds([]);
       setQuery("");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Close on Escape
@@ -66,6 +75,12 @@ function AssignModal({
 
     // Handle All-value behavior (even distribution)
     if (visibleSelectedValues.has(ALL_VALUE)) {
+      appLogger.info("ASSIGN_MODAL_ALL_SELECTED", {
+        component: "AssignModal",
+        selectedCount,
+        assigneeCount: assignees.length,
+      });
+
       setDistributeEvenly(true);
       setSelectedIds(assignees.map((a) => a.id));
       return;
@@ -103,6 +118,14 @@ function AssignModal({
       selectedAssigneeIds: resolvedIds,
       distribution,
     };
+
+    appLogger.info("ASSIGN_MODAL_CONFIRMED", {
+      component: "AssignModal",
+      mode: payload.mode,
+      selectedCount,
+      selectedAssigneeCount: payload.selectedAssigneeIds?.length || 0,
+    });
+
     onConfirm?.(payload);
   };
 

@@ -4,7 +4,13 @@ import api from "./api";
 // Dashboard
 // ------------------------------
 export function getDashboardSummary({ start_date, end_date } = {}) {
-  api.get("/api/v1/report/dashboard-summary", {
+  if (!start_date || !end_date) {
+    return Promise.reject(
+      new Error("Missing required date parameters for dashboard summary"),
+    );
+  }
+
+  return api.get("/api/v1/report/dashboard-summary", {
     query: {
       start_date,
       end_date,
@@ -45,11 +51,7 @@ export function getEndToEndAvgTime({ start_date, end_date } = {}) {
   });
 }
 
-export function getAssignmentsToTicketers({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
+export function getAssignmentsToTicketers({ start_date, end_date } = {}) {
   return api.get("/api/v1/report/operations/assignment-to-ticketers", {
     query: {
       start_date,
@@ -61,7 +63,6 @@ export function getAssignmentsToTicketers({
 export function getErrorVisibilityClassification({
   start_date,
   end_date,
-  signal,
 } = {}) {
   return api.get("/api/v1/report/operations/error-visibility-classification", {
     query: {
@@ -74,7 +75,7 @@ export function getErrorVisibilityClassification({
 // ------------------------------
 // Quality
 // ------------------------------
-export function getHilPnrs({ start_date, end_date, signal } = {}) {
+export function getHilPnrs({ start_date, end_date } = {}) {
   return api.get("/api/v1/report/quality/hil-pnrs", {
     query: {
       start_date,
@@ -83,7 +84,7 @@ export function getHilPnrs({ start_date, end_date, signal } = {}) {
   });
 }
 
-export function getPnrAdm({ start_date, end_date, signal } = {}) {
+export function getPnrAdm({ start_date, end_date } = {}) {
   return api.get("/api/v1/report/quality/pnr-adm", {
     query: {
       start_date,
@@ -95,7 +96,7 @@ export function getPnrAdm({ start_date, end_date, signal } = {}) {
 // ------------------------------
 // AI Governance
 // ------------------------------
-export function getLlmMetricsAvgInRange({ start_date, end_date, signal } = {}) {
+export function getLlmMetricsAvgInRange({ start_date, end_date } = {}) {
   return api.get("/api/v1/report/ai-governance/llm-metrics-avg-in-range", {
     query: {
       start_date,
@@ -104,11 +105,7 @@ export function getLlmMetricsAvgInRange({ start_date, end_date, signal } = {}) {
   });
 }
 
-export function getLlmMetricsTrendOverTime({
-  start_date,
-  end_date,
-  signal,
-} = {}) {
+export function getLlmMetricsTrendOverTime({ start_date, end_date } = {}) {
   return api.get("/api/v1/report/ai-governance/llm-metrics-trend-over-time", {
     query: {
       start_date,

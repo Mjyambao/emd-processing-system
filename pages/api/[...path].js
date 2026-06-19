@@ -1,3 +1,5 @@
+import { serverLogger } from "../../utils/serverLogger";
+
 export default async function handler(req, res) {
   try {
     const BACKEND_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(
@@ -7,11 +9,9 @@ export default async function handler(req, res) {
 
     const { path = [] } = req.query;
 
-    // Extract query params WITHOUT "path"
     const query = { ...req.query };
     delete query.path;
 
-    // Build proper query string
     const queryString = new URLSearchParams(query).toString();
 
     const targetUrl = `${BACKEND_BASE}/api/${path.join("/")}${
@@ -20,11 +20,20 @@ export default async function handler(req, res) {
 
     console.log("Proxying to:", targetUrl);
 
+    serverLogger.info("API_PROXY_REQUEST", {
+      method: req.method,
+      path: path.join("/"),
+      hasQueryString: Boolean(queryString),
+      targetUrl,
+    });
+
+    const startedAt = Date.now();
+
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: {
         ...req.headers,
-        host: undefined, // prevent host mismatch
+        host: undefined,
       },
       body:
         req.method !== "GET" && req.method !== "HEAD"
@@ -32,11 +41,32 @@ export default async function handler(req, res) {
           : undefined,
     });
 
-    const data = await response.text();
+    const durationMs = Date.now() - startedAt;
 
-    res.status(response.status).send(data);
+    serverLogger.info("API_PROXY_RESPONSE", {
+      method: req.method,
+      path: path.join("/"),
+      status: response.status,
+      durationMs,
+    });
+
+    const contentType = response.headers.get("content-type");
+    const data = await response.arrayBuffer();
+
+    res.status(response.status);
+
+    if (contentType) {
+      res.setHeader("Content-Type", contentType);
+    }
+
+    res.send(Buffer.from(data));
   } catch (err) {
-    console.error("Proxy error:", err);
+    serverLogger.error("API_PROXY_ERROR", {
+      method: req.method,
+      message: err?.message || "Unknown proxy error",
+      stack: err?.stack,
+    });
+
     res.status(500).json({ error: err.message });
   }
 }

@@ -1,4 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from "react";
+
+//Components
 import StatusBadge from "./StatusBadge";
 import Tooltip from "./Tooltip";
 import AssignModal from "./AssignModal";
@@ -7,7 +9,10 @@ import ToastViewport from "./ToastViewport";
 import ThCheckboxHeader from "./ThCheckboxHeader";
 import ThWithFilter from "./ThWithFilter";
 import AssigneeMultiSelectFilter from "./AssigneeMultiSelectFilter";
+
+//Utils
 import formatDate from "../utils/helper";
+import { appLogger } from "../utils/appLogger";
 
 // API
 import { getPnrQueueList, patchAssignPnr, patchTtlPnr } from "../api/pnrApi";
@@ -881,6 +886,16 @@ export default function PNRTable({
     if (!silent) {
       setApiLoading(true);
       setApiError("");
+
+      appLogger.info("PNR_QUEUE_FETCH_STARTED", {
+        component: "PNRTable",
+        reason,
+        page,
+        pageSize,
+        statusFilter,
+        ticketType,
+        assignedToOverride: assignedToOverride || "",
+      });
     }
 
     try {
@@ -937,6 +952,17 @@ export default function PNRTable({
         totalPages: typeof data?.totalPages === "number" ? data.totalPages : 0,
       };
 
+      if (!silent) {
+        appLogger.info("PNR_QUEUE_FETCH_SUCCESS", {
+          component: "PNRTable",
+          reason,
+          page: nextMeta.page,
+          pageSize: nextMeta.pageSize,
+          totalRecords: nextMeta.totalRecords,
+          totalPages: nextMeta.totalPages,
+        });
+      }
+
       //  Diff rows/meta BEFORE updating state
       const prevRows = apiRowsRef.current;
       const prevMeta = apiMetaRef.current;
@@ -979,7 +1005,15 @@ export default function PNRTable({
         }
       }
     } catch (e) {
-      console.error("Fetch PNR list failed:", e);
+      appLogger.error("PNR_QUEUE_FETCH_FAILED", {
+        component: "PNRTable",
+        reason,
+        silent,
+        page,
+        pageSize,
+        statusFilter,
+        message: e?.message || "Unknown error",
+      });
 
       // For polling: don't wipe table contents; just set error text
       setApiError(e?.message || "Failed to load PNR list.");
@@ -1122,6 +1156,12 @@ export default function PNRTable({
       dateStr: toYYYYMMDD(current),
       saving: false,
     });
+
+    appLogger.info("TTL_MODAL_OPENED", {
+      component: "PNRTable",
+      pnr: row?.pnr,
+      currentTtl: getTTLForRow(row),
+    });
   };
 
   const closeTTLModal = () =>
@@ -1172,11 +1212,23 @@ export default function PNRTable({
 
   const toggleRow = (row) => {
     if (!isSelectable(row)) return;
+
     const pnr = row.pnr;
+
     setSelectedPNRs((prev) => {
       const next = new Set(prev);
+      const action = next.has(pnr) ? "deselected" : "selected";
+
       if (next.has(pnr)) next.delete(pnr);
       else next.add(pnr);
+
+      appLogger.info("PNR_ROW_SELECTION_CHANGED", {
+        component: "PNRTable",
+        pnr,
+        action,
+        selectedCount: next.size,
+      });
+
       return next;
     });
   };
@@ -1256,6 +1308,13 @@ export default function PNRTable({
     } catch (_) {
       // ignore parent callback errors to avoid masking API results
     }
+
+    appLogger.info("ASSIGN_BATCH_COMPLETED", {
+      component: "PNRTable",
+      assignTo,
+      itemCount: items.length,
+      failureCount: failures.length,
+    });
 
     if (failures.length) {
       const list = failures
@@ -2111,6 +2170,13 @@ export default function PNRTable({
               return;
             }
 
+            appLogger.info("ASSIGN_PNRS_STARTED", {
+              component: "PNRTable",
+              selectedCount: selectedPNRsArr.length,
+              mode,
+              selectedAssigneeCount: selectedAssigneeIds?.length || 0,
+            });
+
             setAssigning(true);
 
             const dist = distribution?.order?.length
@@ -2155,9 +2221,22 @@ export default function PNRTable({
               type: "success",
             });
 
+            appLogger.info("ASSIGN_PNRS_SUCCESS", {
+              component: "PNRTable",
+              totalAssigned,
+              mode,
+              selectedAssigneeCount: selectedAssigneeIds?.length || 0,
+            });
+
             clearSelection();
             setAssignOpen(false);
           } catch (err) {
+            appLogger.error("ASSIGN_PNRS_FAILED", {
+              component: "PNRTable",
+              selectedCount: selectedPNRs.size,
+              message: err?.message || "Unknown error",
+            });
+
             console.error("Assignment error:", err);
             showToast("Failed to assign PNRs. Please try again.", {
               type: "error",
@@ -2199,8 +2278,20 @@ export default function PNRTable({
               ttlUtc,
             };
 
+            appLogger.info("TTL_UPDATE_STARTED", {
+              component: "PNRTable",
+              pnr: ttlModal.pnr,
+              ttlUtc,
+            });
+
             // Call the new Set TLL endpoint
             await patchTtlPnr(ttlModal.pnr, payload_utc);
+
+            appLogger.info("TTL_UPDATE_SUCCESS", {
+              component: "PNRTable",
+              pnr: ttlModal.pnr,
+              ttlUtc,
+            });
 
             // Backward compatibility: still notify parent if provided
             const payload = {
@@ -2214,7 +2305,12 @@ export default function PNRTable({
               await Promise.resolve(onUpdateTTL?.(payload));
             } catch (cbErr) {
               // Do not fail the operation if parent callback throws
-              console.warn("onUpdateTTL callback failed:", cbErr);
+
+              appLogger.error("TTL_UPDATE_FAILED", {
+                component: "PNRTable",
+                pnr: ttlModal.pnr,
+                message: cbErr || "Unknown error",
+              });
             }
 
             setTtlLocalMap((prev) => {

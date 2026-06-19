@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { appLogger } from "../utils/appLogger";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -54,7 +55,6 @@ const DATE_TZ = "UTC";
 // Display helpers (null -> "-")
 // --------------------------------------------------
 function display(v) {
-  console.log(v);
   if (v === null || v === undefined) return "-";
   if (typeof v === "string") {
     const s = v.trim();
@@ -1157,7 +1157,6 @@ function mapAvgCompletionItemToRow(item) {
   const issuanceMs = item.issuance_total_completion_time;
   // const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
   // If server provides completion_time as a string, prefer it
-  console.log("Comp: ", item.completion_time);
   const totalMins = item.completion_time;
   const slaMins = item.sla;
   return {
@@ -1390,6 +1389,12 @@ export default function ReportsModule({ onOpenPNR }) {
     setPnrModalPnr(pnr);
     setPnrModalStatus(typeof rowOrPnr === "object" ? rowOrPnr?.status : "-");
     setPnrModalOpen(true);
+
+    appLogger.info("REPORT_PNR_DETAILS_OPENED", {
+      component: "ReportsModule",
+      pnr,
+      status: typeof rowOrPnr === "object" ? rowOrPnr?.status : "-",
+    });
   };
 
   // Drill-down modal
@@ -1447,6 +1452,13 @@ export default function ReportsModule({ onOpenPNR }) {
       errorClass: "All",
     });
     setDetailOpen(true);
+
+    appLogger.info("REPORT_DETAIL_MODAL_OPENED", {
+      component: "ReportsModule",
+      title: title || "Details",
+      subtitle: subtitle || "",
+      rowCount: Array.isArray(rows) ? rows.length : 0,
+    });
   };
 
   // ------------------------------
@@ -1526,6 +1538,14 @@ export default function ReportsModule({ onOpenPNR }) {
       includeDashboardSummary = activeTab === SUBTABS.OVERVIEW,
     } = {},
   ) {
+    appLogger.info("REPORT_DATA_LOAD_STARTED", {
+      component: "ReportsModule",
+      activeTab,
+      start_date,
+      end_date,
+      includeDashboardSummary,
+    });
+
     // Per-tab lazy loading: only fetch what the active tab needs.
     // Abort previous request for this tab only
     reqRef.current.controllers = reqRef.current.controllers || {};
@@ -1631,6 +1651,11 @@ export default function ReportsModule({ onOpenPNR }) {
 
     const settled = await Promise.allSettled(requests.map((r) => r.p));
 
+    appLogger.info("REPORT_DATA_LOAD_COMPLETED", {
+      component: "ReportsModule",
+      activeTab,
+    });
+
     if (reqRef.current.id !== reqId || signal.aborted) return;
 
     for (let i = 0; i < requests.length; i++) {
@@ -1639,6 +1664,15 @@ export default function ReportsModule({ onOpenPNR }) {
       const ok = res.status === "fulfilled";
       const val = ok ? res.value : null;
       const err = ok ? "" : res.reason?.message || "Failed.";
+
+      if (!ok) {
+        appLogger.error("REPORT_WIDGET_LOAD_FAILED", {
+          component: "ReportsModule",
+          activeTab,
+          widget: keyName,
+          message: err,
+        });
+      }
 
       if (keyName === "dash") {
         setDashSummary(val);
@@ -1957,6 +1991,14 @@ export default function ReportsModule({ onOpenPNR }) {
 
   const handleChartPick = ({ metricLabel, label, seriesName, value }) => {
     let rows = [];
+
+    appLogger.info("REPORT_CHART_DRILLDOWN_CLICKED", {
+      component: "ReportsModule",
+      metricLabel,
+      label,
+      seriesName,
+      value,
+    });
 
     if (metricLabel === "Throughput over time") {
       const dayRow =
@@ -2306,35 +2348,45 @@ export default function ReportsModule({ onOpenPNR }) {
     </div>
   );
 
+  const switchReportSubTab = (tab) => {
+    appLogger.info("REPORTS_SUBTAB_CLICKED", {
+      component: "Reports",
+      from: activeTab,
+      to: tab,
+    });
+
+    setSubTab(tab);
+  };
+
   const subTabNav = (
     <div className="flex flex-wrap items-center gap-2">
       <SubTabButton
         active={subTab === SUBTABS.OVERVIEW}
-        onClick={() => setSubTab(SUBTABS.OVERVIEW)}
+        onClick={() => switchReportSubTab(SUBTABS.OVERVIEW)}
         icon="fa-solid fa-gauge-high"
         label="Overview"
       />
       <SubTabButton
         active={subTab === SUBTABS.OPS}
-        onClick={() => setSubTab(SUBTABS.OPS)}
+        onClick={() => switchReportSubTab(SUBTABS.OPS)}
         icon="fa-solid fa-chart-line"
         label="Operations"
       />
       <SubTabButton
         active={subTab === SUBTABS.QUALITY}
-        onClick={() => setSubTab(SUBTABS.QUALITY)}
+        onClick={() => switchReportSubTab(SUBTABS.QUALITY)}
         icon="fa-solid fa-circle-check"
         label="Quality"
       />
       <SubTabButton
         active={subTab === SUBTABS.AI}
-        onClick={() => setSubTab(SUBTABS.AI)}
+        onClick={() => switchReportSubTab(SUBTABS.AI)}
         icon="fa-solid fa-brain"
         label="AI Governance"
       />
       <SubTabButton
         active={subTab === SUBTABS.EXCEPTIONS}
-        onClick={() => setSubTab(SUBTABS.EXCEPTIONS)}
+        onClick={() => switchReportSubTab(SUBTABS.EXCEPTIONS)}
         icon="fa-solid fa-triangle-exclamation"
         label="Exceptions"
       />

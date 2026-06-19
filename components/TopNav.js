@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { appLogger } from "../utils/appLogger";
 
 export default function TopNav({ onLogout }) {
   const [mounted, setMounted] = useState(false);
@@ -41,6 +42,12 @@ export default function TopNav({ onLogout }) {
             userId: claims.oid || claims.sub || "",
           };
           setSession(next);
+
+          appLogger.info("SESSION_RESOLVED", {
+            component: "TopNav",
+            hasUser: Boolean(next?.name || next?.userId || next?.agentId),
+          });
+
           // keep localStorage in sync for any other code that reads it
           localStorage.setItem("session", JSON.stringify(next));
           return;
@@ -65,15 +72,28 @@ export default function TopNav({ onLogout }) {
   }, []);
 
   const handleLogoutClick = async () => {
-    if (isLoggingOut) return; // guard
+    if (isLoggingOut) return;
+
+    appLogger.info("LOGOUT_CLICKED", {
+      component: "TopNav",
+    });
 
     setIsLoggingOut(true);
 
     try {
-      await onLogout(); // call your existing logout logic
+      await onLogout();
+
+      appLogger.info("LOGOUT_SUCCESS", {
+        component: "TopNav",
+      });
     } catch (err) {
+      appLogger.error("LOGOUT_FAILED", {
+        component: "TopNav",
+        message: err?.message || "Unknown error",
+      });
+
       console.error("Logout failed:", err);
-      setIsLoggingOut(false); // allow retry if it fails
+      setIsLoggingOut(false);
     }
   };
 
