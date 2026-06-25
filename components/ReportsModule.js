@@ -195,6 +195,7 @@ const MODAL_CONFIG = {
       "maskCheckTime",
       "dealMatchingTime",
       "issuanceTime",
+      "invoicingTime",
       "completionMinutes",
       "slaMinutes",
     ],
@@ -274,6 +275,7 @@ const MODAL_CONFIG = {
       "maskCheckTime",
       "dealMatchingTime",
       "issuanceTime",
+      "invoicingTime",
       "completionMinutes",
       "slaMinutes",
     ],
@@ -519,6 +521,12 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     render: (r) => (r.issuanceTime != null ? `${r.issuanceTime}m` : "-"),
   };
 
+  const invoicingTimeCol = {
+    key: "invoicingTime",
+    header: "Invoicing",
+    render: (r) => (r.invoicingTime != null ? `${r.invoicingTime}m` : "-"),
+  };
+
   const admCol = {
     key: "adm",
     header: "Is ADM?",
@@ -721,6 +729,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       maskCheckTimeCol,
       dealMatchingTimeCol,
       issuanceTimeCol,
+      invoicingTimeCol,
       completionCol,
       slaCol,
     ],
@@ -790,6 +799,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       maskCheckTimeCol,
       dealMatchingTimeCol,
       issuanceTimeCol,
+      invoicingTimeCol,
       completionCol,
       slaCol,
     ],
@@ -1155,6 +1165,7 @@ function mapAvgCompletionItemToRow(item) {
   const maskMs = item.mask_total_completion_time;
   const dealMs = item.deal_matching_total_completion_time;
   const issuanceMs = item.issuance_total_completion_time;
+  const invoicingMs = item.invoicing_total_completion_time;
   // const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
   // If server provides completion_time as a string, prefer it
   const totalMins = item.completion_time;
@@ -1175,6 +1186,7 @@ function mapAvgCompletionItemToRow(item) {
     maskCheckTime: maskMs,
     dealMatchingTime: dealMs,
     issuanceTime: issuanceMs,
+    invoicingTime: invoicingMs,
     completionMinutes: totalMins,
     slaMinutes: slaMins,
   };
@@ -1253,6 +1265,7 @@ function mapEndToEndItemToRow(item) {
     maskCheckTime: item.mask_total_completion_time,
     dealMatchingTime: item.deal_matching_total_completion_time,
     issuanceTime: item.issuance_total_completion_time,
+    invoicingTime: item.invoicing_total_completion_time,
     completionMinutes: item.completion_time,
     slaMinutes: item.sla ?? getSlaMinutesForDocType(base.documentType),
   };
@@ -1663,7 +1676,7 @@ export default function ReportsModule({ onOpenPNR }) {
       const res = settled[i];
       const ok = res.status === "fulfilled";
       const val = ok ? res.value : null;
-      const err = ok ? "" : res.reason?.message || "Failed.";
+      const err = ok ? "" : res.reason?.data?.detail || "Failed.";
 
       if (!ok) {
         appLogger.error("REPORT_WIDGET_LOAD_FAILED", {
@@ -2141,78 +2154,125 @@ export default function ReportsModule({ onOpenPNR }) {
     });
   };
 
-  // detailOptions for modal dropdowns
+  // --------------------------------------------------
+  // Cascading modal filters
+  // --------------------------------------------------
+  const norm = (v) =>
+    String(v || "")
+      .trim()
+      .toLowerCase();
+
+  const rowMatchesSearch = (r, q) => {
+    if (!q) return true;
+
+    const hay = [
+      r.pnr,
+      r.status,
+      r.assigned,
+      r.stage,
+      r.createdAt,
+      r.errorClass,
+      r.airline,
+      r.documentType,
+      r.emdNumber,
+    ]
+      .map(safeStr)
+      .join(" ")
+      .toLowerCase();
+
+    return hay.includes(q);
+  };
+
+  const rowMatchesFilters = (r, filters) => {
+    if (
+      filters.status !== "All" &&
+      normalizeStatus(r.status) !== normalizeStatus(filters.status)
+    ) {
+      return false;
+    }
+
+    if (
+      filters.assigned !== "All" &&
+      norm(r.assigned) !== norm(filters.assigned)
+    ) {
+      return false;
+    }
+
+    if (filters.stage !== "All" && norm(r.stage) !== norm(filters.stage)) {
+      return false;
+    }
+
+    if (
+      filters.errorClass !== "All" &&
+      norm(r.errorClass) !== norm(filters.errorClass)
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const visibleDetailRows = useMemo(() => {
+    const q = (detailSearch || "").trim().toLowerCase();
+
+    return detailRows.filter((r) => {
+      if (!rowMatchesSearch(r, q)) return false;
+      return rowMatchesFilters(r, detailFilters);
+    });
+  }, [detailRows, detailSearch, detailFilters]);
+
+  // Filter dropdown options now come only from currently visible rows.
   const detailOptions = useMemo(() => {
     const statuses = uniq(
-      detailRows.map((r) => r.status).filter(Boolean),
+      visibleDetailRows.map((r) => r.status).filter(Boolean),
     ).sort();
+
     const assigned = uniq(
-      detailRows.map((r) => r.assigned).filter((v) => Boolean(v) && v !== "-"),
+      visibleDetailRows
+        .map((r) => r.assigned)
+        .filter((v) => Boolean(v) && v !== "-"),
     ).sort();
-    const stages = uniq(detailRows.map((r) => r.stage).filter(Boolean)).sort();
+
+    const stages = uniq(
+      visibleDetailRows.map((r) => r.stage).filter(Boolean),
+    ).sort();
+
     const errorClasses = uniq(
-      detailRows.map((r) => r.errorClass).filter(Boolean),
+      visibleDetailRows.map((r) => r.errorClass).filter(Boolean),
     ).sort();
+
     return {
       status: ["All", ...statuses],
       assigned: ["All", ...assigned],
       stage: ["All", ...stages],
       errorClass: ["All", ...errorClasses],
     };
-  }, [detailRows]);
+  }, [visibleDetailRows]);
 
   const filteredDetailRows = useMemo(() => {
-    const q = (detailSearch || "").trim().toLowerCase();
-    let rows = detailRows.filter((r) => {
-      if (detailFilters.status !== "All" && r.status !== detailFilters.status)
-        return false;
-      if (
-        detailFilters.assigned !== "All" &&
-        r.assigned !== detailFilters.assigned
-      )
-        return false;
-      if (detailFilters.stage !== "All" && r.stage !== detailFilters.stage)
-        return false;
-      if (
-        detailFilters.errorClass !== "All" &&
-        (r.errorClass || "") !== detailFilters.errorClass
-      )
-        return false;
-
-      if (!q) return true;
-
-      const hay = [
-        r.pnr,
-        r.status,
-        r.assigned,
-        r.stage,
-        r.createdAt,
-        r.errorClass,
-        r.airline,
-        r.documentType,
-        r.emdNumber,
-      ]
-        .map(safeStr)
-        .join(" ")
-        .toLowerCase();
-
-      return hay.includes(q);
-    });
+    const rows = [...visibleDetailRows];
 
     rows.sort((a, b) => {
       const av = a?.[detailSortKey];
       const bv = b?.[detailSortKey];
+
       const aNum = Number(av);
       const bNum = Number(bv);
       const bothNums = !Number.isNaN(aNum) && !Number.isNaN(bNum);
+
       let cmp = 0;
-      if (bothNums) cmp = aNum - bNum;
-      else cmp = String(display(av)).localeCompare(String(display(bv)));
+
+      if (bothNums) {
+        cmp = aNum - bNum;
+      } else {
+        cmp = String(display(av)).localeCompare(String(display(bv)));
+      }
+
       return detailSortDir === "asc" ? cmp : -cmp;
     });
 
     return rows;
-  }, [detailRows, detailSearch, detailFilters, detailSortKey, detailSortDir]);
+  }, [visibleDetailRows, detailSortKey, detailSortDir]);
 
   useEffect(() => {
     // Reset paging when filters/search/sort change
@@ -2325,9 +2385,11 @@ export default function ReportsModule({ onOpenPNR }) {
           className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-sm"
         />
         <label className="text-xs text-black/50">To</label>
+
         <input
           type="date"
           value={to}
+          min={from}
           onChange={(e) => {
             setPreset(presets.CUSTOM);
             setTo(e.target.value);
@@ -3370,8 +3432,13 @@ export default function ReportsModule({ onOpenPNR }) {
               }
             >
               {detailOptions.errorClass.map((opt) => (
-                <option key={`ec-${opt || "blank"}`} value={opt}>
-                  {opt || "(blank)"}
+                <option
+                  className="ml-[-60px]"
+                  key={`ec-${opt || "blank"}`}
+                  value={opt}
+                  title={opt}
+                >
+                  {opt?.length > 80 ? opt.substring(0, 80) + "..." : opt}
                 </option>
               ))}
             </select>
@@ -3412,7 +3479,7 @@ export default function ReportsModule({ onOpenPNR }) {
                   </td>
                 </tr>
               ) : (
-                // ✅ FIX: render ALL rows (no 10-limit)
+                // render ALL rows
                 filteredDetailRows.map((r, idx) => (
                   <tr
                     key={`${r.pnr}-${idx}`}
@@ -3438,7 +3505,7 @@ export default function ReportsModule({ onOpenPNR }) {
             <span className="font-semibold text-black">
               {filteredDetailRows.length}
             </span>{" "}
-            entries {""}
+            {filteredDetailRows.length == 1 ? "entry" : "entries"} {""}
           </div>
         </div>
       </DetailModal>

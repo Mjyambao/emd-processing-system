@@ -6,8 +6,8 @@ let authToken = null;
 // Read base URL from env and remove trailing slashes
 const BASE_URL = "";
 
-// Default timeout (ms) for API requests. (20 secs)
-const DEFAULT_TIMEOUT = 20000;
+// Default timeout (ms) for API requests. (60 secs)
+const DEFAULT_TIMEOUT = 60000;
 
 // Custom API Error to normalize server/client errors. */
 export class ApiError extends Error {
