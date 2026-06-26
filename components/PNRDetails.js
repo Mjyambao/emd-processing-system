@@ -899,15 +899,9 @@ export default function PNRDetails({
 
   const showAiAssistSection = isHumanRequired || isProcessed;
 
-  const issueDetailsText =
-    pnrDetails?.errorDetails ||
-    pnrDetails?.humanError ||
-    pnrDetails?.actionRequired ||
-    pnrDetails?.errorDesc ||
-    selected?.errorDetails ||
-    selected?.errorDesc ||
-    selected?.error ||
-    "";
+  const issueDetailsHumanText = pnrDetails?.humanError || "-";
+
+  const issueDetailsText = pnrDetails?.errorDetails || "-";
 
   const issueDetailsLabel = isSentToOasisQueue ? "Reason" : "Error Details";
   const issueModalTitle = isSentToOasisQueue
@@ -1633,7 +1627,7 @@ export default function PNRDetails({
                     </div>
 
                     <PNRDetailsActionBar
-                      errorDetails={issueDetailsText}
+                      errorDetails={issueDetailsHumanText}
                       detailsLabel={issueDetailsLabel}
                       disableActions={isSentToOasisQueue}
                       blockedActionText="Actions are blocked while this PNR is in Sent to Oasis Queue status."
