@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { appLogger } from "../utils/appLogger";
@@ -95,9 +95,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     requireAuth(router);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasMounted(true);
     try {
       const raw = localStorage.getItem("session") || "{}";
@@ -128,32 +129,74 @@ export default function Dashboard() {
   /**
    * Counters for chips
    */
-  const countByStatus = (rows) =>
+  const normalizeStatus = (status) =>
+    String(status ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_");
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const countByStatus = useCallback((rows = []) =>
     rows.reduce(
       (acc, r) => {
-        const s = String(r?.status ?? "").toLowerCase();
-        acc.total++;
-        acc[s] = (acc[s] || 0) + 1;
+        const s = normalizeStatus(r?.status);
+
+        acc.total += 1;
+
+        if (s === "processed") acc.processed += 1;
+        else if (s === "processing") acc.processing += 1;
+        else if (s === "error") acc.error += 1;
+        else if (s === "human") acc.human += 1;
+        else if (
+          s === "sent_back_to_oasis" ||
+          s === "send_to_oasis" ||
+          s === "sent_to_oasis"
+        ) {
+          acc.sentBackToOasis += 1;
+        }
+
         return acc;
       },
-      { total: 0, processed: 0, processing: 0, error: 0, human: 0 },
-    );
+      {
+        total: 0,
+        processed: 0,
+        processing: 0,
+        error: 0,
+        human: 0,
+        sentBackToOasis: 0,
+      },
+    ),
+  );
 
-  const allCounts = useMemo(
-    () =>
+  const countsFromApiMeta = (meta) => {
+    if (!meta) return null;
+    return {
+      total: Number(meta.totalRecords ?? 0),
+      processed: Number(meta.totalProcessed ?? 0),
+      processing: Number(meta.totalProcessing ?? 0),
+      error: Number(meta.totalError ?? 0),
+      human: Number(meta.totalHuman ?? 0),
+      sentBackToOasis: Number(meta.totalSendToOasis ?? 0),
+    };
+  };
+
+  const allCounts = useMemo(() => {
+    return (
+      countsFromApiMeta(allTableSnapshot.meta) ??
       countByStatus(
         allTableSnapshot.rows?.length ? allTableSnapshot.rows : allRows,
-      ),
-    [allTableSnapshot.rows, allRows],
-  );
+      )
+    );
+  }, [allTableSnapshot.meta, allTableSnapshot.rows, countByStatus, allRows]);
 
-  const myCounts = useMemo(
-    () =>
+  const myCounts = useMemo(() => {
+    return (
+      countsFromApiMeta(myTableSnapshot.meta) ??
       countByStatus(
         myTableSnapshot.rows?.length ? myTableSnapshot.rows : myRows,
-      ),
-    [myTableSnapshot.rows, myRows],
-  );
+      )
+    );
+  }, [myTableSnapshot.meta, myTableSnapshot.rows, countByStatus, myRows]);
 
   // Handlers: All
   async function refreshAll() {
@@ -202,14 +245,6 @@ export default function Dashboard() {
     } finally {
       setMyRefreshing(false);
     }
-  }
-
-  // Handlers: Mine
-  async function refreshMine() {
-    setMyRefreshing(true);
-    await new Promise((r) => setTimeout(r, 800));
-    setMyRows((p) => refreshStatuses(p));
-    setMyRefreshing(false);
   }
 
   // helper to mark busy/not busy
@@ -400,6 +435,19 @@ export default function Dashboard() {
               onClick={() => setStatus("all")}
             />
 
+            <Chip
+              label={`Error on Processing (${counters.error})`}
+              color="red"
+              active={statusFilter === "error"}
+              onClick={() => setStatus("error")}
+            />
+            <Chip
+              label={`Human Input Required (${counters.human})`}
+              color="gray"
+              active={statusFilter === "human"}
+              onClick={() => setStatus("human")}
+            />
+
             {activeTab === TABS.ALL ? (
               <>
                 <Chip
@@ -420,16 +468,10 @@ export default function Dashboard() {
             )}
 
             <Chip
-              label={`Error (${counters.error})`}
-              color="red"
-              active={statusFilter === "error"}
-              onClick={() => setStatus("error")}
-            />
-            <Chip
-              label={`Human (${counters.human})`}
-              color="gray"
-              active={statusFilter === "human"}
-              onClick={() => setStatus("human")}
+              label={`Sent back to Oasis (${counters.sentBackToOasis})`}
+              color="blue"
+              active={statusFilter === "sent_back_to_oasis"}
+              onClick={() => setStatus("sent_back_to_oasis")}
             />
           </div>
         ) : null}

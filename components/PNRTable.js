@@ -527,6 +527,11 @@ export default function PNRTable({
     pageSize: 10,
     totalRecords: 0,
     totalPages: 0,
+    totalProcessed: 0,
+    totalProcessing: 0,
+    totalError: 0,
+    totalHuman: 0,
+    totalSendToOasis: 0,
   });
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState("");
@@ -556,11 +561,6 @@ export default function PNRTable({
       }
 
       return rowsToFilter;
-    }
-
-    // EMD (existing)
-    if (statusFilter !== "all") {
-      rowsToFilter = rowsToFilter.filter((r) => r.status === statusFilter);
     }
 
     return rowsToFilter;
@@ -621,6 +621,11 @@ export default function PNRTable({
     pageSize: 10,
     totalRecords: 0,
     totalPages: 0,
+    totalProcessed: 0,
+    totalProcessing: 0,
+    totalError: 0,
+    totalHuman: 0,
+    totalSendToOasis: 0,
   });
 
   // Keep the latest externally active/selected PNR row and select callback.
@@ -655,7 +660,12 @@ export default function PNRTable({
     a?.page === b?.page &&
     a?.pageSize === b?.pageSize &&
     a?.totalRecords === b?.totalRecords &&
-    a?.totalPages === b?.totalPages;
+    a?.totalPages === b?.totalPages &&
+    a?.totalProcessed === b?.totalProcessed &&
+    a?.totalProcessing === b?.totalProcessing &&
+    a?.totalError === b?.totalError &&
+    a?.totalHuman === b?.totalHuman &&
+    a?.totalSendToOasis === b?.totalSendToOasis;
 
   const hasRowChanged = (prev, next) => {
     if (!prev) return true;
@@ -1014,6 +1024,16 @@ export default function PNRTable({
         totalRecords:
           typeof data?.totalRecords === "number" ? data.totalRecords : 0,
         totalPages: typeof data?.totalPages === "number" ? data.totalPages : 0,
+        totalProcessed:
+          typeof data?.totalProcessed === "number" ? data.totalProcessed : 0,
+        totalProcessing:
+          typeof data?.totalProcessing === "number" ? data.totalProcessing : 0,
+        totalError: typeof data?.totalError === "number" ? data.totalError : 0,
+        totalHuman: typeof data?.totalHuman === "number" ? data.totalHuman : 0,
+        totalSendToOasis:
+          typeof data?.totalSendToOasis === "number"
+            ? data.totalSendToOasis
+            : 0,
       };
 
       if (!silent) {
@@ -1024,6 +1044,11 @@ export default function PNRTable({
           pageSize: nextMeta.pageSize,
           totalRecords: nextMeta.totalRecords,
           totalPages: nextMeta.totalPages,
+          totalProcessed: nextMeta.totalProcessed,
+          totalProcessing: nextMeta.totalProcessing,
+          totalError: nextMeta.totalError,
+          totalHuman: nextMeta.totalHuman,
+          totalSendToOasis: nextMeta.totalSendToOasis,
         });
       }
 
@@ -1095,12 +1120,31 @@ export default function PNRTable({
       if (!silent) {
         // Original behavior for non-silent fetches
         setApiRows([]);
-        setApiMeta((m) => ({ ...m, totalRecords: 0, totalPages: 0 }));
+        setApiMeta((m) => ({
+          ...m,
+          totalRecords: 0,
+          totalPages: 0,
+          totalProcessed: 0,
+          totalProcessing: 0,
+          totalError: 0,
+          totalHuman: 0,
+          totalSendToOasis: 0,
+        }));
 
         try {
           onRowsChange?.({
             rows: [],
-            meta: { page, pageSize, totalRecords: 0, totalPages: 0 },
+            meta: {
+              page,
+              pageSize,
+              totalRecords: 0,
+              totalPages: 0,
+              totalProcessed: 0,
+              totalProcessing: 0,
+              totalError: 0,
+              totalHuman: 0,
+              totalSendToOasis: 0,
+            },
           });
         } catch {
           // no-op
@@ -1158,16 +1202,47 @@ export default function PNRTable({
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const totalRecordsRaw = apiMeta.totalRecords;
-  const totalPages = Math.max(1, apiMeta.totalPages || 1);
+  const STATUS_TOTAL_MAP = {
+    processed: "totalProcessed",
+    processing: "totalProcessing",
+    error: "totalError",
+    human: "totalHuman",
+    sent_back_to_oasis: "totalSendToOasis",
+  };
+
+  const totalRecord = STATUS_TOTAL_MAP[statusFilter]
+    ? (apiMeta[STATUS_TOTAL_MAP[statusFilter]] ?? 0)
+    : (apiMeta.totalRecords ?? 0);
+
+  const totalPages = Math.max(1, Math.ceil(totalRecord / pageSize));
   const clampedPage = Math.min(page, totalPages);
 
   const pageRows = filteredRows;
   // If polling adds rows but the backend meta lags, ensure the footer still reflects the latest count.
   const displayedMax = (clampedPage - 1) * pageSize + (pageRows?.length || 0);
-  const totalRecords = Math.max(totalRecordsRaw || 0, displayedMax);
+  const getTotalRecordsByStatus = (apiMeta, statusFilter) => {
+    switch (statusFilter) {
+      case "processed":
+        return apiMeta.totalProcessed ?? 0;
+      case "processing":
+        return apiMeta.totalProcessing ?? 0;
+      case "error":
+        return apiMeta.totalError ?? 0;
+      case "human":
+        return apiMeta.totalHuman ?? 0;
+      case "sent_back_to_oasis":
+        return apiMeta.totalSendToOasis ?? 0;
+      case "all":
+      default:
+        return apiMeta.totalRecords ?? 0;
+    }
+  };
+
+  const totalRecords = getTotalRecordsByStatus(apiMeta, statusFilter);
 
   const from = pageRows.length === 0 ? 0 : (clampedPage - 1) * pageSize + 1;
   const to =
@@ -1468,8 +1543,8 @@ export default function PNRTable({
       {/* Helper banner */}
       {totalRecords > 0 && pageSelectableEligibleCount === 0 && (
         <div className="mx-2 my-1.5 px-2 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-xs">
-          No selectable rows in current results. Only <b>Error</b> or{" "}
-          <b>Human</b> statuses are eligible for assignment.
+          No selectable rows in current results. Only <b>Error on Processing</b>{" "}
+          or <b>Human Input Required</b> statuses are eligible for assignment.
         </div>
       )}
 
