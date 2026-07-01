@@ -15,6 +15,7 @@ export default function PNRDetailsActionBar({
   actionButtonLabel = "Select Action",
   disableActions = false,
   blockedActionText = "Actions are not available for this status.",
+  isHumanRequired = false,
 }) {
   const [open, setOpen] = useState(false);
   const [oasisOpen, setOasisOpen] = useState(false);
@@ -28,12 +29,16 @@ export default function PNRDetailsActionBar({
 
   return (
     <div>
-      <div className="text-sm w-[250px] mb-2">
-        <span className="text-black/60 mr-1">{detailsLabel}:</span>
-        <strong className="font-semibold">
-          {errorDetails !== "" ? errorDetails : "-"}
-        </strong>
-      </div>
+      {!isHumanRequired ? (
+        <div className="text-sm w-[250px] mb-2">
+          <span className="text-black/60 mr-1">{detailsLabel}:</span>
+          <strong className="font-semibold">
+            {errorDetails !== "" ? errorDetails : "-"}
+          </strong>
+        </div>
+      ) : (
+        ""
+      )}
 
       <div className="relative">
         <span className="text-black/60 mr-2">{actionLabel}:</span>
@@ -61,7 +66,7 @@ export default function PNRDetailsActionBar({
         {!disableActions && open && (
           <div className="absolute right-0 mt-1 w-[220px] bg-white border border-black/10 rounded shadow-lg z-[120]">
             <button
-              className="w-full text-left px-3 py-2 hover:bg-black/5 text-sm"
+              className={`w-full text-left px-3 py-2 hover:bg-black/5 text-sm ${isHumanRequired ? "hidden" : ""}`}
               onClick={() => {
                 setOpen(false);
 

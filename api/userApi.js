@@ -26,3 +26,13 @@ export function getAuthToken() {
 export function getUserPermissions() {
   return api.get("/api/v1/auth/me/permissions");
 }
+
+/*
+ * Check whether the current user passed the Entra security group gate
+ *
+ * GET /api/v1/auth/me/access-check
+ *
+ */
+export function checkAccess() {
+  return api.get("/api/v1/auth/me/access-check");
+}

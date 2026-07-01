@@ -157,6 +157,27 @@ registerResponseInterceptor(async ({ response, request }) => {
   }
 
   const detail = payload?.detail || payload?.message || payload?.error || "";
+
+  // Not authenticated failing "expired" case OR not authorized for this app
+  // (missing required Entra security group). Handle the group-membership
+  // case FIRST and separately: it must NOT trigger a full Azure AD logout
+  // loop, since the user IS authenticated — they're just not authorized.
+  const isNotAuthorizedForApp =
+    response.status === 403 &&
+    typeof detail === "string" &&
+    /not authorized to access this application/i.test(detail);
+
+  if (isNotAuthorizedForApp) {
+    if (typeof window !== "undefined" && window.location.pathname !== "/access-denied") {
+      window.location.assign("/access-denied");
+    }
+    throw new ApiError("You are not authorized to access this application.", {
+      status: response.status,
+      data: payload,
+      url: request?.url,
+    });
+  }
+
   const isExpiredSignature =
     typeof detail === "string" &&
     detail.includes("Invalid token: Signature has expired.");

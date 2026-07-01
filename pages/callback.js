@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import msalInstance, { getMsal, getRedirectResult } from "../lib/okta";
 
 import { createChatSession } from "../api/chatApi";
+import { checkAccess } from "../api/userApi";
 
 export default function Callback() {
   const router = useRouter();
@@ -52,6 +53,22 @@ export default function Callback() {
           );
         } else {
           console.warn("Callback: no MSAL account found after redirect.");
+        }
+
+        // Enforce the Azure Entra security group gate before letting the
+        // user into the app. A 403 here means auth succeeded but the user
+        // isn't authorized (backend enforces this on every call too — this
+        // just avoids a flash of the dashboard before it 403s everywhere).
+        try {
+          await checkAccess();
+        } catch (accessErr) {
+          if (accessErr?.status === 403) {
+            router.replace("/access-denied");
+            return;
+          }
+          // Non-403 errors (network hiccup, etc.) — fall through and let
+          // the dashboard's own API calls enforce access as a fallback.
+          console.error("Access check failed:", accessErr);
         }
 
         try {

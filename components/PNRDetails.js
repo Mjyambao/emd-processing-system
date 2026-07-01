@@ -528,8 +528,6 @@ function mapApiToPnrDetails(pnrApi) {
 
     const paxTicketNumber = pax?.flightTickets[0]?.ticketNumber || "—";
 
-    console.log("PAX: ", pax);
-
     return {
       name: paxName,
       ticketNo: paxTicketNumber || "TEST",
@@ -913,7 +911,8 @@ export default function PNRDetails({
     : "Detailed Error";
 
   const showIssuePanel =
-    (isError || isSentToOasisQueue) && !!normalize(issueDetailsText);
+    (isError || isSentToOasisQueue || isHumanRequired) &&
+    !!normalize(issueDetailsText);
 
   const resolvePnrId = () =>
     selected?.pnr_id ??
@@ -1614,23 +1613,50 @@ export default function PNRDetails({
               <StatusBadge status={displayStatusSource} />
               {showIssuePanel ? (
                 <>
+                  {/* Human Input Required: Inputs Needed */}
+                  {isHumanRequired && inputsNeeded.length > 0 && (
+                    <FadeIn as="div" className="w-full text-left">
+                      <div className="text-black/80 mb-1">Inputs Needed:</div>
+                      <ul className="list-disc pl-5 md:pl-0">
+                        {inputsNeeded.map((item, idx) => (
+                          <FadeIn
+                            as="li"
+                            key={item.key}
+                            delay={70 * idx}
+                            className="text-black/70"
+                          >
+                            <span className="font-medium">
+                              {item.passenger}
+                            </span>{" "}
+                            — {item.label}
+                          </FadeIn>
+                        ))}
+                      </ul>
+                    </FadeIn>
+                  )}
+
                   <FadeIn as="div" className="mt-2">
-                    <div className="text-left mb-[-20px] ml-[-20px]">
-                      <button
-                        type="button"
-                        className="h-6"
-                        title="View full error details"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openErrorDetails();
-                        }}
-                        data-stop-collapse
-                      >
-                        <i className="fa-solid fa-circle-info"></i>
-                      </button>
-                    </div>
+                    {!isHumanRequired ? (
+                      <div className="text-left mb-[-20px] ml-[-20px]">
+                        <button
+                          type="button"
+                          className="h-6"
+                          title="View full error details"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openErrorDetails();
+                          }}
+                          data-stop-collapse
+                        >
+                          <i className="fa-solid fa-circle-info"></i>
+                        </button>
+                      </div>
+                    ) : (
+                      ""
+                    )}
 
                     <PNRDetailsActionBar
+                      isHumanRequired={isHumanRequired}
                       errorDetails={issueDetailsHumanText}
                       detailsLabel={issueDetailsLabel}
                       disableActions={isSentToOasisQueue}
@@ -1654,26 +1680,6 @@ export default function PNRDetails({
                 </>
               ) : null}
             </div>
-
-            {/* Human Input Required: Inputs Needed */}
-            {isHumanRequired && inputsNeeded.length > 0 && (
-              <FadeIn as="div" className="w-full text-left">
-                <div className="text-black/80 mb-1">Inputs Needed:</div>
-                <ul className="list-disc pl-5 md:pl-0">
-                  {inputsNeeded.map((item, idx) => (
-                    <FadeIn
-                      as="li"
-                      key={item.key}
-                      delay={70 * idx}
-                      className="text-black/70"
-                    >
-                      <span className="font-medium">{item.passenger}</span> —{" "}
-                      {item.label}
-                    </FadeIn>
-                  ))}
-                </ul>
-              </FadeIn>
-            )}
           </div>
         </div>
 
@@ -2674,9 +2680,7 @@ export default function PNRDetails({
               className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5 opacity-0 scale-[0.98] transition-all duration-200"
               style={{ animation: "fadeInUp 220ms 40ms ease-out forwards" }}
             >
-              <h5 className="text-lg font-semibold mb-3">
-                Confirm Error Action
-              </h5>
+              <h5 className="text-lg font-semibold mb-3">Confirm Action</h5>
               <div className="text-sm text-black/70">
                 <span className="font-medium">
                   {pendingErrorAction == "SendToOasis"
