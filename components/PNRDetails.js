@@ -434,7 +434,7 @@ function mapApiToPnrDetails(pnrApi) {
       `${linkedFlight?.origin || ""} → ${linkedFlight?.destination || ""}`.trim();
     const dep = linkedFlight?.departureDatetimeUtc || "";
     const arr = linkedFlight?.arrivalDatetimeUtc || "";
-    const seat = firstPaxFlight?.seatNumber || "—";
+    const seat = linkedFlight?.flightSeat || "—";
 
     const emdItems = Array.isArray(pax?.emdItems) ? pax.emdItems : [];
 
@@ -526,17 +526,21 @@ function mapApiToPnrDetails(pnrApi) {
       `${pax?.surname || ""} ${pax?.givenName || ""}`.trim() ||
       "—";
 
+    const paxTicketNumber = pax?.flightTickets[0]?.ticketNumber || "—";
+
+    console.log("PAX: ", pax);
+
     return {
       name: paxName,
-      ticketNo: pax?.ticketNo || pax?.ticketNumber || "—",
+      ticketNo: paxTicketNumber || "TEST",
       travelerName: paxName,
       ...common,
       flightNo: flightNo || "—",
       operating: operating || "—",
       route: route || "—",
+      flightSeat: seat,
       dep,
       arr,
-      seat,
       emds,
       passengerId: pax?.passengerId,
       travelerIndex: pax?.travelerIndex,
@@ -1887,9 +1891,7 @@ export default function PNRDetails({
                                     Seat
                                   </>
                                 }
-                                v={
-                                  passenger.passengerFlights?.seatNumber || "—"
-                                }
+                                v={passenger.flightSeat || "—"}
                               />
                               <Field
                                 k={
