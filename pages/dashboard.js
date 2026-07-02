@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { appLogger } from "../utils/appLogger";
@@ -353,6 +353,14 @@ export default function Dashboard() {
     setActiveTab(tab);
   };
 
+  const tableRef = useRef(null);
+  const handleCloseDetails = () => {
+    setSelected(null);
+    requestAnimationFrame(() => {
+      tableRef.current?.focus?.();
+    });
+  };
+
   return (
     <div className="min-h-screen">
       <TopNav onLogout={handleLogout} />
@@ -489,6 +497,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 items-start">
               <div>
                 <PNRTable
+                  ref={tableRef}
                   rows={rows}
                   search={search}
                   setSearch={setSearch}
@@ -526,6 +535,7 @@ export default function Dashboard() {
                 <PNRDetails
                   loggedInUserId={loggedInUserId}
                   selected={selected}
+                  onCloseDetails={handleCloseDetails}
                   onApprove={({ pnr }) => {
                     setRows((list) =>
                       list.map((r) =>

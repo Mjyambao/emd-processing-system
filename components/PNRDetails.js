@@ -706,6 +706,7 @@ export default function PNRDetails({
   onSendToQueue,
   onProcessPNR,
   loggedInUserId,
+  onCloseDetails,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
   const [detailsError, setDetailsError] = useState(null);
@@ -1332,6 +1333,8 @@ export default function PNRDetails({
         ariaLabel: `PNR ${pnrId} removed from queue`,
         title: `PNR ${pnrId} removed from queue`,
       });
+
+      onCloseDetails?.();
     } catch (e) {
       appLogger.error("REMOVE_FROM_QUEUE_FAILED", {
         component: "PNRDetails",
@@ -1398,6 +1401,11 @@ export default function PNRDetails({
         ariaLabel: `Action "${action}" submitted for PNR ${pnrId}`,
         title: `Action "${action}" submitted for PNR ${pnrId}`,
       });
+
+      if (action === "SendToOasis" || action === "RemoveFromQueue") {
+        onCloseDetails?.();
+        return;
+      }
     } catch (e) {
       appLogger.error("ERROR_ACTION_SUBMIT_FAILED", {
         component: "PNRDetails",
