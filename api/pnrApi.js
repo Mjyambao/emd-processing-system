@@ -186,50 +186,18 @@ export function logUiAction(payload) {
   return api.post("/api/v1/logs/ui-actions", payload);
 }
 
-// -------------------------
-// PNRDetails API helpers (moved from PNRDetailsV4.js)
-// Keeps existing endpoints/methods/error-shape + AbortController support
-// -------------------------
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
-
-// Feedback (ADM) API
-function buildEmdFeedbackUrl(emdId) {
-  const id = encodeURIComponent(emdId || "");
-  const path = `/api/v1/pnrs/emd-items/${id}/feedback`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-// Build AE API
-function buildBuildAeUrl(pnrId) {
-  const id = encodeURIComponent(pnrId || "");
-  const path = `/api/v1/pnrs/${id}/build-ae`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-// Process PNR API
-function buildProcessPnrUrl(pnrId) {
-  const id = encodeURIComponent(pnrId ?? "");
-  const path = `/api/v1/pnrs/${id}/process`;
-  return API_BASE ? `${API_BASE}${path}` : path;
-}
-
-async function parseJsonOrEmpty(res) {
-  const txt = await res.text().catch(() => "");
-  try {
-    return txt ? JSON.parse(txt) : {};
-  } catch {
-    return {};
-  }
-}
-
-async function throwHttpError(res) {
-  const text = await res.text().catch(() => "");
-  const err = new Error(
-    `HTTP ${res.status} ${res.statusText}${text ? ` â€” ${text}` : ""}`,
+/*
+ * Send ADM Feedback
+ * POST /api/v1/pnrs/ttl
+ *
+ * @param {string} pnrId
+ * @param {Object} payload
+ */
+export async function patchEmdFeedback(emdId, payload) {
+  return api.patch(
+    `/api/v1/pnrs/emd-items/${encodeURIComponent(emdId)}/feedback`,
+    payload,
   );
-  err.status = res.status;
-  throw err;
 }
 
 export function getEmdFeedbackId(emd) {
@@ -242,17 +210,4 @@ export function getEmdFeedbackId(emd) {
   if (no && no !== "â€”" && String(no).trim() !== "") return no;
 
   return null;
-}
-
-export async function patchEmdFeedback(emdId, payload, { signal } = {}) {
-  const url = buildEmdFeedbackUrl(emdId);
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload || {}),
-    signal,
-  });
-
-  if (!res.ok) await throwHttpError(res);
-  return parseJsonOrEmpty(res);
 }
