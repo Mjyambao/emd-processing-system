@@ -509,6 +509,7 @@ function mapApiToPnrDetails(pnrApi) {
         feesAmount: item?.feesAmount,
         netRemitAmount: item?.netRemitAmount,
         currencyCode: item?.currencyCode,
+        ssrCode: item?.ssrCode,
         aeNumber: item?.aeNumber,
         aeBuildStatus: item?.aeBuildStatus,
         aeBuiltUtc: item?.aeBuiltUtc,
