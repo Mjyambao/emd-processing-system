@@ -32,6 +32,12 @@ function safeUpper(v) {
   return normalize(v).toUpperCase();
 }
 
+function canBuildEmd(emd) {
+  return Boolean(
+    normalize(emd?.rfic) && normalize(emd?.rfisc) && normalize(emd?.emdDesc),
+  );
+}
+
 function sanitizeAlphaNumericValue(value, maxLength) {
   const sanitized = (value ?? "")
     .toString()
@@ -77,7 +83,6 @@ function sanitizeEditableEmdField(field, value) {
 
   return value;
 }
-``;
 
 function statusToComparable(v) {
   // supports: HUMAN_INPUT_REQUIRED, Human Input Required, human_input_required
@@ -1918,6 +1923,7 @@ export default function PNRDetails({
                                 isHumanRequired &&
                                 (emd?.aeBuildStatus || "").toUpperCase() ===
                                   "PENDING";
+                              const canBuild = canBuildEmd(emd);
 
                               return (
                                 <FadeIn
@@ -2290,8 +2296,13 @@ export default function PNRDetails({
                                         <FadeIn delay={100}>
                                           <div className="mt-2">
                                             <button
-                                              className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150"
-                                              title="Build AE with current values for this EMD"
+                                              className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                              title={
+                                                canBuild
+                                                  ? "Build AE with current values for this EMD"
+                                                  : "RFIC, RFISC and EMD Desc are required"
+                                              }
+                                              disabled={!canBuild}
                                               onClick={() =>
                                                 openBuildFor(
                                                   passengerIndex,
@@ -2299,7 +2310,7 @@ export default function PNRDetails({
                                                 )
                                               }
                                             >
-                                              <i className="fa-regular fa-paper-plane mr-1"></i>{" "}
+                                              <i className="fa-regular fa-paper-plane mr-1"></i>
                                               Build AE
                                             </button>
                                           </div>
