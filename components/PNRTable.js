@@ -252,11 +252,11 @@ export default function PNRTable({
 
     // overdue
     if (daysFromToday < 0) {
-      return "bg-red-50 hover:bg-red-100";
+      return "bg-red-100 hover:bg-red-200";
     }
 
     // 2 days and below
-    if (daysFromToday <= 3) {
+    if (daysFromToday <= 2) {
       return "bg-red-100 hover:bg-red-200";
     }
 
