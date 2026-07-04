@@ -58,7 +58,7 @@ function AssigneeMultiSelectFilter({
       </button>
 
       {open && (
-        <div className="absolute z-[95] mt-1 w-[260px] bg-white border border-black/10 rounded shadow-lg p-2">
+        <div className="absolute z-[95] mt-1 w-[200px] bg-white border border-black/10 rounded shadow-lg p-2">
           <div className="mb-2">
             <input
               className="input h-8 text-xs w-full"
@@ -68,7 +68,7 @@ function AssigneeMultiSelectFilter({
             />
           </div>
 
-          <div className="max-h-[220px] overflow-y-auto pr-1">
+          <div className="pr-4 h-20 overflow-auto">
             <label className="flex items-center gap-2 py-1 text-xs cursor-pointer">
               <input
                 type="checkbox"
@@ -101,7 +101,7 @@ function AssigneeMultiSelectFilter({
 
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-black/10">
             <button
-              className="btn h-8 text-xs"
+              className="btn btn-primary h-8 text-xs"
               onClick={() => {
                 setDraftSelected([]);
                 setDraftUnassigned(false);

@@ -158,7 +158,7 @@ function AssignModal({
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-2">
+        <div className="px-5 py-4 space-y-2 overflow-y-auto flex-1">
           <label htmlFor="assignee-search" className="block text-sm">
             Search names
           </label>
@@ -217,7 +217,7 @@ function AssignModal({
           {resolvedIds.length > 0 && selectedCount > 0 && (
             <div className="mt-2 rounded border border-black/10 bg-black/5 p-2">
               <p className="text-xs font-medium mb-1">Preview:</p>
-              <ul className="text-xs list-disc pl-5 space-y-0.5">
+              <ul className="h-20 overflow-y-auto text-xs list-disc pl-5 space-y-0.5">
                 {resolvedIds.map((id) => {
                   const a = assignees.find((x) => x.id === id);
                   const count = distribution.perAssignee[id] || 0;

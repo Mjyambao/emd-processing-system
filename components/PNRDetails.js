@@ -20,7 +20,7 @@ import FadeIn from "./FadeIn";
 import PNRDetailsActionBar from "./PNRDetailsActionBar";
 
 // Utils
-import formatDate from "../utils/helper";
+import { formatDatetime, formatDate, formatTime } from "../utils/helper";
 
 // -------------------------
 // Helpers
@@ -439,6 +439,8 @@ function mapApiToPnrDetails(pnrApi) {
       `${linkedFlight?.origin || ""} → ${linkedFlight?.destination || ""}`.trim();
     const dep = linkedFlight?.departureDatetimeUtc || "";
     const arr = linkedFlight?.arrivalDatetimeUtc || "";
+    const depTime = linkedFlight?.departureTime || "";
+    const arrTime = linkedFlight?.arrivalTime || "";
     const seat = linkedFlight?.flightSeat || "—";
 
     const emdItems = Array.isArray(pax?.emdItems) ? pax.emdItems : [];
@@ -545,6 +547,8 @@ function mapApiToPnrDetails(pnrApi) {
       flightSeat: seat,
       dep,
       arr,
+      depTime,
+      arrTime,
       emds,
       passengerId: pax?.passengerId,
       travelerIndex: pax?.travelerIndex,
@@ -1750,7 +1754,7 @@ export default function PNRDetails({
                       Created
                     </>
                   }
-                  v={formatDate(pnrDetails.created) || "—"}
+                  v={formatDatetime(pnrDetails.created) || "—"}
                 />
                 <Field
                   k={
@@ -1893,7 +1897,10 @@ export default function PNRDetails({
                                     Departure
                                   </>
                                 }
-                                v={formatDate(passenger.dep) || "—"}
+                                v={
+                                  `${formatDate(passenger.dep)}, ${passenger.depTime}` ||
+                                  "—"
+                                }
                               />
                               <Field
                                 k={
@@ -1902,7 +1909,10 @@ export default function PNRDetails({
                                     Arrival
                                   </>
                                 }
-                                v={formatDate(passenger.arr) || "—"}
+                                v={
+                                  `${formatDate(passenger.arr)}, ${passenger.arrTime}` ||
+                                  "—"
+                                }
                               />
                               <Field
                                 k={
@@ -2265,13 +2275,10 @@ export default function PNRDetails({
                                                               src.url ? (
                                                                 <a
                                                                   key={`${src.title}-${idx2}`}
-                                                                  href={src.url}
+                                                                  href={`/api/source-article?url=${encodeURIComponent(src.url)}`}
                                                                   target="_blank"
-                                                                  rel="noreferrer"
+                                                                  rel="noopener noreferrer"
                                                                   className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px] break-all"
-                                                                  title={
-                                                                    src.title
-                                                                  }
                                                                 >
                                                                   {src.title}
                                                                 </a>

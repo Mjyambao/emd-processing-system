@@ -1,4 +1,16 @@
-export default function formatDate(date) {
+export function formatDate(date) {
+  if (date != null) {
+    return new Date(date).toLocaleString("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } else {
+    return "—";
+  }
+}
+
+export function formatDatetime(date) {
   if (date != null) {
     return new Date(date).toLocaleString("en-US", {
       year: "numeric",

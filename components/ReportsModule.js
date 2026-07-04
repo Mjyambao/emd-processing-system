@@ -2033,7 +2033,7 @@ export default function ReportsModule({ onOpenPNR }) {
 
       openDetailModal({
         title: `Throughput over time${label ? ` — ${label}` : ""}`,
-        subtitle: `${display(seriesName)} • ${display(value)}`,
+        subtitle: ``,
         rows,
       });
       return;
@@ -2069,7 +2069,7 @@ export default function ReportsModule({ onOpenPNR }) {
 
       openDetailModal({
         title: `AI vs Human corrections${label ? ` — ${label}` : ""}`,
-        subtitle: `${display(value)}`,
+        subtitle: ``,
         rows,
       });
       return;
@@ -2131,7 +2131,7 @@ export default function ReportsModule({ onOpenPNR }) {
 
       openDetailModal({
         title: `LLM metrics trend over time${label ? ` — ${label}` : ""}`,
-        subtitle: `${display(seriesName)} • ${display(value)}`,
+        subtitle: ``,
         rows,
       });
       return;

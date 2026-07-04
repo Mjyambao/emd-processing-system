@@ -11,8 +11,9 @@ import ToastViewport from "../components/ToastViewport";
 import Spinner from "../components/Spinner";
 import Chip from "../components/Chip";
 
-// lib
-import { requireAuth } from "../lib/auth";
+import { requireAuth, getGraphAccessToken } from "../lib/auth";
+
+import { getGroupMembers } from "../api/userApi";
 
 // Client-only components to avoid hydration mismatches
 const ReportsModule = dynamic(() => import("../components/ReportsModule"), {
@@ -35,6 +36,36 @@ const AIAgentsDockPortal = dynamic(
 // import { logout } from "../api/userApi";
 
 export default function Dashboard() {
+  const [groupMembers, setGroupMembers] = useState([]);
+
+  useEffect(() => {
+    const loadGroupMembers = async () => {
+      try {
+        const members = await getGroupMembers();
+        setGroupMembers(members?.members || []);
+
+        localStorage.setItem(
+          "groupMembers",
+          JSON.stringify(members?.members || []),
+        );
+      } catch (error) {
+        const cachedMembers = JSON.parse(
+          localStorage.getItem("groupMembers") || "[]",
+        );
+
+        setGroupMembers(cachedMembers);
+      }
+    };
+    loadGroupMembers();
+  }, []);
+
+  const assignees = useMemo(() => {
+    return groupMembers.map((member) => ({
+      id: member.id,
+      name: member.displayName,
+    }));
+  }, [groupMembers]);
+
   const router = useRouter();
 
   const refreshStatuses = (list) => {
@@ -508,11 +539,7 @@ export default function Dashboard() {
                   statusFilter={statusFilter}
                   killingSet={killing}
                   retryingSet={retrying}
-                  assignees={[
-                    { id: "t-01", name: "Ticketer 1" },
-                    { id: "t-02", name: "Guest User" },
-                    { id: "t-03", name: "Ticketer 2" },
-                  ]}
+                  assignees={assignees}
                   onAssign={({ assignee, items }) => {
                     console.log("Assign to:", assignee, "Items:", items);
                   }}

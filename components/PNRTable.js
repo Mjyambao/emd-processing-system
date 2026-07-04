@@ -11,7 +11,7 @@ import ThWithFilter from "./ThWithFilter";
 import AssigneeMultiSelectFilter from "./AssigneeMultiSelectFilter";
 
 //Utils
-import formatDate from "../utils/helper";
+import { formatDatetime } from "../utils/helper";
 import { appLogger } from "../utils/appLogger";
 
 // API
@@ -585,27 +585,27 @@ export default function PNRTable({
     return Array.from(set);
   }, [filteredRows]);
 
-  const assigneeOptions = assignees.length
-    ? assignees
-    : [
-        {
-          id: "1",
-          name: "Ticketer 1",
-          description: "(4 PNRs / 06:00 - 14:00)",
-        },
-        {
-          id: "2",
-          name: "Guest User",
-          description: "(2 PNRs / 14:00 - 22:00)",
-        },
-        {
-          id: "3",
-          name: "Ticketer 2",
-          description: "(0 PNRs / 22:00 - 06:00)",
-        },
-      ];
+  const [ticketers, setTicketers] = useState([]);
 
-  const FILTER_ASSIGNEES = ["Ticketer 1", "Guest User", "Ticketer 2"];
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("groupMembers") || "[]");
+
+      setTicketers(Array.isArray(stored) ? stored : []);
+    } catch (err) {
+      console.error("Failed to load group members:", err);
+      setTicketers([]);
+    }
+  }, []);
+
+  const assignedToOptions = useMemo(
+    () =>
+      ticketers
+        .map((member) => member.displayName)
+        .filter(Boolean)
+        .sort(),
+    [ticketers],
+  );
 
   /**
    * --------
@@ -2017,7 +2017,7 @@ export default function PNRTable({
                 {filterOpen.assigned && (
                   <div className="mt-1">
                     <AssigneeMultiSelectFilter
-                      options={FILTER_ASSIGNEES}
+                      options={assignedToOptions}
                       selected={colFilters.assignedNames}
                       includeUnassigned={colFilters.includeUnassigned}
                       onCommit={({ selected, includeUnassigned }) => {
@@ -2145,12 +2145,12 @@ export default function PNRTable({
 
                   {/* Last Updated */}
                   <td className="w-[190px] text-black/80 whitespace-nowrap">
-                    {row.lastUpdated ? formatDate(row.lastUpdated) : "-"}
+                    {row.lastUpdated ? formatDatetime(row.lastUpdated) : "-"}
                   </td>
 
                   {/* Queue Arrival */}
                   <td className="w-[190px] text-black/80 whitespace-nowrap">
-                    {row.queueArrival ? formatDate(row.queueArrival) : "-"}
+                    {row.queueArrival ? formatDatetime(row.queueArrival) : "-"}
                   </td>
 
                   {/* TTL */}
@@ -2301,7 +2301,7 @@ export default function PNRTable({
       <AssignModal
         open={assignOpen}
         onClose={closeAssign}
-        assignees={assigneeOptions}
+        assignees={assignees}
         selectedCount={selectedPNRs.size}
         onConfirm={async ({ mode, selectedAssigneeIds, distribution }) => {
           try {
