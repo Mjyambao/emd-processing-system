@@ -61,8 +61,9 @@ export default function Dashboard() {
 
   const assignees = useMemo(() => {
     return groupMembers.map((member) => ({
-      id: member.id,
-      name: member.displayName,
+      id: member?.id,
+      name: member?.displayName,
+      email: member?.mail,
     }));
   }, [groupMembers]);
 
@@ -211,6 +212,40 @@ export default function Dashboard() {
     };
   };
 
+  const countsFromRows = (rows = []) => {
+    const counts = {
+      total: rows.length,
+      processed: 0,
+      processing: 0,
+      error: 0,
+      human: 0,
+      sentBackToOasis: 0,
+    };
+
+    rows.forEach((row) => {
+      const status = String(row?.status ?? "")
+        .trim()
+        .toLowerCase();
+
+      if (status === "processed") {
+        counts.processed += 1;
+      } else if (status === "processing") {
+        counts.processing += 1;
+      } else if (status === "error") {
+        counts.error += 1;
+      } else if (status === "human") {
+        counts.human += 1;
+      } else if (
+        status === "sent_back_to_oasis" ||
+        status === "sent back to oasis"
+      ) {
+        counts.sentBackToOasis += 1;
+      }
+    });
+
+    return counts;
+  };
+
   const allCounts = useMemo(() => {
     return (
       countsFromApiMeta(allTableSnapshot.meta) ??
@@ -221,13 +256,10 @@ export default function Dashboard() {
   }, [allTableSnapshot.meta, allTableSnapshot.rows, countByStatus, allRows]);
 
   const myCounts = useMemo(() => {
-    return (
-      countsFromApiMeta(myTableSnapshot.meta) ??
-      countByStatus(
-        myTableSnapshot.rows?.length ? myTableSnapshot.rows : myRows,
-      )
+    return countByStatus(
+      myTableSnapshot.rows?.length ? myTableSnapshot.rows : myRows,
     );
-  }, [myTableSnapshot.meta, myTableSnapshot.rows, countByStatus, myRows]);
+  }, [myTableSnapshot.rows, countByStatus, myRows]);
 
   // Handlers: All
   async function refreshAll() {
@@ -345,6 +377,7 @@ export default function Dashboard() {
   const counters = activeTab === TABS.ALL ? allCounts : myCounts;
 
   const loggedInName = session?.name || session?.user?.name || "";
+  const loggedInEmail = session?.email || session?.user?.email || "";
   const loggedInUserId =
     session?.userId || session?.user?.userId || session?.user?.name || "";
 
@@ -540,9 +573,7 @@ export default function Dashboard() {
                   killingSet={killing}
                   retryingSet={retrying}
                   assignees={assignees}
-                  onAssign={({ assignee, items }) => {
-                    console.log("Assign to:", assignee, "Items:", items);
-                  }}
+                  onAssign={({ assignee, items }) => {}}
                   onRowsChange={({ rows: latestRows, meta }) => {
                     if (activeTab === TABS.ALL)
                       setAllTableSnapshot({ rows: latestRows, meta });
@@ -550,12 +581,13 @@ export default function Dashboard() {
                       setMyTableSnapshot({ rows: latestRows, meta });
                   }}
                   assignedToOverride={
-                    activeTab === TABS.MINE && loggedInName
-                      ? loggedInName
+                    activeTab === TABS.MINE && loggedInEmail
+                      ? loggedInEmail
                       : undefined
                   }
                   loggedInUserName={loggedInName}
                   loggedInUserId={loggedInUserId}
+                  isMyQueuesTab={activeTab === TABS.MINE}
                 />
               </div>
               <div>

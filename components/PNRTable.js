@@ -65,6 +65,7 @@ export default function PNRTable({
   assignedToOverride,
   loggedInUserName,
   loggedInUserId,
+  isMyQueuesTab = false,
 }) {
   /**
    * -----------------------------
@@ -544,9 +545,14 @@ export default function PNRTable({
     let rowsToFilter = effectiveRows;
 
     // MY QUEUE FILTER
+
     if (assignedToOverride) {
+      const currentUser = String(assignedToOverride).trim().toLowerCase();
       rowsToFilter = rowsToFilter.filter(
-        (r) => r.assigned === assignedToOverride,
+        (r) =>
+          String(r.assigned ?? "")
+            .trim()
+            .toLowerCase() === currentUser,
       );
     }
 
@@ -601,7 +607,7 @@ export default function PNRTable({
   const assignedToOptions = useMemo(
     () =>
       ticketers
-        .map((member) => member.displayName)
+        .map((member) => member?.mail)
         .filter(Boolean)
         .sort(),
     [ticketers],
@@ -817,18 +823,18 @@ export default function PNRTable({
       : undefined;
 
     // assignTo base logic (existing behavior), unless assignedToOverride is provided.
-    let assignTo;
+    let assignedTo;
     if (assignedToOverride && String(assignedToOverride).trim()) {
-      assignTo = String(assignedToOverride).trim();
+      assignedTo = String(assignedToOverride).trim();
     } else if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
-      assignTo = f.assignedNames[0];
+      assignedTo = f.assignedNames[0];
     } else if (
       f.includeUnassigned &&
       (!f.assignedNames || f.assignedNames.length === 0)
     ) {
-      assignTo = "Unassigned";
+      assignedTo = "Unassigned";
     } else {
-      assignTo = undefined;
+      assignedTo = undefined;
     }
 
     const pnr = f.pnr?.trim()
@@ -882,7 +888,7 @@ export default function PNRTable({
       page: Math.max(1, page), // backend expects 1-based
       pageSize: Math.min(100, Math.max(1, pageSize)),
       status,
-      assignTo,
+      assignedTo,
       pnr,
       brand,
       gds,
@@ -1214,16 +1220,6 @@ export default function PNRTable({
     sent_back_to_oasis: "totalSendToOasis",
   };
 
-  const totalRecord = STATUS_TOTAL_MAP[statusFilter]
-    ? (apiMeta[STATUS_TOTAL_MAP[statusFilter]] ?? 0)
-    : (apiMeta.totalRecords ?? 0);
-
-  const totalPages = Math.max(1, Math.ceil(totalRecord / pageSize));
-  const clampedPage = Math.min(page, totalPages);
-
-  const pageRows = filteredRows;
-  // If polling adds rows but the backend meta lags, ensure the footer still reflects the latest count.
-  const displayedMax = (clampedPage - 1) * pageSize + (pageRows?.length || 0);
   const getTotalRecordsByStatus = (apiMeta, statusFilter) => {
     switch (statusFilter) {
       case "processed":
@@ -1242,7 +1238,20 @@ export default function PNRTable({
     }
   };
 
-  const totalRecords = getTotalRecordsByStatus(apiMeta, statusFilter);
+  const tableRowCount = filteredRows.length;
+  const totalRecords = isMyQueuesTab
+    ? tableRowCount
+    : getTotalRecordsByStatus(apiMeta, statusFilter);
+
+  const totalPages = isMyQueuesTab
+    ? Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    : Math.max(1, Math.ceil(totalRecords / pageSize));
+
+  const clampedPage = Math.min(page, Math.max(1, totalPages));
+
+  const pageRows = filteredRows;
+  // If polling adds rows but the backend meta lags, ensure the footer still reflects the latest count.
+  const displayedMax = (clampedPage - 1) * pageSize + (pageRows?.length || 0);
 
   const from = pageRows.length === 0 ? 0 : (clampedPage - 1) * pageSize + 1;
   const to =
@@ -1405,7 +1414,7 @@ export default function PNRTable({
 
   const assignPnrsToAssignee = async (assignee, items) => {
     // Items: [{ pnr, originalIndex }]
-    const assignTo = assignee?.name ?? String(assignee?.id ?? "");
+    const assignTo = assignee?.email;
     const assignedById = getAssignedById();
     const assignedByName = getAssignedByName();
 
@@ -1534,7 +1543,7 @@ export default function PNRTable({
 
           <div className="text-xs text-black/70">{selectedCount} selected</div>
 
-          <div className="ml-2 text-xs text-black/50">
+          <div className="ml-2 text-sm text-black/50">
             {apiLoading ? "Loading..." : apiError ? "Failed to load" : ""}
           </div>
         </div>
@@ -1556,7 +1565,7 @@ export default function PNRTable({
       )}
 
       <div
-        className="relative overflow-x-auto overflow-y-auto scroll-smooth max-h-[340px] pb-2"
+        className="relative overflow-x-auto overflow-y-visible scroll-smooth max-h-[340px] pb-2"
         tabIndex={0}
         role="region"
         aria-label="PNR results table"
@@ -2009,7 +2018,7 @@ export default function PNRTable({
                     />
                   </span>
                 }
-                widthClass="w-[240px]"
+                widthClass="w-[320px]"
                 sortKey="assigned"
                 sort={sort}
                 onSort={toggleSort}
@@ -2044,7 +2053,7 @@ export default function PNRTable({
             </tr>
           </thead>
 
-          <tbody className="relative z-[10] [&>tr>td]:px-2 [&>tr>td]:py-1.5 [&>tr>td]:align-middle">
+          <tbody className="relative z-[10] [&>tr>td]:px-2 [&>tr>td]:py-1.5 [&>tr>td]:align-middle min">
             {pageRows.map((row) => {
               const selectable = isSelectable(row);
               const isChecked = selectable && selectedPNRs.has(row.pnr);
@@ -2349,7 +2358,7 @@ export default function PNRTable({
             for (const [assigneeId, items] of Object.entries(byAssignee)) {
               if (!items.length) continue;
 
-              const assignee = assigneeOptions.find(
+              const assignee = assignees.find(
                 (a) => String(a.id) === String(assigneeId),
               ) || {
                 id: assigneeId,
@@ -2363,7 +2372,7 @@ export default function PNRTable({
 
             const who =
               mode === "all"
-                ? `evenly to all ${assigneeOptions.length} ticketers`
+                ? `evenly to all ${assignees.length} ticketers`
                 : `to ${selectedAssigneeIds.length} selected ticketer(s)`;
 
             showToast(`${totalAssigned} PNR(s) assigned ${who}`, {

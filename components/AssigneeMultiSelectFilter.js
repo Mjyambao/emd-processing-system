@@ -58,7 +58,7 @@ function AssigneeMultiSelectFilter({
       </button>
 
       {open && (
-        <div className="absolute z-[95] mt-1 w-[200px] bg-white border border-black/10 rounded shadow-lg p-2">
+        <div className="relative z-[99] mt-1 w-[200px] bg-white border border-black/10 rounded shadow-lg p-2">
           <div className="mb-2">
             <input
               className="input h-8 text-xs w-full"
@@ -68,7 +68,7 @@ function AssigneeMultiSelectFilter({
             />
           </div>
 
-          <div className="pr-4 h-20 overflow-auto">
+          <div className="pr-4 h-20 overflow-y-auto">
             <label className="flex items-center gap-2 py-1 text-xs cursor-pointer">
               <input
                 type="checkbox"
