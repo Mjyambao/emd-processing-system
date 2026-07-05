@@ -17,12 +17,8 @@
     "primeHostId": "1S"
   },
   "contactInfo": {
-    "emails": [
-      "travel@sabre.com"
-    ],
-    "phones": [
-      "+1-555-123-4567"
-    ]
+    "emails": ["travel@sabre.com"],
+    "phones": ["+1-555-123-4567"]
   },
   "travelers": [
     {
@@ -36,9 +32,7 @@
       "nameAssociationId": "3",
       "nameReferenceCode": "C05",
       "isGrouped": true,
-      "emails": [
-        "john@smith.family.priv"
-      ],
+      "emails": ["john@smith.family.priv"],
       "phones": [
         {
           "number": "+1-555-123-4567",
@@ -87,9 +81,7 @@
             "postalCode": "75063",
             "countryCode": "US"
           },
-          "flightIndices": [
-            1
-          ],
+          "flightIndices": [1],
           "itemId": "76c2817b178cc264fa44cf85df1da5fb9e1b963006b2339aa5edc09129415bba5fcf5bf91a5f",
           "citizenshipCountryCode": "US"
         }
@@ -141,9 +133,7 @@
           ]
         }
       ],
-      "formOfPaymentIndices": [
-        1
-      ],
+      "formOfPaymentIndices": [1],
       "employerIndex": 1
     }
   ],
@@ -181,9 +171,7 @@
       "seats": [
         {
           "number": "13A",
-          "characteristics": [
-            "K"
-          ],
+          "characteristics": ["K"],
           "statusCode": "AF",
           "statusName": "Confirmed"
         }
@@ -191,9 +179,7 @@
       "changeOfGaugeSeats": [
         {
           "number": "13A",
-          "characteristics": [
-            "K"
-          ],
+          "characteristics": ["K"],
           "statusCode": "AF",
           "statusName": "Confirmed"
         }
@@ -233,9 +219,7 @@
           "durationInMinutes": 300
         }
       ],
-      "travelerIndices": [
-        1
-      ],
+      "travelerIndices": [1],
       "identityDocuments": [
         {
           "itemId": "76c2817b178cc264fa44cf85df1da5fb9e1b963006b2339aa5edc09129415bba5fcf5bf91a5f",
@@ -312,9 +296,7 @@
   ],
   "fareOffers": [
     {
-      "travelerIndices": [
-        1
-      ],
+      "travelerIndices": [1],
       "flights": [
         {
           "itemId": "12"
@@ -409,9 +391,7 @@
       "fareCalculationLine": "BUE AA DFW Q430.00 5740.00NUC6170.00END ROE1.00 XT175.50TQ175.50QO315.90US96.50YC122.90XY69.50XA",
       "tourCode": "123456789ABCDE",
       "isNegotiatedFare": true,
-      "travelerIndices": [
-        1
-      ],
+      "travelerIndices": [1],
       "commission": {
         "commissionAmount": "25.00",
         "currencyCode": "USD",
@@ -424,9 +404,7 @@
               "itemId": "12"
             }
           ],
-          "flightIndices": [
-            1
-          ],
+          "flightIndices": [1],
           "fareBasisCode": "ABCDE10",
           "baseRate": {
             "amount": "100.00",
@@ -737,9 +715,7 @@
             "amount": "100.00",
             "currencyCode": "USD"
           },
-          "virtualCardCharges": [
-            "Breakfast"
-          ]
+          "virtualCardCharges": ["Breakfast"]
         },
         "agencyIataNumber": "129345738",
         "agencyAddress": {
@@ -774,12 +750,8 @@
         "invoiceDescription": "AGT INVOICE",
         "useType": "Unknown",
         "tripType": "Unknown",
-        "useTypes": [
-          "Unknown"
-        ],
-        "tripTypes": [
-          "Unknown"
-        ],
+        "useTypes": ["Unknown"],
+        "tripTypes": ["Unknown"],
         "isAgencyPaymentCard": false,
         "addInvoiceDescriptionPrefix": false
       }
@@ -811,9 +783,7 @@
   },
   "specialServices": [
     {
-      "travelerIndices": [
-        1
-      ],
+      "travelerIndices": [1],
       "flights": [
         {
           "itemId": "12"
@@ -842,9 +812,7 @@
       },
       "fareAmount": "520.00",
       "taxAmount": "123.00",
-      "travelerIndices": [
-        1
-      ],
+      "travelerIndices": [1],
       "tariffBasisType": "Foreign",
       "cardNumber": "4537156488578956",
       "cardTypeCode": "VI",
@@ -878,9 +846,7 @@
           "label": "M"
         }
       ],
-      "emails": [
-        "john@gst.company.com"
-      ],
+      "emails": ["john@gst.company.com"],
       "street": "1230 Ellen Ave, apt 10",
       "city": "Dallas",
       "stateProvince": "TX",
@@ -897,9 +863,7 @@
     "givenName": "John",
     "middleName": "W",
     "surname": "Smith",
-    "returnOnly": [
-      "FLIGHTS"
-    ],
+    "returnOnly": ["FLIGHTS"],
     "extraFeatures": {
       "returnFrequentRenter": false,
       "returnWalletFormsOfPayment": false,

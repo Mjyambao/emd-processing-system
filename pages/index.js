@@ -1,20 +1,37 @@
-import { useState } from 'react'
-import { useRouter } from 'next/router'
-import { VALID_USER } from '../lib/auth'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
+import msalInstance, { getMsal, apiScopes } from "../lib/okta";
 
 export default function Login() {
-  const [email, setEmail] = useState('me@me.com')
-  const [password, setPassword] = useState('1234')
-  const [error, setError] = useState('')
-  const router = useRouter()
+  const router = useRouter();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  function handleSubmit(e){
-    e.preventDefault()
-    if (email === VALID_USER.email && password === VALID_USER.password){
-      localStorage.setItem('session', JSON.stringify({ email, name: VALID_USER.name, agentId: VALID_USER.agentId }))
-      router.push('/dashboard')
-    } else {
-      setError('Invalid credentials')
+  // If already authenticated, go straight to dashboard
+  useEffect(() => {
+    getMsal().then(() => {
+      if (msalInstance.getAllAccounts().length > 0)
+        router.replace("/dashboard");
+    });
+  }, [router]);
+
+  async function handleLogin() {
+    if (isLoggingIn) return; // prevent spam clicks
+
+    setIsLoggingIn(true);
+
+    try {
+      await getMsal();
+
+      await msalInstance.loginRedirect({
+        scopes: ["openid", "profile", "email", ...apiScopes],
+      });
+
+      // NOTE:
+      // No need to reset isLoggingIn = false
+      // because redirect will unload the page
+    } catch (err) {
+      console.error("Login failed:", err);
+      setIsLoggingIn(false); // allow retry if something breaks
     }
   }
 
@@ -22,28 +39,31 @@ export default function Login() {
     <main className="min-h-screen grid place-items-center p-4">
       <div className="w-full max-w-md card p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded bg-brand-red grid place-items-center text-white"><i className="fa-solid fa-plane"></i></div>
+          <div className="h-10 w-10 rounded bg-brand-red grid place-items-center text-white">
+            <i className="fa-solid fa-plane"></i>
+          </div>
           <div>
-            <h1 className="text-xl font-semibold">EMD Processing System</h1>
+            <h1 className="text-xl font-semibold">
+              EMD Processing System{" "}
+              <span className="text-xs text-black/30">v1.0</span>
+            </h1>
             <p className="text-black/60 text-sm">Sign in to continue</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-sm mb-1">Email</label>
-            <input className="input w-full" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="me@me.com"/>
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Password</label>
-            <input className="input w-full" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="•••••"/>
-          </div>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          <button className="btn btn-primary w-full justify-center" type="submit"><i className="fa-solid fa-right-to-bracket"></i> Sign in</button>
-        </form>
-
-        {/* <p className="mt-4 text-xs text-black/50">Use <span className="font-mono">me@me.com / 1234</span></p> */}
+        <button
+          className="btn btn-primary w-full justify-center"
+          onClick={handleLogin}
+          disabled={isLoggingIn}
+          style={{
+            opacity: isLoggingIn ? 0.6 : 1,
+            cursor: isLoggingIn ? "not-allowed" : "pointer",
+          }}
+        >
+          <i className="fa-solid fa-right-to-bracket"></i>{" "}
+          {isLoggingIn ? "Signing in..." : "Sign in with Okta"}
+        </button>
       </div>
     </main>
-  )
+  );
 }
