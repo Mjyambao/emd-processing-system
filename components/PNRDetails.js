@@ -568,6 +568,7 @@ function mapApiToPnrDetails(pnrApi) {
       passengerFlights: paxFlights,
       emdItems: emds,
       emdItemsRaw: emdItems,
+      ssrCodes: pax?.ssrCodes,
     };
   });
 
@@ -763,6 +764,7 @@ export default function PNRDetails({
   // Silent refetch (used after actions like Build AE)
   const silentRefetchControllerRef = useRef(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   async function regetPnrDetailsSilently(pnrId) {
     if (!pnrId) return;
 
@@ -1596,6 +1598,30 @@ export default function PNRDetails({
     }
   }, [selected?.pnr, pnrDetails?.status, selected?.status, statusUiOverride]);
 
+  const selectedRowStateKey = useMemo(
+    () =>
+      JSON.stringify({
+        status: selected?.status,
+      }),
+    [selected?.status],
+  );
+
+  const previousRowStateRef = useRef("");
+
+  useEffect(() => {
+    if (!selected?.pnr) return;
+    if (!pnrDetails) return;
+
+    if (
+      previousRowStateRef.current &&
+      previousRowStateRef.current !== selectedRowStateKey
+    ) {
+      regetPnrDetailsSilently(selected.pnr);
+    }
+
+    previousRowStateRef.current = selectedRowStateKey;
+  }, [selectedRowStateKey, selected?.pnr, pnrDetails, regetPnrDetailsSilently]);
+
   if (!selected) return null;
 
   return (
@@ -2006,7 +2032,7 @@ export default function PNRDetails({
                                                 SSR
                                               </>
                                             }
-                                            v={emd.ssrCode || "—"}
+                                            v={passenger.ssrCodes || "—"}
                                           />
                                           <Field
                                             k={
