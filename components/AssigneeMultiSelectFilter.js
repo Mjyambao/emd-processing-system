@@ -58,7 +58,7 @@ function AssigneeMultiSelectFilter({
       </button>
 
       {open && (
-        <div className="relative z-[99] mt-1 w-[200px] bg-white border border-black/10 rounded shadow-lg p-2">
+        <div className="relative z-[99] mt-1 w-full bg-white border border-black/10 rounded shadow-lg p-2">
           <div className="mb-2">
             <input
               className="input h-8 text-xs w-full"

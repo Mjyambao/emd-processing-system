@@ -2721,6 +2721,11 @@ export default function PNRDetails({
                   {selected?.pnr || pnrDetails?.pnr || "—"}
                 </span>
                 ?
+                <p className="text-xs text-black/40 mt-2">
+                  {pendingErrorAction == "RemoveFromQueue"
+                    ? "The PNR will be removed from the queue and will not undergo further processing."
+                    : ""}
+                </p>
               </div>
 
               <div className="mt-4 flex items-center justify-end gap-2">
