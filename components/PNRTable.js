@@ -334,11 +334,9 @@ export default function PNRTable({
       case "ttl":
         return "ttl";
       case "error":
-        return "humanError";
-      case "errorDetailed":
         return "errorDetails";
       case "assigned":
-        return "assignTo";
+        return "assignedTo";
       default:
         return "departureDate";
     }
