@@ -33,8 +33,13 @@ function safeUpper(v) {
 }
 
 function canBuildEmd(emd) {
-  return Boolean(
+  const hasRequiredEmdFields = Boolean(
     normalize(emd?.rfic) && normalize(emd?.rfisc) && normalize(emd?.emdDesc),
+  );
+  const needsPassengerSelection = Boolean(emd?.requiresPassengerSelection);
+  return Boolean(
+    hasRequiredEmdFields &&
+    (!needsPassengerSelection || normalize(emd?.selectedPassengerId)),
   );
 }
 
@@ -384,6 +389,92 @@ function pickOtherInfoFromApi(pnrApi) {
   return "—";
 }
 
+function mapRawEmdItemToView(item, options = {}) {
+  const aeStatus = safeUpper(item?.aeBuildStatus);
+  const editable = aeStatus === "PENDING";
+  const built = aeStatus && aeStatus !== "PENDING";
+  const totalAmount = item?.totalAmount ?? item?.subtotalAmount;
+  const currencyCode = item?.currencyCode;
+  const emdTotal =
+    normalize(totalAmount) && normalize(currencyCode)
+      ? `${totalAmount} ${currencyCode}`
+      : normalize(totalAmount)
+        ? `${totalAmount}`
+        : "—";
+  const emdNo =
+    item?.emdNumber ||
+    item?.aeNumber ||
+    item?.ancillaryItemId ||
+    item?.emdItemId ||
+    "—";
+  const rfic = item?.rfic || "";
+  const rfisc = item?.rfisc || "";
+  const emdDesc = item?.emdDesc || item?.commercialName || "";
+  const emdStatus =
+    normalize(item?.emdStatusCode) && normalize(item?.emdStatusName)
+      ? `${item.emdStatusCode} - ${item.emdStatusName}`
+      : item?.emdStatusName || item?.emdStatusCode || "—";
+  const emd = {
+    emdNo,
+    emdStatus,
+    emdTotal,
+    rfic,
+    rfisc,
+    emdDesc,
+    baseline: {
+      rfic,
+      rfisc,
+      emdDesc,
+      selectedPassengerId:
+        options.selectedPassengerId || item?.passengerId || "",
+    },
+    built,
+    editable,
+    notes: "",
+    adm: {
+      isAdm: item?.isAdm != null ? Boolean(item.isAdm) : false,
+      feedback: item?.feedback ?? "",
+      submitted: item?.isAdm != null || item?.feedback != null,
+    },
+    emdItemId: item?.emdItemId,
+    emdType: options.emdType ?? item?.emdType,
+    originalEmdType: item?.emdType,
+    ancillaryItemId: item?.ancillaryItemId,
+    commercialName: item?.commercialName,
+    numberOfItems: item?.numberOfItems,
+    rficName: item?.rficName,
+    airlineCode: item?.airlineCode,
+    vendorCode: item?.vendorCode,
+    isRefundable: item?.isRefundable,
+    isCommissionable: item?.isCommissionable,
+    flightApplicabilityType: item?.flightApplicabilityType,
+    emdStatusCode: item?.emdStatusCode,
+    emdStatusName: item?.emdStatusName,
+    subtotalAmount: item?.subtotalAmount,
+    taxesAmount: item?.taxesAmount,
+    totalAmount: item?.totalAmount,
+    feesAmount: item?.feesAmount,
+    netRemitAmount: item?.netRemitAmount,
+    currencyCode: item?.currencyCode,
+    ssrCode: item?.ssrCode,
+    aeNumber: item?.aeNumber,
+    aeBuildStatus: item?.aeBuildStatus,
+    aeBuiltUtc: item?.aeBuiltUtc,
+    aiSuggestions: item?.aiSuggestions,
+    buildFeedback: item?.buildFeedback,
+    reviewedBy: item?.reviewedBy,
+    reviewedAtUtc: item?.reviewedAtUtc,
+    isAdm: item?.isAdm,
+    feedback: item?.feedback,
+    otherInfo: item?.otherInfo,
+    travelerIndex: item?.travelerIndex,
+    requiresPassengerSelection: Boolean(options.requiresPassengerSelection),
+    selectedPassengerId: options.selectedPassengerId || item?.passengerId || "",
+  };
+  if (editable) emd.built = false;
+  return emd;
+}
+
 function mapApiToPnrDetails(pnrApi) {
   const header = pnrApi?.header || {};
   const flights = Array.isArray(pnrApi?.flights) ? pnrApi.flights : [];
@@ -494,6 +585,7 @@ function mapApiToPnrDetails(pnrApi) {
         },
         emdItemId: item?.emdItemId,
         emdType: item?.emdType,
+        originalEmdType: item?.emdType,
         ancillaryItemId: item?.ancillaryItemId,
         commercialName: item?.commercialName,
         numberOfItems: item?.numberOfItems,
@@ -571,7 +663,18 @@ function mapApiToPnrDetails(pnrApi) {
     };
   });
 
-  return { ...common, passengers, raw: pnrApi };
+  const unassociatedEmdItemsRaw = Array.isArray(pnrApi?.unassociatedEmdItems)
+    ? pnrApi.unassociatedEmdItems
+    : [];
+  const unassociatedEmdItems = unassociatedEmdItemsRaw.map((item) =>
+    mapRawEmdItemToView(item, {
+      emdType: item?.emdType || "1",
+      requiresPassengerSelection: true,
+      selectedPassengerId: item?.passengerId || "",
+    }),
+  );
+
+  return { ...common, passengers, unassociatedEmdItems, raw: pnrApi };
 }
 
 // -------------------------
@@ -596,6 +699,18 @@ function decorateMappedDetails(mapped, selectedStatus) {
       });
     });
   }
+
+  getUnassociatedEmdCollection(mapped).forEach((emd) => {
+    if (!emd.baseline) {
+      emd.baseline = {
+        rfic: emd.rfic,
+        rfisc: emd.rfisc,
+        emdDesc: emd.emdDesc,
+        selectedPassengerId: emd.selectedPassengerId || "",
+      };
+    }
+    emd.requiresPassengerSelection = true;
+  });
 
   return mapped;
 }
@@ -623,6 +738,24 @@ function getPassengerEmdAt(pax, emdIndex) {
   return Array.isArray(emds) ? emds?.[emdIndex] : undefined;
 }
 
+function getUnassociatedEmdCollection(details) {
+  if (!details || typeof details !== "object") return [];
+  const emds = Array.isArray(details?.unassociatedEmdItems)
+    ? details.unassociatedEmdItems
+    : [];
+  details.unassociatedEmdItems = emds;
+  return emds;
+}
+
+function getPassengerDisplayNameById(details, passengerId) {
+  const id = normalize(passengerId);
+  if (!id) return "";
+  const pax = (details?.passengers || []).find(
+    (p) => normalize(p?.passengerId) === id,
+  );
+  return pax?.name || pax?.fullName || pax?.travelerName || "";
+}
+
 function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
   if (!fresh) return prev;
   if (!prev) return decorateMappedDetails(fresh, selectedStatus);
@@ -647,6 +780,9 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
     next.header = fresh.header ?? next.header;
     next.flights = fresh.flights ?? next.flights;
     next.raw = fresh.raw ?? next.raw;
+    if (!Array.isArray(next.unassociatedEmdItems)) {
+      next.unassociatedEmdItems = [];
+    }
 
     // If passengers shape changed, safest is to swap in fresh entirely
     if (!Array.isArray(next.passengers) || !Array.isArray(fresh.passengers)) {
@@ -660,6 +796,10 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
         const k = getEmdKey(emd);
         if (k) freshEmdMap.set(k, emd);
       });
+    });
+    getUnassociatedEmdCollection(fresh).forEach((emd) => {
+      const k = getEmdKey(emd);
+      if (k) freshEmdMap.set(k, emd);
     });
 
     // Patch only status-ish fields (avoid clobbering local input values)
@@ -691,6 +831,31 @@ function mergePnrDetailsSilently(prev, fresh, selectedStatus) {
         emd.emdItemId = fe.emdItemId ?? emd.emdItemId;
         emd.ancillaryItemId = fe.ancillaryItemId ?? emd.ancillaryItemId;
       });
+    });
+    getUnassociatedEmdCollection(next).forEach((emd) => {
+      const k = getEmdKey(emd);
+      if (!k) return;
+      const fe = freshEmdMap.get(k);
+      if (!fe) return;
+      emd.aeBuildStatus = fe.aeBuildStatus ?? emd.aeBuildStatus;
+      emd.aeBuiltUtc = fe.aeBuiltUtc ?? emd.aeBuiltUtc;
+      emd.aeBuiltBy = fe.aeBuiltBy ?? emd.aeBuiltBy;
+      emd.errorDesc = fe.errorDesc ?? emd.errorDesc;
+      emd.aiSuggestions = fe.aiSuggestions ?? emd.aiSuggestions;
+      emd.buildFeedback = fe.buildFeedback ?? emd.buildFeedback;
+      emd.reviewedBy = fe.reviewedBy ?? emd.reviewedBy;
+      emd.reviewedAtUtc = fe.reviewedAtUtc ?? emd.reviewedAtUtc;
+      emd.emdStatus = fe.emdStatus ?? emd.emdStatus;
+      emd.emdStatusCode = fe.emdStatusCode ?? emd.emdStatusCode;
+      emd.emdStatusName = fe.emdStatusName ?? emd.emdStatusName;
+      emd.totalAmount = fe.totalAmount ?? emd.totalAmount;
+      emd.currencyCode = fe.currencyCode ?? emd.currencyCode;
+      emd.emdTotal = fe.emdTotal ?? emd.emdTotal;
+      emd.otherInfo = fe.otherInfo ?? emd.otherInfo;
+      emd.emdNo = fe.emdNo ?? emd.emdNo;
+      emd.emdItemId = fe.emdItemId ?? emd.emdItemId;
+      emd.ancillaryItemId = fe.ancillaryItemId ?? emd.ancillaryItemId;
+      emd.requiresPassengerSelection = true;
     });
 
     return decorateMappedDetails(next, selectedStatus);
@@ -731,7 +896,11 @@ export default function PNRDetails({
   const [isBuildSubmitting, setIsBuildSubmitting] = useState(false);
   const [buildChanges, setBuildChanges] = useState([]);
   const [buildNotes, setBuildNotes] = useState("");
-  const buildTargetRef = useRef({ passengerIndex: -1, emdIndex: -1 });
+  const buildTargetRef = useRef({
+    collection: "passenger",
+    passengerIndex: -1,
+    emdIndex: -1,
+  });
 
   // Process PNR
   const [isProcessSubmitting, setIsProcessSubmitting] = useState(false);
@@ -1050,14 +1219,14 @@ export default function PNRDetails({
     openPassengerIndex >= 0 ? openPassengerIndex : defaultPassengerIndex;
 
   const inputsNeeded = useMemo(() => {
-    if (!isHumanRequired || !pnrDetails?.passengers?.length) return [];
+    if (!isHumanRequired || !pnrDetails) return [];
     const list = [];
 
-    pnrDetails.passengers.forEach((passenger, passengerIndex) => {
+    (pnrDetails.passengers || []).forEach((passenger, passengerIndex) => {
       (passenger.emdItems || []).forEach((emd, emdIndex) => {
         if (emd.aeBuildStatus === "PENDING") {
           list.push({
-            key: `${passengerIndex}-${emdIndex}`,
+            key: `pax-${passengerIndex}-${emdIndex}`,
             passenger: passenger.name,
             label: `EMD ${emdIndex + 1}: RFIC, RFISC, EMD Desc`,
             passengerIndex,
@@ -1067,42 +1236,100 @@ export default function PNRDetails({
       });
     });
 
+    getUnassociatedEmdCollection(pnrDetails).forEach((emd, emdIndex) => {
+      if (emd.aeBuildStatus === "PENDING") {
+        const missingPassenger = !normalize(emd?.selectedPassengerId);
+        list.push({
+          key: `emd-s-${emdIndex}`,
+          passenger: "EMD-S items",
+          label: `EMD-${emdIndex + 1}: ${missingPassenger ? "Passenger, " : ""}RFIC, RFISC, EMD Desc`,
+          passengerIndex: -1,
+          emdIndex,
+        });
+      }
+    });
+
     return list;
   }, [pnrDetails, isHumanRequired]);
 
   const allEmdsBuilt = useMemo(() => {
-    if (!pnrDetails?.passengers?.length) return false;
-    return pnrDetails.passengers.every((passenger) =>
-      (passenger.emdItems || []).every(
-        (emd) => emd.aeBuildStatus !== "PENDING",
-      ),
+    if (!pnrDetails) return false;
+    const passengerEmdsBuilt = (pnrDetails.passengers || []).every(
+      (passenger) =>
+        (passenger.emdItems || []).every(
+          (emd) => emd.aeBuildStatus !== "PENDING",
+        ),
     );
+    const unassociatedEmdsBuilt = getUnassociatedEmdCollection(
+      pnrDetails,
+    ).every((emd) => emd.aeBuildStatus !== "PENDING");
+    return passengerEmdsBuilt && unassociatedEmdsBuilt;
   }, [pnrDetails]);
 
-  function handleFieldChange(passengerIndex, emdIndex, field, value) {
+  function handleFieldChange(
+    passengerIndex,
+    emdIndex,
+    field,
+    value,
+    collection = "passenger",
+  ) {
     const sanitizedValue = sanitizeEditableEmdField(field, value);
 
     setPnrDetailsAndRef((prev) => {
       if (!prev) return prev;
-
       const next = deepClone(prev);
-      const pax = next?.passengers?.[passengerIndex];
-      if (!pax) return prev;
-
-      const emds = getPassengerEmdCollection(pax);
+      const emds =
+        collection === "unassociated"
+          ? getUnassociatedEmdCollection(next)
+          : getPassengerEmdCollection(next?.passengers?.[passengerIndex]);
       if (!Array.isArray(emds) || !emds[emdIndex]) return prev;
-
       emds[emdIndex][field] = sanitizedValue;
       return next;
     });
   }
 
-  function openBuildFor(passengerIndex, emdIndex) {
-    buildTargetRef.current = { passengerIndex, emdIndex };
+  function handleUnassociatedPassengerChange(emdIndex, passengerId) {
+    setPnrDetailsAndRef((prev) => {
+      if (!prev) return prev;
+      const next = deepClone(prev);
+      const emds = getUnassociatedEmdCollection(next);
+      if (!Array.isArray(emds) || !emds[emdIndex]) return prev;
+      emds[emdIndex].selectedPassengerId = passengerId || "";
+      return next;
+    });
+  }
+
+  function getBuildTarget(details, target) {
+    if (target?.collection === "unassociated") {
+      const emd = getUnassociatedEmdCollection(details)?.[target.emdIndex];
+      const passengerId = emd?.selectedPassengerId || "";
+      const passengerName =
+        getPassengerDisplayNameById(details, passengerId) ||
+        "Selected passenger";
+      return {
+        passenger: null,
+        emd,
+        passengerId,
+        passengerName,
+        emdLabel: `EMD-S ${target.emdIndex + 1}`,
+      };
+    }
+    const passenger = details?.passengers?.[target.passengerIndex];
+    const emd = passenger?.emdItems?.[target.emdIndex];
+    return {
+      passenger,
+      emd,
+      passengerId: passenger?.passengerId || "",
+      passengerName: passenger?.name || "Passenger",
+      emdLabel: `EMD ${target.emdIndex + 1}`,
+    };
+  }
+
+  function openBuildFor(passengerIndex, emdIndex, collection = "passenger") {
+    buildTargetRef.current = { collection, passengerIndex, emdIndex };
 
     const details = pnrDetailsRef.current || pnrDetails;
-
-    const emd = details?.passengers?.[passengerIndex]?.emdItems?.[emdIndex];
+    const { emd } = getBuildTarget(details, buildTargetRef.current);
 
     if (!emd) {
       setBuildChanges([]);
@@ -1122,15 +1349,21 @@ export default function PNRDetails({
   }
 
   async function confirmBuildAE() {
-    const { passengerIndex, emdIndex } = buildTargetRef.current;
-    if (passengerIndex < 0 || emdIndex < 0) return;
+    const targetRef = buildTargetRef.current;
+    const { passengerIndex, emdIndex } = targetRef;
+    if (
+      emdIndex < 0 ||
+      (targetRef.collection !== "unassociated" && passengerIndex < 0)
+    )
+      return;
 
     const pnrId = selected?.pnr || pnrDetails?.pnr;
-    const passenger = pnrDetails?.passengers?.[passengerIndex];
-    const emd = passenger?.emdItems?.[emdIndex];
+    const target = getBuildTarget(pnrDetails, targetRef);
+    const passenger = target.passenger;
+    const emd = target.emd;
 
     const emdItemId = emd?.emdItemId || emd?.ancillaryItemId || null;
-    const passengerId = passenger?.passengerId || null;
+    const passengerId = target.passengerId || null;
 
     if (!pnrId) {
       const msg = "Cannot build AE: missing PNR Id";
@@ -1159,6 +1392,7 @@ export default function PNRDetails({
         rfisc: sanitizeAlphaNumericValue(emd?.rfisc || "", 4).toUpperCase(),
         rfic_name: sanitizeAlphaNumericText(emd?.emdDesc || ""),
         feedback: sanitizeFeedbackText(buildNotes || ""),
+        passenger_id: passengerId,
       };
 
       appLogger.info("BUILD_AE_SUBMIT_STARTED", {
@@ -1179,18 +1413,23 @@ export default function PNRDetails({
 
       setPnrDetailsAndRef((prev) => {
         const next = deepClone(prev);
-        const target = next.passengers[passengerIndex].emdItems?.[emdIndex];
+        const targetEmd =
+          targetRef.collection === "unassociated"
+            ? getUnassociatedEmdCollection(next)?.[emdIndex]
+            : next.passengers[passengerIndex].emdItems?.[emdIndex];
+        if (!targetEmd) return prev;
 
-        target.baseline = {
-          rfic: target.rfic,
-          rfisc: target.rfisc,
-          emdDesc: target.emdDesc,
+        targetEmd.baseline = {
+          rfic: targetEmd.rfic,
+          rfisc: targetEmd.rfisc,
+          emdDesc: targetEmd.emdDesc,
+          selectedPassengerId: targetEmd.selectedPassengerId || "",
         };
 
-        target.built = true;
-        target.editable = false;
-        target.aeBuildStatus = "BUILT";
-        target.aeBuiltUtc = target.aeBuiltUtc || new Date().toISOString();
+        targetEmd.built = true;
+        targetEmd.editable = false;
+        targetEmd.aeBuildStatus = "BUILT";
+        targetEmd.aeBuiltUtc = targetEmd.aeBuiltUtc || new Date().toISOString();
 
         return next;
       });
@@ -1202,14 +1441,19 @@ export default function PNRDetails({
       setBuildChanges([]);
       setBuildNotes("");
 
-      const passengerName = passenger?.name || "Passenger";
+      const passengerName =
+        target.passengerName || passenger?.name || "Passenger";
       showToast({
         variant: "success",
-        ariaLabel: `AE built for ${passengerName}, EMD ${emdIndex + 1}`,
-        title: `AE built for ${passengerName}, EMD ${emdIndex + 1}`,
+        ariaLabel: `AE built for ${passengerName}, ${target.emdLabel}`,
+        title: `AE built for ${passengerName}, ${target.emdLabel}`,
       });
 
-      buildTargetRef.current = { passengerIndex: -1, emdIndex: -1 };
+      buildTargetRef.current = {
+        collection: "passenger",
+        passengerIndex: -1,
+        emdIndex: -1,
+      };
     } catch (e) {
       appLogger.error("BUILD_AE_SUBMIT_FAILED", {
         component: "PNRDetails",
@@ -1954,7 +2198,10 @@ export default function PNRDetails({
                                       <div className="font-medium text-[13px]">
                                         <i className="fa-solid fa-passport text-brand-red mr-1"></i>
                                         {/* EMD {emdIndex + 1} • {emd.emdNo} */}
-                                        EMD - {emdIndex + 1}
+                                        {emd.emdType === "1"
+                                          ? "EMD-S"
+                                          : "EMD-A"}{" "}
+                                        • {emdIndex + 1}
                                       </div>
 
                                       {!canEdit ? (
@@ -2553,6 +2800,429 @@ export default function PNRDetails({
                   );
                 })}
               </div>
+              {/* EMD-S items */}
+              {getUnassociatedEmdCollection(pnrDetails).length > 0 && (
+                <div className="mt-3 rounded border border-black/10 bg-white">
+                  <div className="px-3 py-2 bg-black/[0.02] flex items-center justify-between">
+                    <div className="font-semibold text-[14px]">
+                      <i className="fa-solid fa-passport text-brand-red mr-1"></i>
+                      EMD-S items
+                    </div>
+                    <span className="text-[12px] text-black/60">
+                      Unassociated EMD items
+                    </span>
+                  </div>
+                  <div className="p-2 space-y-2">
+                    {getUnassociatedEmdCollection(pnrDetails).map(
+                      (emd, emdIndex) => {
+                        const canEdit =
+                          isHumanRequired &&
+                          (emd?.aeBuildStatus || "").toUpperCase() ===
+                            "PENDING";
+                        const canBuild = canBuildEmd(emd);
+                        return (
+                          <FadeIn
+                            key={`emd-s-${emdIndex}`}
+                            delay={100 * emdIndex}
+                          >
+                            <div className="rounded border border-black/10">
+                              <div className="px-3 py-2 bg-black/[0.02] flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <div className="font-medium text-[13px] flex flex-col gap-2 md:flex-row md:items-center">
+                                  <span>
+                                    <i className="fa-solid fa-passport text-brand-red mr-1"></i>
+                                    EMD-{emdIndex + 1}
+                                  </span>
+                                  <select
+                                    className={`input h-8 px-2 min-w-[220px] ${
+                                      canEdit &&
+                                      !normalize(emd?.selectedPassengerId)
+                                        ? "border-red-400 bg-red-50"
+                                        : ""
+                                    }`}
+                                    value={emd?.selectedPassengerId || ""}
+                                    disabled={!canEdit}
+                                    data-stop-collapse
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDownCapture={(e) =>
+                                      e.stopPropagation()
+                                    }
+                                    onChange={(ev) =>
+                                      handleUnassociatedPassengerChange(
+                                        emdIndex,
+                                        ev.target.value,
+                                      )
+                                    }
+                                    title="Select passenger for this EMD-S item"
+                                  >
+                                    <option value="">Select passenger</option>
+                                    {(pnrDetails.passengers || []).map(
+                                      (passenger) => (
+                                        <option
+                                          key={
+                                            passenger.passengerId ||
+                                            passenger.name
+                                          }
+                                          value={passenger.passengerId || ""}
+                                        >
+                                          {passenger.name ||
+                                            passenger.fullName ||
+                                            "Passenger"}
+                                        </option>
+                                      ),
+                                    )}
+                                  </select>
+                                </div>
+                                {!canEdit ? (
+                                  <span className="text-[12px] text-black/60">
+                                    Status: {emd.emdStatus || "—"}
+                                  </span>
+                                ) : (
+                                  <span className="text-[12px] text-red-600 font-medium">
+                                    Select a passenger to associate this EMD-s
+                                    item.
+                                  </span>
+                                )}
+                              </div>
+                              <div className="p-2">
+                                <FadeIn>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
+                                    <Field
+                                      k={
+                                        <>
+                                          <i className="fa-regular fa-circle-dot text-black/60"></i>{" "}
+                                          EMD Status
+                                        </>
+                                      }
+                                      v={
+                                        normalize(emd.emdStatusCode) &&
+                                        normalize(emd.emdStatusName)
+                                          ? `${emd.emdStatusCode} - ${emd.emdStatusName}`
+                                          : emd.emdStatus || "—"
+                                      }
+                                    />
+                                    <Field
+                                      k={
+                                        <>
+                                          <i className="fa-solid fa-dollar-sign text-black/60"></i>{" "}
+                                          EMD Total
+                                        </>
+                                      }
+                                      v={emd.emdTotal || emd.totalAmount || "—"}
+                                    />
+                                    <Field
+                                      k={
+                                        <>
+                                          <i className="fa-solid fa-puzzle-piece text-black/60"></i>{" "}
+                                          SSR
+                                        </>
+                                      }
+                                      v={emd.ssrCode || "—"}
+                                    />
+                                    <Field
+                                      k={
+                                        <>
+                                          <i className="fa-regular fa-note-sticky text-black/60"></i>{" "}
+                                          Other Info
+                                        </>
+                                      }
+                                      v={emd.otherInfo || "—"}
+                                    />
+                                  </div>
+                                </FadeIn>
+                                <FadeIn delay={60}>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                    <div
+                                      className={`rounded p-2 border transition-colors ${
+                                        canEdit
+                                          ? "border-red-400 bg-red-50"
+                                          : "border-black/10 bg-black/[0.03]"
+                                      }`}
+                                    >
+                                      <div className="text-black/60 text-[12px]">
+                                        RFIC
+                                      </div>
+                                      {canEdit ? (
+                                        <input
+                                          className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
+                                          value={emd.rfic || ""}
+                                          maxLength={1}
+                                          inputMode="text"
+                                          autoComplete="off"
+                                          onChange={(ev) =>
+                                            handleFieldChange(
+                                              -1,
+                                              emdIndex,
+                                              "rfic",
+                                              ev.target.value,
+                                              "unassociated",
+                                            )
+                                          }
+                                        />
+                                      ) : (
+                                        <div className="mt-1 font-medium">
+                                          {emd.rfic || "—"}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div
+                                      className={`rounded p-2 border transition-colors ${
+                                        canEdit
+                                          ? "border-red-400 bg-red-50"
+                                          : "border-black/10 bg-black/[0.03]"
+                                      }`}
+                                    >
+                                      <div className="text-black/60 text-[12px]">
+                                        RFISC
+                                      </div>
+                                      {canEdit ? (
+                                        <input
+                                          className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
+                                          value={emd.rfisc || ""}
+                                          maxLength={3}
+                                          inputMode="text"
+                                          autoComplete="off"
+                                          onChange={(ev) =>
+                                            handleFieldChange(
+                                              -1,
+                                              emdIndex,
+                                              "rfisc",
+                                              ev.target.value,
+                                              "unassociated",
+                                            )
+                                          }
+                                        />
+                                      ) : (
+                                        <div className="mt-1 font-medium">
+                                          {emd.rfisc || "—"}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div
+                                      className={`rounded p-2 border transition-colors ${
+                                        canEdit
+                                          ? "border-red-400 bg-red-50"
+                                          : "border-black/10 bg-black/[0.03]"
+                                      }`}
+                                    >
+                                      <div className="text-black/60 text-[12px]">
+                                        EMD Desc
+                                      </div>
+                                      {canEdit ? (
+                                        <input
+                                          className="input mt-1 font-medium w-full h-8 px-2 transition-shadow focus:shadow-sm"
+                                          value={emd.emdDesc || ""}
+                                          inputMode="text"
+                                          autoComplete="off"
+                                          onChange={(ev) =>
+                                            handleFieldChange(
+                                              -1,
+                                              emdIndex,
+                                              "emdDesc",
+                                              ev.target.value,
+                                              "unassociated",
+                                            )
+                                          }
+                                        />
+                                      ) : (
+                                        <div className="mt-1 font-medium">
+                                          {emd.emdDesc || "—"}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </FadeIn>
+                                {showAiAssistSection ? (
+                                  <div className="mt-2">
+                                    <div
+                                      className={`rounded p-2 border ${
+                                        canEdit
+                                          ? "border-red-200 bg-red-50/60"
+                                          : "border-black/10 bg-black/[0.03]"
+                                      }`}
+                                    >
+                                      {(() => {
+                                        const aiRaw = emd.aiSuggestions;
+                                        const aiList =
+                                          coerceAiSuggestions(aiRaw);
+                                        const metrics = coerceLlmMetrics(aiRaw);
+                                        const formatMetric = (v) => {
+                                          if (v == null) return "—";
+                                          const num = Number(v);
+                                          if (!Number.isFinite(num)) return "—";
+                                          if (num >= 0 && num <= 1)
+                                            return `${Math.round(num * 100)}%`;
+                                          return `${Math.round(num * 100) / 100}`;
+                                        };
+                                        return (
+                                          <>
+                                            {metrics && (
+                                              <div>
+                                                <div className="text-[12px] text-black/60 font-medium mb-1">
+                                                  LLM Metrics
+                                                </div>
+                                                <div className="lg:w-1/2">
+                                                  <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    Accuracy:{" "}
+                                                    <span className="font-medium">
+                                                      {formatMetric(
+                                                        metrics.accuracy,
+                                                      )}
+                                                    </span>
+                                                  </span>
+                                                  <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    Consistency:{" "}
+                                                    <span className="font-medium">
+                                                      {formatMetric(
+                                                        metrics.consistency,
+                                                      )}
+                                                    </span>
+                                                  </span>
+                                                  <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    Coherence:{" "}
+                                                    <span className="font-medium">
+                                                      {formatMetric(
+                                                        metrics.coherence,
+                                                      )}
+                                                    </span>
+                                                  </span>
+                                                  <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    Groundedness:{" "}
+                                                    <span className="font-medium">
+                                                      {formatMetric(
+                                                        metrics.groundedness,
+                                                      )}
+                                                    </span>
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            )}
+                                            <div className="text-[12px] text-black/60 flex items-center gap-1 mt-2">
+                                              <i className="fa-solid fa-circle-info text-black/50"></i>
+                                              Notes / Suggestions
+                                            </div>
+                                            <ul className="mt-1 list-disc pl-4 grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-black/80 leading-tight">
+                                              {aiList.length
+                                                ? aiList.map((textVal, i) => (
+                                                    <li
+                                                      key={`emd-s-ai-${emdIndex}-${i}`}
+                                                      className="text-black/80 break-words"
+                                                    >
+                                                      {textVal}
+                                                    </li>
+                                                  ))
+                                                : buildEmdSuggestions({
+                                                    rfic: emd.rfic,
+                                                    rfisc: emd.rfisc,
+                                                    emdDesc: emd.emdDesc,
+                                                    reason:
+                                                      emd.aiSuggestions
+                                                        ?.reasoning,
+                                                  }).map((item, i) => {
+                                                    const danger =
+                                                      item.variant === "warn";
+                                                    const ok =
+                                                      item.variant === "ok";
+                                                    return (
+                                                      <li
+                                                        key={`emd-s-suggest-${emdIndex}-${i}`}
+                                                        className={`break-words ${
+                                                          danger
+                                                            ? "text-red-700"
+                                                            : ok
+                                                              ? "text-green-800"
+                                                              : "text-black/80"
+                                                        }`}
+                                                      >
+                                                        {item.text}
+                                                      </li>
+                                                    );
+                                                  })}
+                                            </ul>
+                                            <div className="mt-2">
+                                              <div className="text-[12px] text-black/60 font-medium mb-1">
+                                                Knowledge source
+                                              </div>
+                                              {(() => {
+                                                const sources =
+                                                  coerceKnowledgeSources(
+                                                    emd?.aiSuggestions,
+                                                  );
+                                                if (!sources.length) {
+                                                  return (
+                                                    <div className="text-[12px] text-black/60">
+                                                      -
+                                                    </div>
+                                                  );
+                                                }
+                                                return (
+                                                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                                    {sources.map((src, idx2) =>
+                                                      src.url ? (
+                                                        <a
+                                                          key={`${src.title}-${idx2}`}
+                                                          href={`/api/source-article?url=${encodeURIComponent(src.url)}`}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          className="text-brand-red underline underline-offset-2 hover:opacity-80 text-[12px] break-all"
+                                                        >
+                                                          {src.title}
+                                                        </a>
+                                                      ) : (
+                                                        <span
+                                                          key={`${src.title}-${idx2}`}
+                                                          className="text-[12px] text-black/60 break-all"
+                                                          title={src.title}
+                                                        >
+                                                          {src.title}
+                                                        </span>
+                                                      ),
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
+                                            </div>
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  ""
+                                )}
+                                {canEdit && (
+                                  <FadeIn delay={100}>
+                                    <div className="mt-2">
+                                      <button
+                                        className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        title={
+                                          canBuild
+                                            ? "Build AE with current values for this EMD-S item"
+                                            : "Passenger, RFIC, RFISC and EMD Desc are required"
+                                        }
+                                        disabled={!canBuild}
+                                        onClick={() =>
+                                          openBuildFor(
+                                            -1,
+                                            emdIndex,
+                                            "unassociated",
+                                          )
+                                        }
+                                      >
+                                        <i className="fa-regular fa-paper-plane mr-1"></i>
+                                        Build AE
+                                      </button>
+                                    </div>
+                                  </FadeIn>
+                                )}
+                              </div>
+                            </div>
+                          </FadeIn>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Human: Process PNR */}
               {/* disabled={!allEmdsBuilt || isProcessSubmitting} */}
 
