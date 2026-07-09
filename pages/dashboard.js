@@ -424,6 +424,7 @@ export default function Dashboard() {
       tableRef.current?.focus?.();
     });
   };
+  const selectedRowStatus = selected?.status;
 
   return (
     <div className="min-h-screen">
@@ -577,6 +578,7 @@ export default function Dashboard() {
                   onRowsChange={({ rows: latestRows, meta }) => {
                     if (activeTab === TABS.ALL)
                       setAllTableSnapshot({ rows: latestRows, meta });
+
                     if (activeTab === TABS.MINE)
                       setMyTableSnapshot({ rows: latestRows, meta });
                   }}
@@ -594,6 +596,7 @@ export default function Dashboard() {
                 <PNRDetails
                   loggedInUserId={loggedInUserId}
                   selected={selected}
+                  selectedRowStatus={selectedRowStatus}
                   onCloseDetails={handleCloseDetails}
                   onApprove={({ pnr }) => {
                     setRows((list) =>

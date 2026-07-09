@@ -666,11 +666,15 @@ function mapApiToPnrDetails(pnrApi) {
   const unassociatedEmdItemsRaw = Array.isArray(pnrApi?.unassociatedEmdItems)
     ? pnrApi.unassociatedEmdItems
     : [];
+
+  const singlePassengerId =
+    passengers.length === 1 ? passengers[0]?.passengerId || "" : "";
+
   const unassociatedEmdItems = unassociatedEmdItemsRaw.map((item) =>
     mapRawEmdItemToView(item, {
       emdType: item?.emdType || "1",
       requiresPassengerSelection: true,
-      selectedPassengerId: item?.passengerId || "",
+      selectedPassengerId: item?.passengerId || singlePassengerId,
     }),
   );
 
@@ -709,7 +713,9 @@ function decorateMappedDetails(mapped, selectedStatus) {
         selectedPassengerId: emd.selectedPassengerId || "",
       };
     }
+
     emd.requiresPassengerSelection = true;
+    emd.selectedPassengerId = fe.selectedPassengerId ?? emd.selectedPassengerId;
   });
 
   return mapped;
@@ -877,6 +883,7 @@ export default function PNRDetails({
   onProcessPNR,
   loggedInUserId,
   onCloseDetails,
+  selectedRowStatus,
 }) {
   const [pnrDetails, setPnrDetails] = useState(null);
   const [detailsError, setDetailsError] = useState(null);
@@ -1826,19 +1833,21 @@ export default function PNRDetails({
     setStatusUiOverride(null);
   }, [selected?.pnr]);
 
-  // Retire the temporary override only when the server has moved past
-  // Human Input Required / Processing into its next real state.
+  const previousStatusRef = useRef(selectedRowStatus);
+
   useEffect(() => {
-    if (!selected?.pnr || !statusUiOverride) return;
+    if (!selected?.pnr) return;
 
-    const comparable = statusToComparable(
-      pnrDetails?.status ?? selected?.status ?? "",
-    );
+    const previousStatus = statusToComparable(previousStatusRef.current);
+    const currentStatus = statusToComparable(selectedRowStatus);
 
-    if (!shouldKeepProcessingUiOverride(comparable)) {
-      setStatusUiOverride(null);
+    if (previousStatus && currentStatus && previousStatus !== currentStatus) {
+      regetPnrDetailsSilently(selected.pnr);
     }
-  }, [selected?.pnr, pnrDetails?.status, selected?.status, statusUiOverride]);
+
+    previousStatusRef.current = selectedRowStatus;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.pnr, selectedRowStatus]);
 
   if (!selected) return null;
 
@@ -2854,7 +2863,10 @@ export default function PNRDetails({
                                     }
                                     title="Select passenger for this EMD-S item"
                                   >
-                                    <option value="">Select passenger</option>
+                                    {pnrDetails.passengers.length > 1 && (
+                                      <option value="">Select passenger</option>
+                                    )}
+
                                     {(pnrDetails.passengers || []).map(
                                       (passenger) => (
                                         <option

@@ -2697,7 +2697,7 @@ export default function ReportsModule({ onOpenPNR }) {
           subtitle="Throughput, assignments, completion time, and error visibility."
         >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-black/10 bg-white p-3">
+            <div className="rounded-xl border border-black/10 bg-white p-3 lg:col-span-2">
               <div className="mb-2 text-sm font-medium text-black">
                 End-to-end completion time{" "}
                 <span className="ml-2 text-xs text-black/40">
@@ -2757,58 +2757,83 @@ export default function ReportsModule({ onOpenPNR }) {
               ) : null}
             </div>
 
-            <div className="rounded-xl border border-black/10 bg-white p-3">
+            <div className="rounded-xl border border-black/10 bg-white p-3 lg:col-span-2">
               <div className="mb-2 text-sm font-medium text-black">
                 Assignments to ticketers
               </div>
-              <div className="h-56">
-                {assignmentsLoading ? (
-                  <div className="h-full flex items-center justify-center text-black/60">
-                    <Spinner />
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={assignmentsChart} layout="vertical">
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="rgba(0,0,0,0.06)"
-                      />
-                      <XAxis type="number" allowDecimals={false} />
-                      <YAxis type="category" dataKey="name" width={140} />
-                      <Tooltip
-                        content={(props) => (
-                          <ClickableTooltip
-                            {...props}
-                            metricLabel="Assignments to ticketers"
-                            onPick={handleChartPick}
-                          />
-                        )}
-                      />
-                      <Bar
-                        dataKey="count"
-                        name="Assigned"
-                        fill={COLORS.purple}
-                        radius={[6, 6, 6, 6]}
-                        className="cursor-pointer"
-                        onClick={(d) => {
-                          const payload = d?.payload || {};
-                          handleChartPick({
-                            metricLabel: "Assignments to ticketers",
-                            label: payload?.name,
-                            seriesName: "Assigned",
-                            value: d?.value,
-                          });
+
+              <div className="h-56 overflow-x-hidden no-scrollbar overflow-y-auto">
+                <div
+                  style={{
+                    height: `${Math.max(assignmentsChart.length * 20, 200)}px`,
+                  }}
+                >
+                  {assignmentsLoading ? (
+                    <div className="h-full flex items-center justify-center text-black/60">
+                      <Spinner />
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={assignmentsChart}
+                        layout="vertical"
+                        margin={{
+                          top: 10,
+                          right: 20,
+                          bottom: 10,
+                          left: 110,
                         }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-              {assignmentsErr ? (
-                <div className="mt-2 text-xs text-red-700">
-                  {assignmentsErr}
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="rgba(0,0,0,0.06)"
+                        />
+                        <XAxis type="number" allowDecimals={false} />
+
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          width={90}
+                          tick={{
+                            fontSize: 12,
+                          }}
+                        />
+
+                        <Tooltip
+                          content={(props) => (
+                            <ClickableTooltip
+                              {...props}
+                              metricLabel="Assignments to ticketers"
+                              onPick={handleChartPick}
+                            />
+                          )}
+                        />
+                        <Bar
+                          dataKey="count"
+                          name="Assigned"
+                          fill={COLORS.purple}
+                          radius={[6, 6, 6, 6]}
+                          className="cursor-pointer"
+                          onClick={(d) => {
+                            const payload = d?.payload || {};
+                            handleChartPick({
+                              metricLabel: "Assignments to ticketers",
+                              label: payload?.name,
+                              seriesName: "Assigned",
+                              value: d?.value,
+                            });
+                          }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              ) : null}
+                {assignmentsErr ? (
+                  <div className="mt-2 text-xs text-red-700">
+                    {assignmentsErr}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="rounded-xl border border-black/10 bg-white p-3 lg:col-span-2">

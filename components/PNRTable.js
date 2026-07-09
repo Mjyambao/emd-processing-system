@@ -245,6 +245,13 @@ export default function PNRTable({
   };
 
   const getUrgencyRowClass = (row, ttlValueOverride) => {
+    const normalizedStatus = normalizeStatus(row?.status);
+
+    // Only highlight Error and Human statuses
+    if (normalizedStatus !== "error" && normalizedStatus !== "human") {
+      return "";
+    }
+
     const daysFromToday = getDaysFromToday(
       getPriorityDateForRow(row, ttlValueOverride),
     );
