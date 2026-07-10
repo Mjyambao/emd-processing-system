@@ -715,7 +715,6 @@ function decorateMappedDetails(mapped, selectedStatus) {
     }
 
     emd.requiresPassengerSelection = true;
-    emd.selectedPassengerId = fe.selectedPassengerId ?? emd.selectedPassengerId;
   });
 
   return mapped;
@@ -2842,7 +2841,7 @@ export default function PNRDetails({
                                     EMD-{emdIndex + 1}
                                   </span>
                                   <select
-                                    className={`input h-8 px-2 min-w-[220px] ${
+                                    className={`input h-9 ml-2 px-1 min-w-[220px] ${
                                       canEdit &&
                                       !normalize(emd?.selectedPassengerId)
                                         ? "border-red-400 bg-red-50"
