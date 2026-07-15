@@ -381,7 +381,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     render: (r) => (
       <button
         type="button"
-        className="text-brand-red hover:underline font-medium"
+        className="text-[#1BB6B6] hover:underline font-medium"
         onClick={() => onPnrClick?.(r)}
         title="Open PNR details"
       >

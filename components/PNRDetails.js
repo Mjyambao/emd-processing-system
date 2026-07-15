@@ -2425,7 +2425,7 @@ export default function PNRDetails({
                                                             type="button"
                                                             disabled
                                                             title={
-                                                              "Correctness and factual reliability of responses."
+                                                              "Is the answer factually correct? Checks the response against what's actually true."
                                                             }
                                                             className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                             aria-label="More info about this error"
@@ -2447,7 +2447,7 @@ export default function PNRDetails({
                                                             type="button"
                                                             disabled
                                                             title={
-                                                              "Consistency of responses across similar inputs."
+                                                              "Does the answer stay in agreement with itself? Flags responses that contradict their own earlier statements."
                                                             }
                                                             className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                             aria-label="More info about this error"
@@ -2469,7 +2469,7 @@ export default function PNRDetails({
                                                             type="button"
                                                             disabled
                                                             title={
-                                                              "Clarity, structure, and logical flow of responses."
+                                                              "Does it read well and make sense? Looks at whether the response flows logically and is clear to follow."
                                                             }
                                                             className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                             aria-label="More info about this error"
@@ -2491,7 +2491,7 @@ export default function PNRDetails({
                                                             type="button"
                                                             disabled
                                                             title={
-                                                              "Alignment of responses with provided source content."
+                                                              "Is the answer backed by the source material? Checks that claims come from the documents provided rather than being made up."
                                                             }
                                                             className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                             aria-label="More info about this error"
@@ -3132,7 +3132,7 @@ export default function PNRDetails({
                                                       type="button"
                                                       disabled
                                                       title={
-                                                        "Correctness and factual reliability of responses."
+                                                        "Is the answer factually correct? Checks the response against what's actually true."
                                                       }
                                                       className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                       aria-label="More info about this error"
@@ -3154,7 +3154,7 @@ export default function PNRDetails({
                                                       type="button"
                                                       disabled
                                                       title={
-                                                        "Consistency of responses across similar inputs."
+                                                        "Does the answer stay in agreement with itself? Flags responses that contradict their own earlier statements."
                                                       }
                                                       className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                       aria-label="More info about this error"
@@ -3176,7 +3176,7 @@ export default function PNRDetails({
                                                       type="button"
                                                       disabled
                                                       title={
-                                                        "Clarity, structure, and logical flow of responses."
+                                                        "Does it read well and make sense? Looks at whether the response flows logically and is clear to follow."
                                                       }
                                                       className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                       aria-label="More info about this error"
@@ -3198,7 +3198,7 @@ export default function PNRDetails({
                                                       type="button"
                                                       disabled
                                                       title={
-                                                        "Alignment of responses with provided source content."
+                                                        "Is the answer backed by the source material? Checks that claims come from the documents provided rather than being made up."
                                                       }
                                                       className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
                                                       aria-label="More info about this error"
