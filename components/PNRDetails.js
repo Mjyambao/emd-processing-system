@@ -2006,7 +2006,7 @@ export default function PNRDetails({
                       Created
                     </>
                   }
-                  v={formatDatetime(pnrDetails.created) || "—"}
+                  v={formatDate(pnrDetails.created) || "—"}
                 />
                 <Field
                   k={

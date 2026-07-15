@@ -3,9 +3,16 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: { red: '#D90429', black: '#0B0C10', white: '#FFFFFF', green: '#00a615' }
-      }
-    }
+        brand: {
+          red: "#D90429",
+          black: "#0B0C10",
+          white: "#FFFFFF",
+          green: "#00a615",
+          teal: "#34E0E0",
+          navyGround: "#0E2634",
+        },
+      },
+    },
   },
   plugins: [],
-}
+};
