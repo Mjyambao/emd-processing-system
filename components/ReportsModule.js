@@ -1073,7 +1073,7 @@ function SubTabButton({ active, onClick, icon, label }) {
       onClick={onClick}
       className={`rounded-lg border px-3 py-2 text-sm flex items-center gap-2 ${
         active
-          ? "border-red-200 bg-red-50 text-brand-red"
+          ? "bg-brand-teal bg-opacity-20 border-brand-teal text-[#1BB6B6]"
           : "border-black/10 bg-white text-black/70 hover:text-black"
       }`}
     >
@@ -2333,7 +2333,7 @@ export default function ReportsModule({ onOpenPNR }) {
         onClick={() => setPresetRange(presets.DAILY)}
         className={`rounded-lg border px-3 py-1.5 text-sm ${
           preset === presets.DAILY
-            ? "border-red-200 bg-red-50 text-brand-red"
+            ? "bg-brand-teal bg-opacity-30 border-brand-teal text-[#1BB6B6]"
             : "border-black/10 bg-white text-black/70 hover:text-black"
         }`}
       >
@@ -2344,7 +2344,7 @@ export default function ReportsModule({ onOpenPNR }) {
         onClick={() => setPresetRange(presets.WEEKLY)}
         className={`rounded-lg border px-3 py-1.5 text-sm ${
           preset === presets.WEEKLY
-            ? "border-red-200 bg-red-50 text-brand-red"
+            ? "bg-brand-teal bg-opacity-30 border-brand-teal text-[#1BB6B6]"
             : "border-black/10 bg-white text-black/70 hover:text-black"
         }`}
       >
@@ -2355,7 +2355,7 @@ export default function ReportsModule({ onOpenPNR }) {
         onClick={() => setPresetRange(presets.MONTHLY)}
         className={`rounded-lg border px-3 py-1.5 text-sm ${
           preset === presets.MONTHLY
-            ? "border-red-200 bg-red-50 text-brand-red"
+            ? "bg-brand-teal bg-opacity-30 border-brand-teal text-[#1BB6B6]"
             : "border-black/10 bg-white text-black/70 hover:text-black"
         }`}
       >
@@ -2366,7 +2366,7 @@ export default function ReportsModule({ onOpenPNR }) {
         onClick={() => setPreset(presets.CUSTOM)}
         className={`rounded-lg border px-3 py-1.5 text-sm ${
           preset === presets.CUSTOM
-            ? "border-red-200 bg-red-50 text-brand-red"
+            ? "bg-brand-teal bg-opacity-30 border-brand-teal text-[#1BB6B6]"
             : "border-black/10 bg-white text-black/70 hover:text-black"
         }`}
       >

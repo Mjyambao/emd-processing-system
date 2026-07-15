@@ -238,7 +238,7 @@ function AssignModal({
             Cancel
           </button>
           <button
-            className="btn btn-primary h-9"
+            className="btn btn-navyGround h-9"
             onClick={handleConfirm}
             disabled={!canConfirm}
             title="Confirm assignment"

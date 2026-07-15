@@ -21,7 +21,8 @@ export default function StatusBadge({ status }) {
     normalized === "sent_back_to_oasis" ||
     normalized === "sent back to oasis"
   ) {
-    className += " bg-blue-100 text-blue-800 border-blue-200 ";
+    className +=
+      " bg-brand-teal bg-opacity-30 text-[#158E8E] border-[#158E8E] ";
     icon = <i className="fa-solid fa-circle-exclamation" />;
     label = "Sent back to Oasis Queue";
   } else if (normalized.includes("error")) {

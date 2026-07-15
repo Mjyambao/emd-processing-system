@@ -20,8 +20,8 @@ import { getPnrQueueList, patchAssignPnr, patchTtlPnr } from "../api/pnrApi";
 const FilterToggleButton = ({ open, active, onClick, label }) => (
   <button
     type="button"
-    className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-black/60 hover:text-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal ${
-      open ? "text-brand-teal" : ""
+    className={`ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-black/60 hover:text-brand-red focus:outline-none focus:ring-2 focus:ring-brand-red ${
+      open ? "text-brand-red" : ""
     }`}
     aria-label={`Toggle ${label} filter`}
     aria-expanded={open ? "true" : "false"}
@@ -34,7 +34,7 @@ const FilterToggleButton = ({ open, active, onClick, label }) => (
     <span className="relative inline-flex">
       <i className="fa-solid fa-filter text-[11px]" />
       {active ? (
-        <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-brand-teal ring-1 ring-white" />
+        <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-brand-red ring-1 ring-white" />
       ) : null}
     </span>
   </button>
@@ -439,42 +439,6 @@ export default function PNRTable({
   const updateFilter = (key, value) =>
     setColFilters((prev) => ({ ...prev, [key]: value }));
 
-  const CLEAR_FILTERS = {
-    pnr: "",
-    brand: "",
-    gds: "",
-    pcc: "",
-    documentType: "",
-    status: "",
-    passengerNames: "",
-    departureDateFrom: "",
-    departureDateTo: "",
-    lastUpdatedFrom: "",
-    lastUpdatedTo: "",
-    queueFrom: "",
-    queueTo: "",
-    ttlFrom: "",
-    ttlTo: "",
-    error: "",
-    assignedNames: [],
-    includeUnassigned: false,
-  };
-
-  const clearFilters = () => {
-    setSearch?.("");
-    setColFilters(CLEAR_FILTERS);
-    closeAllFilterUI();
-
-    setSort({
-      key: "ttl",
-      dir: "asc",
-    });
-
-    setPage(1);
-
-    clearSelection();
-  };
-
   const [filterOpen, setFilterOpen] = useState({
     pnr: false,
     brand: false,
@@ -557,35 +521,6 @@ export default function PNRTable({
       return { key: "ttl", dir: "asc" }; // revert to new default
     });
   };
-
-  const hasActiveFiltersOrSort = useMemo(() => {
-    const hasSearch = !!String(search ?? "").trim();
-
-    const hasFilters =
-      !!colFilters.pnr ||
-      !!colFilters.brand ||
-      !!colFilters.gds ||
-      !!colFilters.pcc ||
-      !!colFilters.documentType ||
-      !!colFilters.status ||
-      !!colFilters.passengerNames ||
-      !!colFilters.departureDateFrom ||
-      !!colFilters.departureDateTo ||
-      !!colFilters.lastUpdatedFrom ||
-      !!colFilters.lastUpdatedTo ||
-      !!colFilters.queueFrom ||
-      !!colFilters.queueTo ||
-      !!colFilters.ttlFrom ||
-      !!colFilters.ttlTo ||
-      !!colFilters.error ||
-      colFilters.includeUnassigned ||
-      (Array.isArray(colFilters.assignedNames) &&
-        colFilters.assignedNames.length > 0);
-
-    const hasCustomSort = sort.key !== "ttl" || sort.dir !== "asc";
-
-    return hasSearch || hasFilters || hasCustomSort;
-  }, [search, colFilters, sort]);
 
   /**
    * -----------------------------
@@ -1577,7 +1512,7 @@ export default function PNRTable({
         <div className="flex items-center gap-2 w-full md:w-auto">
           <button
             type="button"
-            className="btn btn-teal h-9 px-3 text-xs justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn btn-primary h-9 px-3 text-xs justify-center disabled:opacity-60 disabled:cursor-not-allowed"
             title={
               selectedCount > 0
                 ? "Assign selected PNRs"
@@ -1617,18 +1552,6 @@ export default function PNRTable({
             {apiLoading ? "Loading..." : apiError ? "Failed to load" : ""}
           </div>
         </div>
-        <button
-          onClick={clearFilters}
-          disabled={!hasActiveFiltersOrSort}
-          title={
-            hasActiveFiltersOrSort
-              ? "Clear all filters and sorting"
-              : "No filters or sorting applied"
-          }
-          className="rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:bg-gray-50 disabled:text-gray-400"
-        >
-          Clear Filters
-        </button>
       </div>
 
       {/* Helper banner */}
@@ -2175,7 +2098,7 @@ export default function PNRTable({
                   </td>
 
                   {/* PNR */}
-                  <td className="w-[140px] font-mono font-semibold text-[#1BB6B6] whitespace-nowrap border-r border-black/10">
+                  <td className="w-[140px] font-mono font-semibold text-brand-red whitespace-nowrap border-r border-black/10">
                     {row.pnr}
                   </td>
 

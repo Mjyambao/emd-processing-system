@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { appLogger } from "../utils/appLogger";
 
 export default function TopNav({ onLogout }) {
@@ -101,10 +102,14 @@ export default function TopNav({ onLogout }) {
     <header className="sticky top-0 z-[99999] border-b border-black/10 bg-white/80 backdrop-blur">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded bg-brand-red/90 backdrop-blur grid place-items-center text-white">
-            <i className="fa-solid fa-plane"></i>
-          </div>
-          <h1 className="text-lg font-semibold tracking-wide">
+          <Image
+            src="/o2-logo-navy-bg.png"
+            alt="EMD Logo"
+            className="rounded-sm"
+            width={40}
+            height={40}
+          />
+          <h1 className="text-lg font-semibold tracking-wide text-brand-navyGround">
             EMD Processing System
           </h1>
         </div>
@@ -113,13 +118,14 @@ export default function TopNav({ onLogout }) {
           {mounted && (
             <>
               <div className="hidden sm:block text-black/80">
-                <i className="fa-regular fa-clock text-black/70"></i> {now}
+                <i className="fa-regular fa-clock text-brand-navyGround"></i>{" "}
+                {now}
               </div>
               <div className="text-black/90">
-                <i className="fa-regular fa-user text-brand-red"></i>{" "}
+                <i className="fa-regular fa-user text-brand-navyGround"></i>{" "}
                 {session?.name || "Agent"}
                 <span className="text-black/60"> • </span>
-                <i className="fa-solid fa-id-card-clip text-black/70"></i>{" "}
+                <i className="fa-solid fa-id-card-clip text-brand-navyGround"></i>{" "}
                 {session?.agentId || "AGT-XXXX"}
               </div>
             </>

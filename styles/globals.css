@@ -16,7 +16,10 @@ body {
   @apply bg-brand-red text-white hover:bg-red-700;
 }
 .btn-navyGround {
-  @apply bg-brand-navyGround text-white hover:bg-brand-navyGround;
+  @apply bg-brand-navyGround text-white hover:bg-[#19445D];
+}
+.btn-teal {
+  @apply bg-brand-teal text-white hover:bg-[#1BB6B6];
 }
 .btn-success {
   @apply bg-brand-green text-white hover:bg-green-700;

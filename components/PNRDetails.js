@@ -1860,8 +1860,8 @@ export default function PNRDetails({
         <div className="flex items-start justify-between">
           <h3 className="font-semibold text-lg flex items-center gap-2 flex-wrap">
             <span>
-              <i className="fa-solid fa-ticket text-brand-red"></i> PNR Details
-              • <span className="text-brand-red">{selected.pnr}</span>
+              <i className="fa-solid fa-ticket text-brand-teal"></i> PNR Details
+              • <span className="text-brand-teal">{selected.pnr}</span>
             </span>
 
             {/* View PNR JSON */}
@@ -1967,7 +1967,7 @@ export default function PNRDetails({
             {/* PNR & Booking */}
             <section>
               <h4 className="section-title text-[15px]">
-                <i className="fa-solid fa-clipboard-list text-brand-red"></i>{" "}
+                <i className="fa-solid fa-clipboard-list text-brand-teal"></i>{" "}
                 PNR & Booking
               </h4>
 
@@ -2048,7 +2048,7 @@ export default function PNRDetails({
             {/* Passengers, Flight & EMDs */}
             <section>
               <h4 className="section-title text-[15px]">
-                <i className="fa-solid fa-people-group text-brand-red"></i>{" "}
+                <i className="fa-solid fa-people-group text-brand-teal"></i>{" "}
                 Passengers, Flight & EMDs
               </h4>
               <div className="space-y-3">
@@ -2204,7 +2204,7 @@ export default function PNRDetails({
                                   <div className="rounded border border-black/10">
                                     <div className="px-3 py-2 bg-black/[0.02] flex items-center justify-between">
                                       <div className="font-medium text-[13px]">
-                                        <i className="fa-solid fa-passport text-brand-red mr-1"></i>
+                                        <i className="fa-solid fa-passport text-brand-teal mr-1"></i>
                                         {/* EMD {emdIndex + 1} • {emd.emdNo} */}
                                         {emd.emdType === "1"
                                           ? "EMD-S"
@@ -2421,6 +2421,20 @@ export default function PNRDetails({
 
                                                       <div className="lg:w-1/2">
                                                         <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          <button
+                                                            type="button"
+                                                            disabled
+                                                            title={
+                                                              "Correctness and factual reliability of responses."
+                                                            }
+                                                            className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                            aria-label="More info about this error"
+                                                            onClick={(e) =>
+                                                              e.stopPropagation()
+                                                            }
+                                                          >
+                                                            <i className="fa-solid fa-circle-info text-[10px]" />
+                                                          </button>
                                                           Accuracy:{" "}
                                                           <span className="font-medium">
                                                             {formatMetric(
@@ -2429,6 +2443,20 @@ export default function PNRDetails({
                                                           </span>
                                                         </span>
                                                         <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          <button
+                                                            type="button"
+                                                            disabled
+                                                            title={
+                                                              "Consistency of responses across similar inputs."
+                                                            }
+                                                            className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                            aria-label="More info about this error"
+                                                            onClick={(e) =>
+                                                              e.stopPropagation()
+                                                            }
+                                                          >
+                                                            <i className="fa-solid fa-circle-info text-[10px]" />
+                                                          </button>
                                                           Consistency:{" "}
                                                           <span className="font-medium">
                                                             {formatMetric(
@@ -2437,6 +2465,20 @@ export default function PNRDetails({
                                                           </span>
                                                         </span>
                                                         <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          <button
+                                                            type="button"
+                                                            disabled
+                                                            title={
+                                                              "Clarity, structure, and logical flow of responses."
+                                                            }
+                                                            className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                            aria-label="More info about this error"
+                                                            onClick={(e) =>
+                                                              e.stopPropagation()
+                                                            }
+                                                          >
+                                                            <i className="fa-solid fa-circle-info text-[10px]" />
+                                                          </button>
                                                           Coherence:{" "}
                                                           <span className="font-medium">
                                                             {formatMetric(
@@ -2445,6 +2487,20 @@ export default function PNRDetails({
                                                           </span>
                                                         </span>
                                                         <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                          <button
+                                                            type="button"
+                                                            disabled
+                                                            title={
+                                                              "Alignment of responses with provided source content."
+                                                            }
+                                                            className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                            aria-label="More info about this error"
+                                                            onClick={(e) =>
+                                                              e.stopPropagation()
+                                                            }
+                                                          >
+                                                            <i className="fa-solid fa-circle-info text-[10px]" />
+                                                          </button>
                                                           Groundedness:{" "}
                                                           <span className="font-medium">
                                                             {formatMetric(
@@ -2457,7 +2513,6 @@ export default function PNRDetails({
                                                   )}
 
                                                   <div className="text-[12px] text-black/60 flex items-center gap-1 mt-2">
-                                                    <i className="fa-solid fa-circle-info text-black/50"></i>
                                                     Notes / Suggestions
                                                   </div>
 
@@ -2567,7 +2622,7 @@ export default function PNRDetails({
                                         <FadeIn delay={100}>
                                           <div className="mt-2">
                                             <button
-                                              className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                              className="btn btn-navyGround h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                                               title={
                                                 canBuild
                                                   ? "Build AE with current values for this EMD"
@@ -2778,7 +2833,7 @@ export default function PNRDetails({
                                                   />
 
                                                   <button
-                                                    className="btn btn-success h-8 px-3 disabled:opacity-40"
+                                                    className="btn btn-navyGround h-8 px-3 disabled:opacity-40"
                                                     type="button"
                                                     onClick={() =>
                                                       openAdmConfirm(
@@ -2813,7 +2868,7 @@ export default function PNRDetails({
                 <div className="mt-3 rounded border border-black/10 bg-white">
                   <div className="px-3 py-2 bg-black/[0.02] flex items-center justify-between">
                     <div className="font-semibold text-[14px]">
-                      <i className="fa-solid fa-passport text-brand-red mr-1"></i>
+                      <i className="fa-solid fa-passport text-brand-teal mr-1"></i>
                       EMD-S items
                     </div>
                     <span className="text-[12px] text-black/60">
@@ -2837,7 +2892,7 @@ export default function PNRDetails({
                               <div className="px-3 py-2 bg-black/[0.02] flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                                 <div className="font-medium text-[13px] flex flex-col gap-2 md:flex-row md:items-center">
                                   <span>
-                                    <i className="fa-solid fa-passport text-brand-red mr-1"></i>
+                                    <i className="fa-solid fa-passport text-brand-teal mr-1"></i>
                                     EMD-{emdIndex + 1}
                                   </span>
                                   <select
@@ -3073,6 +3128,20 @@ export default function PNRDetails({
                                                 </div>
                                                 <div className="lg:w-1/2">
                                                   <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    <button
+                                                      type="button"
+                                                      disabled
+                                                      title={
+                                                        "Correctness and factual reliability of responses."
+                                                      }
+                                                      className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                      aria-label="More info about this error"
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                    >
+                                                      <i className="fa-solid fa-circle-info text-[10px]" />
+                                                    </button>
                                                     Accuracy:{" "}
                                                     <span className="font-medium">
                                                       {formatMetric(
@@ -3081,6 +3150,20 @@ export default function PNRDetails({
                                                     </span>
                                                   </span>
                                                   <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    <button
+                                                      type="button"
+                                                      disabled
+                                                      title={
+                                                        "Consistency of responses across similar inputs."
+                                                      }
+                                                      className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                      aria-label="More info about this error"
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                    >
+                                                      <i className="fa-solid fa-circle-info text-[10px]" />
+                                                    </button>
                                                     Consistency:{" "}
                                                     <span className="font-medium">
                                                       {formatMetric(
@@ -3089,6 +3172,20 @@ export default function PNRDetails({
                                                     </span>
                                                   </span>
                                                   <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    <button
+                                                      type="button"
+                                                      disabled
+                                                      title={
+                                                        "Clarity, structure, and logical flow of responses."
+                                                      }
+                                                      className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                      aria-label="More info about this error"
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                    >
+                                                      <i className="fa-solid fa-circle-info text-[10px]" />
+                                                    </button>
                                                     Coherence:{" "}
                                                     <span className="font-medium">
                                                       {formatMetric(
@@ -3097,6 +3194,20 @@ export default function PNRDetails({
                                                     </span>
                                                   </span>
                                                   <span className="px-2 py-0.5 rounded-full border border-black/10 bg-white text-[11px]">
+                                                    <button
+                                                      type="button"
+                                                      disabled
+                                                      title={
+                                                        "Alignment of responses with provided source content."
+                                                      }
+                                                      className="mr-1 inline-flex h-4 w-4 items-center justify-center rounded text-black/50"
+                                                      aria-label="More info about this error"
+                                                      onClick={(e) =>
+                                                        e.stopPropagation()
+                                                      }
+                                                    >
+                                                      <i className="fa-solid fa-circle-info text-[10px]" />
+                                                    </button>
                                                     Groundedness:{" "}
                                                     <span className="font-medium">
                                                       {formatMetric(
@@ -3108,7 +3219,6 @@ export default function PNRDetails({
                                               </div>
                                             )}
                                             <div className="text-[12px] text-black/60 flex items-center gap-1 mt-2">
-                                              <i className="fa-solid fa-circle-info text-black/50"></i>
                                               Notes / Suggestions
                                             </div>
                                             <ul className="mt-1 list-disc pl-4 grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-black/80 leading-tight">
@@ -3204,7 +3314,7 @@ export default function PNRDetails({
                                   <FadeIn delay={100}>
                                     <div className="mt-2">
                                       <button
-                                        className="btn btn-success h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="btn btn-navyGround h-8 px-3 active:scale-[0.98] transition-[transform,box-shadow] duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                                         title={
                                           canBuild
                                             ? "Build AE with current values for this EMD-S item"
@@ -3240,7 +3350,7 @@ export default function PNRDetails({
               {isHumanRequired && (
                 <FadeIn className="flex w-full justify-center mt-3">
                   <button
-                    className="btn btn-primary h-9 w-full md:w-1/2 lg:w-1/3 justify-center disabled:opacity-40 active:scale-[0.985] transition-transform"
+                    className="btn btn-teal h-9 w-full md:w-1/2 lg:w-1/3 justify-center disabled:opacity-40 active:scale-[0.985] transition-transform"
                     title={
                       allEmdsBuilt
                         ? "Process this PNR"
@@ -3325,7 +3435,7 @@ export default function PNRDetails({
                   Cancel
                 </button>
                 <button
-                  className="btn btn-success"
+                  className="btn btn-navyGround"
                   onClick={confirmBuildAE}
                   disabled={isBuildSubmitting}
                   title="Confirm Build"
@@ -3362,7 +3472,7 @@ export default function PNRDetails({
                   Cancel
                 </button>
                 <button
-                  className="btn btn-success"
+                  className="btn btn-navyGround"
                   onClick={() => confirmSubmitADM()}
                   disabled={isAdmSubmitting}
                 >
@@ -3418,7 +3528,7 @@ export default function PNRDetails({
                   Cancel
                 </button>
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-navyGround"
                   onClick={confirmErrorAction}
                   disabled={isErrorActionSubmitting}
                 >

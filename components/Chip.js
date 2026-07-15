@@ -5,7 +5,7 @@ function Chip({ label, onClick, active, color = "slate" }) {
     yellow: "border-yellow-300 text-yellow-700 hover:bg-yellow-50",
     red: "border-red-300 text-red-700 hover:bg-red-50",
     gray: "border-gray-300 text-gray-700 hover:bg-gray-100",
-    blue: "border-blue-400 text-blue-800 hover:bg-blue-50",
+    blue: "border-brand-teal text-[#1BB6B6] hover:bg-brand-teal hover:bg-opacity-30",
   };
   const activeMap = {
     slate: "bg-slate-200",
@@ -13,7 +13,7 @@ function Chip({ label, onClick, active, color = "slate" }) {
     yellow: "bg-yellow-200",
     red: "bg-red-200",
     gray: "bg-gray-200",
-    blue: "bg-blue-200",
+    blue: "bg-brand-teal bg-opacity-30 text-[#158E8E]",
   };
   return (
     <button

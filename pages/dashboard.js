@@ -453,7 +453,7 @@ export default function Dashboard() {
               onClick={() => switchTab(TABS.ALL)}
               className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
                 activeTab === TABS.ALL
-                  ? "border-brand-red text-brand-red bg-red-50"
+                  ? "border-brand-teal text-brand-teal bg-teal-50"
                   : "border-transparent text-black/70 hover:text-black"
               }`}
               aria-selected={activeTab === TABS.ALL}
@@ -470,15 +470,15 @@ export default function Dashboard() {
               onClick={() => switchTab(TABS.MINE)}
               className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
                 activeTab === TABS.MINE
-                  ? "border-brand-red text-brand-red bg-red-50"
+                  ? "border-brand-teal text-brand-teal bg-teal-50"
                   : "border-transparent text-black/70 hover:text-black"
               }`}
               aria-selected={activeTab === TABS.MINE}
               role="tab"
-              title="My Queues"
+              title="My Queue"
             >
               <i className="fa-solid fa-user-check mr-1"></i>
-              My Queues{" "}
+              My Queue{" "}
               {/* <span className="ml-1 text-black/50">({myCounts.total})</span> */}
             </button>
 
@@ -487,7 +487,7 @@ export default function Dashboard() {
               onClick={() => switchTab(TABS.REPORTS)}
               className={`px-3 py-2 rounded-t-md border-b-2 -mb-[1px] ${
                 activeTab === TABS.REPORTS
-                  ? "border-brand-red text-brand-red bg-red-50"
+                  ? "border-brand-teal text-brand-teal bg-teal-50"
                   : "border-transparent text-black/70 hover:text-black"
               }`}
               aria-selected={activeTab === TABS.REPORTS}
@@ -535,17 +535,16 @@ export default function Dashboard() {
                   active={statusFilter === "processing"}
                   onClick={() => setStatus("processing")}
                 />
+                <Chip
+                  label={`Sent back to Oasis (${counters.sentBackToOasis})`}
+                  color="blue"
+                  active={statusFilter === "sent_back_to_oasis"}
+                  onClick={() => setStatus("sent_back_to_oasis")}
+                />
               </>
             ) : (
               ""
             )}
-
-            <Chip
-              label={`Sent back to Oasis (${counters.sentBackToOasis})`}
-              color="blue"
-              active={statusFilter === "sent_back_to_oasis"}
-              onClick={() => setStatus("sent_back_to_oasis")}
-            />
           </div>
         ) : null}
 

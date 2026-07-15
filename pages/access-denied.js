@@ -4,7 +4,7 @@ export default function AccessDenied() {
   return (
     <main className="min-h-screen grid place-items-center p-4">
       <div className="w-full max-w-md card p-6 text-center">
-        <div className="h-10 w-10 rounded bg-brand-red grid place-items-center text-white mx-auto mb-4">
+        <div className="h-10 w-10 rounded bg-brand-navyGround grid place-items-center text-white mx-auto mb-4">
           <i className="fa-solid fa-lock"></i>
         </div>
         <h1 className="text-xl font-semibold mb-2">Access Denied</h1>
@@ -14,7 +14,7 @@ export default function AccessDenied() {
           contact your administrator to be added.
         </p>
         <button
-          className="btn btn-primary w-full justify-center"
+          className="btn btn-navyGround w-full justify-center"
           onClick={() => logout()}
         >
           <i className="fa-solid fa-right-from-bracket"></i>&nbsp;Sign out

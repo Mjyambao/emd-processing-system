@@ -195,7 +195,7 @@ function OasisQueueModal({ open, onClose, names = [], onSubmit }) {
             Cancel
           </button>
           <button
-            className="btn btn-primary h-9 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn btn-navyGround h-9 disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={!canSubmit}
             onClick={() =>
               onSubmit?.({
@@ -204,7 +204,7 @@ function OasisQueueModal({ open, onClose, names = [], onSubmit }) {
               })
             }
           >
-            Confirm
+            Proceed
           </button>
         </div>
       </div>
