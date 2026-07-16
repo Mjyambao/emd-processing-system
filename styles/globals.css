@@ -34,10 +34,10 @@ body {
   @apply bg-transparent hover:bg-black/5;
 }
 .input {
-  @apply bg-black/5 border border-black/10 rounded-md px-3 py-2 outline-none focus:ring-2 focus:ring-brand-red;
+  @apply bg-black/5 border border-black/10 rounded-md px-3 py-2 outline-none focus:ring-1 focus:ring-brand-teal;
 }
 .card {
-  @apply bg-white border border-black/10 border-2 rounded-lg shadow-sm hover:shadow-md transition-shadow;
+  @apply bg-white border border-black/10 rounded-lg shadow-lg hover:shadow-md transition-shadow;
 }
 .table {
   @apply w-full text-sm;

@@ -22,9 +22,9 @@ export default function StatusBadge({ status }) {
     normalized === "sent back to oasis"
   ) {
     className +=
-      " bg-brand-teal bg-opacity-30 text-[#158E8E] border-[#158E8E] ";
+      " bg-brand-teal bg-opacity-30 text-[#158E8E] border-brand-teal";
     icon = <i className="fa-solid fa-circle-exclamation" />;
-    label = "Sent back to Oasis Queue";
+    label = "Sent back to Oasis queue";
   } else if (normalized.includes("error")) {
     className += " bg-red-50 text-red-700 border-red-200";
     icon = <i className="fa-solid fa-triangle-exclamation" />;

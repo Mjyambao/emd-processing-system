@@ -433,10 +433,10 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-2 flex items-center gap-2 text-sm text-black/70">
           <span>
-            <i className="fa-solid fa-table"></i> Dashboard
+            <i className="fa-solid fa-table mr-1"></i> Dashboard
           </span>
-          <span className="text-black/40">/</span>
-          <span>PNR Queues</span>
+          <span className="text-black/70">/</span>
+          <span className="text-black/50">PNR Queues</span>
 
           {isRefreshing && (
             <span className="ml-auto animate-pulse text-black/60">

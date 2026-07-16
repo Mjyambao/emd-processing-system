@@ -2366,7 +2366,7 @@ export default function PNRTable({
           {pageNumbers.map((p) => (
             <button
               key={p}
-              className={`btn h-9 px-3 ${p === clampedPage ? "btn-secondary" : ""}`}
+              className={`btn h-9 px-3 ${p === clampedPage ? "btn-navyGround" : ""}`}
               aria-current={p === clampedPage ? "page" : undefined}
               onClick={() => setPage(p)}
               disabled={totalRecords === 0 || apiLoading}

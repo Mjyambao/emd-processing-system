@@ -38,26 +38,20 @@ export default function Login() {
 
   return (
     <main className="min-h-screen grid place-items-center p-4">
-      <div className="w-full max-w-md card p-6">
-        <div className="flex items-center gap-3 mb-4">
+      <div className="w-full max-w-md card p-8 px-6">
+        <div className="flex flex-col items-center">
           <Image
-            src="/o2-logo-navy-bg.png"
+            src="/login-asset-2.png"
             alt="EMD Logo"
-            className="rounded-sm"
-            width={40}
-            height={40}
+            className="rounded-xl mx-10"
+            width={300}
+            height={300}
           />
-          <div>
-            <h1 className="text-xl font-semibold">
-              EMD Processing System{" "}
-              <span className="text-xs text-black/30">v1.0</span>
-            </h1>
-            <p className="text-black/60 text-sm">Sign in to continue</p>
-          </div>
+          <p className="text-black/60 text-sm py-6">Sign in to continue</p>
         </div>
 
         <button
-          className="btn btn-navyGround w-full justify-center"
+          className="btn btn-navyGround w-full justify-center h-12"
           onClick={handleLogin}
           disabled={isLoggingIn}
           style={{

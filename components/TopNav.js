@@ -102,30 +102,31 @@ export default function TopNav({ onLogout }) {
     <header className="sticky top-0 z-[99999] border-b border-black/10 bg-white/80 backdrop-blur">
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Image
-            src="/o2-logo-navy-bg.png"
-            alt="EMD Logo"
-            className="rounded-sm"
-            width={40}
-            height={40}
-          />
-          <h1 className="text-lg font-semibold tracking-wide text-brand-navyGround">
+          <div className="bg-brand-navyGround p-1 rounded-xl">
+            <Image
+              src="/o2-logo-navy-bg-3.png"
+              alt="EMD Logo"
+              width={50}
+              height={50}
+            />
+          </div>
+
+          {/* <h1 className="text-lg font-semibold tracking-wide text-brand-navyGround">
             EMD Processing System
-          </h1>
+          </h1> */}
         </div>
 
         <div className="flex items-center gap-4 text-sm">
           {mounted && (
             <>
-              <div className="hidden sm:block text-black/80">
-                <i className="fa-regular fa-clock text-brand-navyGround"></i>{" "}
-                {now}
+              <div className="hidden sm:block text-black/70">
+                <i className="fa-regular fa-clock text-black/50"></i> {now}
               </div>
-              <div className="text-black/90">
-                <i className="fa-regular fa-user text-brand-navyGround"></i>{" "}
+              <div className="text-black/70 ml-2">
+                <i className="fa-regular fa-user text-black/50"></i>{" "}
                 {session?.name || "Agent"}
-                <span className="text-black/60"> • </span>
-                <i className="fa-solid fa-id-card-clip text-brand-navyGround"></i>{" "}
+                <span className="text-black/50 px-2"></span>
+                <i className="fa-solid fa-id-card-clip text-black/50 ml-2"></i>{" "}
                 {session?.agentId || "AGT-XXXX"}
               </div>
             </>
