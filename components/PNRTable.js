@@ -15,7 +15,12 @@ import { formatDatetime } from "../utils/helper";
 import { appLogger } from "../utils/appLogger";
 
 // API
-import { getPnrQueueList, patchAssignPnr, patchTtlPnr } from "../api/pnrApi";
+import {
+  getPnrQueueList,
+  patchAssignPnr,
+  patchTtlPnr,
+  postQueueActions,
+} from "../api/pnrApi";
 
 const FilterToggleButton = ({ open, active, onClick, label }) => (
   <button
@@ -1397,6 +1402,84 @@ export default function PNRTable({
 
   /**
    * -----------------------------
+   * Stop Processing
+   * -----------------------------
+   */
+
+  const [stopModal, setStopModal] = useState({
+    open: false,
+    pnr: null,
+  });
+
+  const [isStoppingProcessing, setIsStoppingProcessing] = useState(false);
+
+  const openStopProcessingModal = (row) => {
+    setStopModal({
+      open: true,
+      pnr: row.pnr,
+    });
+
+    appLogger.info("STOP_PROCESSING_MODAL_OPENED", {
+      component: "PNRTable",
+      pnr: row?.pnr,
+    });
+  };
+
+  const confirmStopProcessing = async () => {
+    if (!stopModal.pnr) return;
+
+    try {
+      setIsStoppingProcessing(true);
+
+      await postQueueActions(stopModal.pnr, {
+        action: "StopProcessing",
+      });
+
+      setApiRows((prev) =>
+        prev.map((row) =>
+          row.pnr === stopModal.pnr
+            ? {
+                ...row,
+                status: "error",
+              }
+            : row,
+        ),
+      );
+
+      showToast(`Stop processing submitted for ${stopModal.pnr}`, {
+        type: "success",
+      });
+
+      appLogger.info("STOP_PROCESSING_FOR_PNR", {
+        component: "PNRTable",
+        pnr: stopModal.pnr,
+      });
+
+      setStopModal({
+        open: false,
+        pnr: null,
+      });
+
+      appLogger.info("STOP_PROCESSING_MODAL_CLOSED", {
+        component: "PNRTable",
+        pnr: stopModal.pnr,
+      });
+
+      onSelect();
+
+      await fetchPnrList({
+        silent: true,
+        reason: "stop-processing",
+      });
+    } catch (e) {
+      showToast(e?.message || "Failed to stop processing", { type: "error" });
+    } finally {
+      setIsStoppingProcessing(false);
+    }
+  };
+
+  /**
+   * -----------------------------
    * Selection
    * -----------------------------
    */
@@ -2203,7 +2286,7 @@ export default function PNRTable({
 
                   {/* Status */}
                   {!isNonEmdTicket && (
-                    <td className="w-[130px]">
+                    <td className="w-auto flex flex-row">
                       <button
                         type="button"
                         className="inline-flex items-center"
@@ -2216,6 +2299,19 @@ export default function PNRTable({
                           label={getStatusLabel(row.status)}
                         />
                       </button>
+
+                      {row.status === "processing" && (
+                        <button
+                          type="button"
+                          className="btn border border-black/20 text-black/80 bg-black/5 h-[24px] inline-flex ml-2 mt-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openStopProcessingModal(row);
+                          }}
+                        >
+                          Stop
+                        </button>
+                      )}
                     </td>
                   )}
 
@@ -2486,6 +2582,52 @@ export default function PNRTable({
           }
         }}
       />
+
+      {stopModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() =>
+              setStopModal({
+                open: false,
+                pnr: null,
+              })
+            }
+          />
+
+          <div className="relative bg-white w-[95%] max-w-md rounded shadow-lg p-5">
+            <h5 className="text-lg font-semibold mb-3">Stop Processing</h5>
+
+            <div className="text-sm text-black/70">
+              Are you sure you want to stop processing{" "}
+              <span className="font-medium">{stopModal.pnr}</span>?
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="btn btn-secondary"
+                disabled={isStoppingProcessing}
+                onClick={() =>
+                  setStopModal({
+                    open: false,
+                    pnr: null,
+                  })
+                }
+              >
+                Cancel
+              </button>
+
+              <button
+                className="btn btn-navyGround"
+                disabled={isStoppingProcessing}
+                onClick={confirmStopProcessing}
+              >
+                {isStoppingProcessing ? "Stopping..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TTL Modal */}
       <TTLModal

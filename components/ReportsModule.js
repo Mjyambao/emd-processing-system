@@ -1020,48 +1020,51 @@ function Section({ title, subtitle, children, right }) {
 
 function SimpleTable({ columns, rows, emptyText = "No items." }) {
   return (
-    <div className="overflow-auto rounded-xl border border-black/10 bg-white">
-      <table className="min-w-full text-sm">
-        <thead className="bg-black/[0.03] text-black/70">
-          <tr>
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                className="whitespace-nowrap px-3 py-2 text-left font-medium"
-              >
-                {c.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {!rows.length ? (
+    <div className="rounded-xl border border-black/10 bg-white">
+      <div className="max-h-[480px] overflow-y-auto overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="sticky top-0 z-10 bg-slate-100 text-black/70">
             <tr>
-              <td
-                colSpan={columns.length}
-                className="px-3 py-8 text-center text-black/50"
-              >
-                {emptyText}
-              </td>
+              {columns.map((c) => (
+                <th
+                  key={c.key}
+                  className="whitespace-nowrap px-3 py-2 text-left font-medium"
+                >
+                  {c.header}
+                </th>
+              ))}
             </tr>
-          ) : (
-            rows.map((r, idx) => (
-              <tr
-                key={r.id || r.pnr || idx}
-                className="border-t border-black/5 hover:bg-black/[0.02]"
-              >
-                {columns.map((c) => (
-                  <td key={c.key} className="px-3 py-2">
-                    {typeof c.render === "function"
-                      ? c.render(r)
-                      : display(r[c.key])}
-                  </td>
-                ))}
+          </thead>
+
+          <tbody>
+            {!rows.length ? (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  className="px-3 py-8 text-center text-black/50"
+                >
+                  {emptyText}
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              rows.map((r, idx) => (
+                <tr
+                  key={r.id || r.pnr || idx}
+                  className="border-t border-black/5 hover:bg-black/[0.02]"
+                >
+                  {columns.map((c) => (
+                    <td key={c.key} className="px-3 py-2">
+                      {typeof c.render === "function"
+                        ? c.render(r)
+                        : display(r[c.key])}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1796,7 +1799,7 @@ export default function ReportsModule({ onOpenPNR }) {
     const avgItems = Array.isArray(s?.avgCompletionTime?.data?.items)
       ? s.avgCompletionTime.data.items
       : [];
-    const errPct01 = normalizePercentage01(s?.errorRate?.data?.percentage) ?? 0;
+    const errPct01 = s?.errorRate?.data?.percentage ?? 0.0;
     const errorCount = coerceNumber(s?.errorRate?.data?.errorCount) ?? 0;
     const hilCount = coerceNumber(s?.errorRate?.data?.hilCount) ?? 0;
     const exc = s?.exceptions?.data;
@@ -1966,7 +1969,7 @@ export default function ReportsModule({ onOpenPNR }) {
       .filter(Boolean);
     openDetailModal({
       title: "Throughput",
-      subtitle: `PNRs created in range • ${rows.length} rows`,
+      subtitle: `${rows.length} PNRs created in range`,
       rows,
     });
   };
@@ -1986,7 +1989,7 @@ export default function ReportsModule({ onOpenPNR }) {
     const rows = dashKpis.errorItems.map(mapErrorRateItemToRow).filter(Boolean);
     openDetailModal({
       title: "Error Rate",
-      subtitle: `${rows.length} rows • ${dashKpis.errorCount} errors • ${dashKpis.hilCount} HIL`,
+      subtitle: `${dashKpis.errorCount} errors`,
       rows,
     });
   };
@@ -2224,21 +2227,17 @@ export default function ReportsModule({ onOpenPNR }) {
   // Filter dropdown options now come only from currently visible rows.
   const detailOptions = useMemo(() => {
     const statuses = uniq(
-      visibleDetailRows.map((r) => r.status).filter(Boolean),
+      detailRows.map((r) => r.status).filter(Boolean),
     ).sort();
 
     const assigned = uniq(
-      visibleDetailRows
-        .map((r) => r.assigned)
-        .filter((v) => Boolean(v) && v !== "-"),
+      detailRows.map((r) => r.assigned).filter((v) => Boolean(v) && v !== "-"),
     ).sort();
 
-    const stages = uniq(
-      visibleDetailRows.map((r) => r.stage).filter(Boolean),
-    ).sort();
+    const stages = uniq(detailRows.map((r) => r.stage).filter(Boolean)).sort();
 
     const errorClasses = uniq(
-      visibleDetailRows.map((r) => r.errorClass).filter(Boolean),
+      detailRows.map((r) => r.errorClass).filter(Boolean),
     ).sort();
 
     return {
@@ -2247,7 +2246,7 @@ export default function ReportsModule({ onOpenPNR }) {
       stage: ["All", ...stages],
       errorClass: ["All", ...errorClasses],
     };
-  }, [visibleDetailRows]);
+  }, [detailRows]);
 
   const filteredDetailRows = useMemo(() => {
     const rows = [...visibleDetailRows];
@@ -2509,11 +2508,11 @@ export default function ReportsModule({ onOpenPNR }) {
 
         <Card
           title="Error Rate"
-          value={pct(dashKpis.errorPct01)}
+          value={`${dashKpis.errorPct01}%`}
           sub={
             dashLoading
               ? "Loading dashboard summary…"
-              : `${dashKpis.errorCount} errors • ${dashKpis.hilCount} HIL`
+              : `${dashKpis.errorCount} errors`
           }
           icon={<i className="fa-solid fa-triangle-exclamation" />}
           tone={dashKpis.errorPct01 > 0.2 ? "bad" : "default"}
@@ -2840,54 +2839,83 @@ export default function ReportsModule({ onOpenPNR }) {
               <div className="mb-2 text-sm font-medium text-black">
                 Error visibility & classification
               </div>
-              <div className="h-56">
+
+              <div className="h-72 overflow-x-auto overflow-y-hidden">
                 {errorVisLoading ? (
                   <div className="h-full flex items-center justify-center text-black/60">
                     <Spinner />
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={errorClassChart}>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="rgba(0,0,0,0.06)"
-                      />
-                      <XAxis
-                        dataKey="name"
-                        tick={{ fontSize: 12 }}
-                        interval={0}
-                        height={60}
-                      />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip
-                        content={(props) => (
-                          <ClickableTooltip
-                            {...props}
-                            metricLabel="Error visibility & classification"
-                            onPick={handleChartPick}
-                          />
-                        )}
-                      />
-                      <Bar
-                        dataKey="count"
-                        name="Errors"
-                        fill={COLORS.brand}
-                        radius={[6, 6, 0, 0]}
-                        className="cursor-pointer"
-                        onClick={(d) => {
-                          const payload = d?.payload || {};
-                          handleChartPick({
-                            metricLabel: "Error visibility & classification",
-                            label: payload?.name,
-                            seriesName: "Errors",
-                            value: d?.value,
-                          });
+                  <div
+                    style={{
+                      width:
+                        errorClassChart.length > 10
+                          ? `${errorClassChart.length * 120}px`
+                          : "100%",
+                      minWidth: "100%",
+                      height: "100%",
+                    }}
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={errorClassChart}
+                        margin={{
+                          top: 10,
+                          right: 30,
+                          left: 10,
+                          bottom: 80,
                         }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                      >
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="rgba(0,0,0,0.06)"
+                        />
+
+                        <XAxis
+                          dataKey="name"
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={90}
+                          tick={{ fontSize: 10 }}
+                        />
+
+                        <YAxis allowDecimals={false} />
+
+                        <Tooltip
+                          content={(props) => (
+                            <ClickableTooltip
+                              {...props}
+                              metricLabel="Error visibility & classification"
+                              onPick={handleChartPick}
+                            />
+                          )}
+                        />
+
+                        <Bar
+                          dataKey="count"
+                          name="Errors"
+                          fill={COLORS.brand}
+                          radius={[6, 6, 0, 0]}
+                          maxBarSize={60}
+                          className="cursor-pointer"
+                          onClick={(d) => {
+                            const payload = d?.payload || {};
+
+                            handleChartPick({
+                              metricLabel: "Error visibility & classification",
+                              label: payload?.name,
+                              seriesName: "Errors",
+                              value: d?.value,
+                            });
+                          }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 )}
               </div>
+
               {errorVisErr ? (
                 <div className="mt-2 text-xs text-red-700">{errorVisErr}</div>
               ) : null}
@@ -2960,7 +2988,7 @@ export default function ReportsModule({ onOpenPNR }) {
                           : "-",
                     },
                   ]}
-                  rows={hilRows.slice(0, 10)}
+                  rows={hilRows}
                   emptyText="No HIL items in this range."
                 />
               )}
@@ -3034,7 +3062,7 @@ export default function ReportsModule({ onOpenPNR }) {
                       render: (r) => (r.adm ? "Yes" : "No"),
                     },
                   ]}
-                  rows={feedbackRows.slice(0, 10)}
+                  rows={feedbackRows}
                   emptyText="No feedback items in this range."
                 />
               )}
@@ -3299,7 +3327,7 @@ export default function ReportsModule({ onOpenPNR }) {
                       render: (r) => r.completionMinutes + "m",
                     },
                   ]}
-                  rows={slaBreachedRows.slice(0, 10)}
+                  rows={slaBreachedRows}
                   emptyText="No SLA breaches in this range."
                 />
               )}
@@ -3362,7 +3390,7 @@ export default function ReportsModule({ onOpenPNR }) {
                       ),
                     },
                   ]}
-                  rows={admRows.slice(0, 10)}
+                  rows={admRows}
                   emptyText="No ADMs in this range."
                 />
               )}

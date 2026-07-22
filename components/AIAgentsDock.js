@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // API
-import { createChatSession, processingAgentChat } from "../api/chatApi";
+import { processingAgentChat } from "../api/chatApi";
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -283,17 +283,26 @@ function ChatPanel({
   const messages = histories[agentId] ?? [];
   const input = inputs[agentId] ?? "";
 
-  const [sending, setSending] = useState(false);
+  const [sendingByAgent, setSendingByAgent] = useState({
+    processing: false,
+    admin: false,
+  });
   const scrollRef = useRef(null);
 
   // ---- Typing animation refs ----
-  const typingTimerRef = useRef(null);
-  const typingSessionRef = useRef(0);
+  const typingTimersRef = useRef({
+    processing: null,
+    admin: null,
+  });
+  const typingSessionsRef = useRef({
+    processing: 0,
+    admin: 0,
+  });
 
-  function stopTyping() {
-    if (typingTimerRef.current) {
-      clearInterval(typingTimerRef.current);
-      typingTimerRef.current = null;
+  function stopTyping(targetAgent = agentId) {
+    if (typingTimersRef.current[targetAgent]) {
+      clearInterval(typingTimersRef.current[targetAgent]);
+      typingTimersRef.current[targetAgent] = null;
     }
   }
 
@@ -310,21 +319,21 @@ function ChatPanel({
     agentId,
     meta,
   }) {
-    stopTyping();
-    typingSessionRef.current += 1;
-    const sessionId = typingSessionRef.current;
+    stopTyping(agentId);
 
-    // Tune typing feel here:
-    const BASE_DELAY_MS = 55; // lower=faster
+    typingSessionsRef.current[agentId] += 1;
+    const sessionId = typingSessionsRef.current[agentId];
+
+    const BASE_DELAY_MS = 55;
     const WORDS_PER_TICK_MIN = 1;
     const WORDS_PER_TICK_MAX = 2;
 
     const parts = tokenizeWordsWithWhitespace(fullText);
     let i = 0;
 
-    typingTimerRef.current = setInterval(() => {
-      if (typingSessionRef.current !== sessionId) {
-        stopTyping();
+    typingTimersRef.current[agentId] = setInterval(() => {
+      if (typingSessionsRef.current[agentId] !== sessionId) {
+        stopTyping(agentId);
         return;
       }
 
@@ -336,13 +345,13 @@ function ChatPanel({
 
       i = Math.min(parts.length, i + step);
 
-      // Optional: show a subtle cursor while streaming
       const done = i >= parts.length;
       const partial = parts.slice(0, i).join("") + (done ? "" : " ▍");
 
       setHistories((prev) => {
         const next = { ...prev };
         const list = Array.isArray(next[agentId]) ? [...next[agentId]] : [];
+
         next[agentId] = list.map((m) =>
           m.id === placeholderId
             ? {
@@ -350,22 +359,25 @@ function ChatPanel({
                 text: partial,
                 ts: nowTs(),
                 status: done ? "delivered" : "sent",
-                meta: meta,
+                meta,
               }
             : m,
         );
+
         return next;
       });
 
-      if (done) stopTyping();
+      if (done) stopTyping(agentId);
     }, BASE_DELAY_MS);
   }
 
   // Cleanup timers on unmount + stop typing when switching agents
-  useEffect(() => stopTyping, []);
   useEffect(() => {
-    stopTyping();
-  }, [agentId]);
+    return () => {
+      stopTyping("processing");
+      stopTyping("admin");
+    };
+  }, []);
 
   // Auto-scroll on message change
   useEffect(() => {
@@ -386,11 +398,13 @@ function ChatPanel({
   }
 
   async function send() {
-    const userText = (input ?? "").trim();
-    if (!userText || sending) return;
+    const targetAgent = agentId;
+    const userText = (inputs[targetAgent] ?? "").trim();
 
-    // stop any ongoing typing before starting a new response
-    stopTyping();
+    if (!userText || sendingByAgent[targetAgent]) return;
+
+    // Stop typing only for the current target agent
+    stopTyping(targetAgent);
 
     const userMsg = {
       id: newId("u"),
@@ -410,21 +424,31 @@ function ChatPanel({
       meta: { placeholder: true },
     };
 
-    // append user + placeholder
     setHistories((prev) => {
       const next = { ...prev };
-      const list = Array.isArray(next[agentId]) ? [...next[agentId]] : [];
+      const list = Array.isArray(next[targetAgent])
+        ? [...next[targetAgent]]
+        : [];
+
       list.push(userMsg, placeholder);
-      next[agentId] = list.slice(-80);
+      next[targetAgent] = list.slice(-80);
+
       return next;
     });
 
-    updateInput("");
-    setSending(true);
+    setInputs((prev) => ({
+      ...prev,
+      [targetAgent]: "",
+    }));
+
+    setSendingByAgent((prev) => ({
+      ...prev,
+      [targetAgent]: true,
+    }));
 
     try {
       const context =
-        agentId === "processing"
+        targetAgent === "processing"
           ? typeof getProcessingContext === "function"
             ? getProcessingContext()
             : undefined
@@ -433,36 +457,52 @@ function ChatPanel({
             : undefined;
 
       const res = await sendMessageToAgent({
-        agentId,
-        messages,
+        agentId: targetAgent,
+        messages: histories[targetAgent] ?? [],
         userText,
+        context,
       });
-
-      console.log("Chat Response 2: ", res);
 
       const fullText = res?.text ?? "No response.";
       const meta = res?.meta;
 
-      // Replace placeholder "Typing…" with empty bubble, then animate word-by-word
       setHistories((prev) => {
         const next = { ...prev };
-        const list = Array.isArray(next[agentId]) ? [...next[agentId]] : [];
-        next[agentId] = list
+        const list = Array.isArray(next[targetAgent])
+          ? [...next[targetAgent]]
+          : [];
+
+        next[targetAgent] = list
           .map((m) =>
             m.id === placeholderId
-              ? { ...m, text: "", ts: nowTs(), status: "sent", meta }
+              ? {
+                  ...m,
+                  text: "",
+                  ts: nowTs(),
+                  status: "sent",
+                  meta,
+                }
               : m,
           )
           .slice(-80);
+
         return next;
       });
 
-      typeIntoMessageWordByWord({ placeholderId, fullText, agentId, meta });
+      typeIntoMessageWordByWord({
+        placeholderId,
+        fullText,
+        agentId: targetAgent,
+        meta,
+      });
     } catch (err) {
       setHistories((prev) => {
         const next = { ...prev };
-        const list = Array.isArray(next[agentId]) ? [...next[agentId]] : [];
-        next[agentId] = list
+        const list = Array.isArray(next[targetAgent])
+          ? [...next[targetAgent]]
+          : [];
+
+        next[targetAgent] = list
           .map((m) =>
             m.id === placeholderId
               ? {
@@ -475,10 +515,14 @@ function ChatPanel({
               : m,
           )
           .slice(-80);
+
         return next;
       });
     } finally {
-      setSending(false);
+      setSendingByAgent((prev) => ({
+        ...prev,
+        [targetAgent]: false,
+      }));
     }
   }
 
@@ -550,6 +594,9 @@ function ChatPanel({
             )}
           >
             <i className="fa-solid fa-diagram-project mr-1"></i> Processing
+            {sendingByAgent.processing ? (
+              <i className="fa-solid fa-circle-notch animate-spin ml-2"></i>
+            ) : null}
           </button>
 
           <button
@@ -563,6 +610,9 @@ function ChatPanel({
             )}
           >
             <i className="fa-solid fa-user-tie mr-1"></i> Admin
+            {sendingByAgent.admin ? (
+              <i className="fa-solid fa-circle-notch animate-spin ml-2"></i>
+            ) : null}
           </button>
         </div>
       </div>
@@ -620,16 +670,16 @@ function ChatPanel({
           <button
             type="button"
             onClick={send}
-            disabled={sending || !input.trim()}
+            disabled={sendingByAgent[agentId] || !input.trim()}
             className={cx(
               "inline-flex items-center justify-center rounded-xl px-3 py-2 text-[13px] font-semibold",
-              sending || !input.trim()
+              sendingByAgent[agentId] || !input.trim()
                 ? "bg-black/10 text-black/40 cursor-not-allowed"
                 : "bg-green-600 text-white hover:brightness-95",
             )}
             title="Send"
           >
-            {sending ? (
+            {sendingByAgent[agentId] ? (
               <i className="fa-solid fa-circle-notch animate-spin"></i>
             ) : (
               <i className="fa-solid fa-paper-plane"></i>
