@@ -2812,6 +2812,7 @@ export default function ReportsModule({ onOpenPNR }) {
                           name="Assigned"
                           fill={COLORS.purple}
                           radius={[6, 6, 6, 6]}
+                          minPointSize={4}
                           className="cursor-pointer"
                           onClick={(d) => {
                             const payload = d?.payload || {};
@@ -2898,6 +2899,7 @@ export default function ReportsModule({ onOpenPNR }) {
                           fill={COLORS.brand}
                           radius={[6, 6, 0, 0]}
                           maxBarSize={60}
+                          minPointSize={4}
                           className="cursor-pointer"
                           onClick={(d) => {
                             const payload = d?.payload || {};
