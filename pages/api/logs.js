@@ -100,32 +100,29 @@ async function sendToDatadog(level, event, base) {
       .join(",");
 
     const datadogLog = {
-      message: event,
-
+      message: JSON.stringify({
+        event,
+        level,
+        route: base.route,
+        userId: base.userId,
+        sessionId: base.sessionId,
+        correlationId: base.correlationId,
+        metadata: base.metadata,
+      }),
       status: level,
-
       service: process.env.DD_SERVICE || "tix-ui",
-
       env: process.env.DD_ENV || "dev",
-
       version: process.env.DD_VERSION || "1.0",
-
       ddsource: "nextjs",
-
       ddtags: tags,
-
       hostname: "azure-app-service",
-
       route: base.route,
       session_id: base.sessionId,
       user_id: base.userId,
       correlation_id: base.correlationId,
-
       userAgent: base.userAgent,
       ip: base.ip,
-
       metadata: base.metadata,
-
       frontend: {
         source: base.source,
         route: base.route,
