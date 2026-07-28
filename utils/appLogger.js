@@ -1,5 +1,22 @@
 const LOG_ENDPOINT = "/api/logs";
 
+function createRandomId() {
+  try {
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+      const values = new Uint32Array(2);
+      crypto.getRandomValues(values);
+
+      // Datadog trace/span IDs are commonly represented as decimal strings.
+      const id = (BigInt(values[0]) << 32n) + BigInt(values[1]);
+      return id.toString();
+    }
+  } catch {
+    // fallback below
+  }
+
+  return `${Date.now()}${Math.floor(Math.random() * 1000000)}`;
+}
+
 function createSessionId() {
   try {
     const key = "app_session_id";
@@ -15,6 +32,20 @@ function createSessionId() {
     return id;
   } catch {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+function getSessionTraceId() {
+  try {
+    const key = "app_trace_id";
+    const existing = sessionStorage.getItem(key);
+    if (existing) return existing;
+
+    const traceId = createRandomId();
+    sessionStorage.setItem(key, traceId);
+    return traceId;
+  } catch {
+    return createRandomId();
   }
 }
 
@@ -38,22 +69,36 @@ function redact(metadata = {}) {
   const blockedKeys = new Set([
     "password",
     "token",
-    "accessToken",
-    "idToken",
-    "refreshToken",
+    "accesstoken",
+    "idtoken",
+    "refreshtoken",
     "authorization",
     "cookie",
     "email",
     "phone",
-    "contactEmail",
-    "contactPhone",
+    "contactemail",
+    "contactphone",
+    "secret",
+    "apikey",
+    "api_key",
+    "dd_api_key",
   ]);
+
+  if (Array.isArray(metadata)) {
+    return metadata.map((item) =>
+      item && typeof item === "object" ? redact(item) : item,
+    );
+  }
 
   const output = {};
 
   for (const [key, value] of Object.entries(metadata)) {
-    if (blockedKeys.has(String(key).toLowerCase())) {
+    const normalizedKey = String(key).toLowerCase();
+
+    if (blockedKeys.has(normalizedKey)) {
       output[key] = "[redacted]";
+    } else if (value && typeof value === "object") {
+      output[key] = redact(value);
     } else {
       output[key] = value;
     }
@@ -62,22 +107,59 @@ function redact(metadata = {}) {
   return output;
 }
 
+function getUserId(session) {
+  return session?.userId || session?.user?.userId || "";
+}
+
+function writeToConsole(level, event, metadata) {
+  if (level === "error") {
+    console.error(event, metadata);
+    return;
+  }
+
+  if (level === "warn") {
+    console.warn(event, metadata);
+    return;
+  }
+
+  if (level === "debug") {
+    console.debug(event, metadata);
+    return;
+  }
+
+  console.log(event, metadata);
+}
+
 function send(level, event, metadata = {}) {
   if (typeof window === "undefined") return;
 
   try {
     const session = getSession();
+    const redactedMetadata = redact(metadata);
+
+    const traceId = metadata?.traceId || getSessionTraceId();
+    const spanId = metadata?.spanId || createRandomId();
 
     const payload = {
       level,
       event,
       route: getRoute(),
-      userId: session?.userId || session?.user?.userId || "",
-      userName: session?.name || session?.user?.name || "",
+
+      // Avoid sending display name/email. Use ID only if available.
+      userId: getUserId(session),
+
       sessionId: createSessionId(),
-      metadata: redact(metadata),
+
+      // Trace-like correlation IDs for Datadog logs.
+      // These help group frontend logs even before full APM is enabled.
+      traceId,
+      spanId,
+
+      metadata: redactedMetadata,
       timestamp: new Date().toISOString(),
     };
+
+    writeToConsole(level, event, redactedMetadata);
 
     const body = JSON.stringify(payload);
 
