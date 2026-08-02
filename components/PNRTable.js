@@ -476,6 +476,7 @@ export default function PNRTable({
     });
 
     setPage(1);
+    setPageSize(10);
 
     clearSelection();
   };
@@ -883,6 +884,16 @@ export default function PNRTable({
     return { merged, changed: true };
   };
 
+  const compactQueryParams = (params) =>
+    Object.fromEntries(
+      Object.entries(params).filter(([, value]) => {
+        if (value === undefined || value === null) return false;
+        if (typeof value === "string" && value.trim() === "") return false;
+        if (Array.isArray(value) && value.length === 0) return false;
+        return true;
+      }),
+    );
+
   const buildQueryParams = () => {
     const f = colFilters;
 
@@ -899,10 +910,11 @@ export default function PNRTable({
 
     // assignTo base logic (existing behavior), unless assignedToOverride is provided.
     let assignedTo;
+
     if (assignedToOverride && String(assignedToOverride).trim()) {
       assignedTo = String(assignedToOverride).trim();
-    } else if (Array.isArray(f.assignedNames) && f.assignedNames.length === 1) {
-      assignedTo = f.assignedNames[0];
+    } else if (Array.isArray(f.assignedNames) && f.assignedNames.length > 0) {
+      assignedTo = f.assignedNames;
     } else if (
       f.includeUnassigned &&
       (!f.assignedNames || f.assignedNames.length === 0)
@@ -936,6 +948,8 @@ export default function PNRTable({
     const ttlTo = f.ttlTo ? toIsoEndOfDayZ(f.ttlTo) : undefined;
 
     // Text filters
+    // IMPORTANT: keep these as server-side query params so the queue API
+    // returns filtered items, filtered totalRecords, and filtered totalPages.
     const brand = f.brand?.trim() ? f.brand.trim() : undefined;
     const gds = f.gds?.trim() ? f.gds.trim() : undefined;
     const pcc = f.pcc?.trim() ? f.pcc.trim() : undefined;
@@ -959,17 +973,33 @@ export default function PNRTable({
     const sortDir = sort?.dir || "desc";
     const sortParam = `${sortField}:${sortDir}`;
 
-    return {
+    const hasTextFilters =
+      !!f.pnr?.trim() ||
+      !!f.brand?.trim() ||
+      !!f.gds?.trim() ||
+      !!f.pcc?.trim() ||
+      !!f.documentType?.trim() ||
+      !!f.passengerNames?.trim() ||
+      !!f.error?.trim();
+
+    const queryParams = {
       page: Math.max(1, page), // backend expects 1-based
-      pageSize: Math.min(100, Math.max(1, pageSize)),
+      pageSize: hasTextFilters ? 100 : Math.min(100, Math.max(1, pageSize)),
       status,
       assignedTo,
+
+      // Keep existing pnr param and add swagger-aligned pnrId alias.
+      // This fixes cases where the endpoint expects pnrId for the column filter.
       pnr,
+      pnrId: pnr,
+
+      // Text column filters sent directly to the fetch queue item endpoint.
       brand,
       gds,
       pcc,
       documentType,
       passengerNames,
+
       departureDateFrom,
       departureDateTo,
       errorDetails,
@@ -981,6 +1011,8 @@ export default function PNRTable({
       ttlTo,
       sort: sortParam,
     };
+
+    return compactQueryParams(queryParams);
   };
 
   const applyLocalSecondarySort = (rowsToSort) => {
@@ -1286,44 +1318,63 @@ export default function PNRTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const totalRecordsRaw = apiMeta.totalRecords;
-  const STATUS_TOTAL_MAP = {
-    processed: "totalProcessed",
-    processing: "totalProcessing",
-    error: "totalError",
-    human: "totalHuman",
-    sent_back_to_oasis: "totalSendToOasis",
-  };
+  // Frontend footer count fix:
+  // If any table filter is active, show the number of rows currently rendered
+  // by the table instead of trusting API meta counts. This handles cases where
+  // the endpoint returns filtered items but still returns unfiltered totalRecords
+  // or totalPages.
+  const hasActiveColumnFilters =
+    !!String(search ?? "").trim() ||
+    !!colFilters.pnr?.trim() ||
+    !!colFilters.brand?.trim() ||
+    !!colFilters.gds?.trim() ||
+    !!colFilters.pcc?.trim() ||
+    !!colFilters.documentType?.trim() ||
+    !!colFilters.status ||
+    !!colFilters.passengerNames?.trim() ||
+    !!colFilters.departureDateFrom ||
+    !!colFilters.departureDateTo ||
+    !!colFilters.lastUpdatedFrom ||
+    !!colFilters.lastUpdatedTo ||
+    !!colFilters.queueFrom ||
+    !!colFilters.queueTo ||
+    !!colFilters.ttlFrom ||
+    !!colFilters.ttlTo ||
+    !!colFilters.error?.trim() ||
+    (Array.isArray(colFilters.assignedNames) &&
+      colFilters.assignedNames.length > 0) ||
+    !!colFilters.includeUnassigned;
 
-  const getTotalRecordsByStatus = (apiMeta, statusFilter) => {
-    switch (statusFilter) {
+  const hasActiveStatusChipFilter = statusFilter && statusFilter !== "all";
+
+  const shouldUseClientFilteredCount = isMyQueuesTab || hasActiveColumnFilters;
+
+  const tableRowCount = filteredRows.length;
+
+  const getTotalRecordsByStatus = (meta, filter) => {
+    switch (filter) {
       case "processed":
-        return apiMeta.totalProcessed ?? 0;
+        return meta.totalProcessed ?? meta.totalRecords ?? 0;
       case "processing":
-        return apiMeta.totalProcessing ?? 0;
+        return meta.totalProcessing ?? meta.totalRecords ?? 0;
       case "error":
-        return apiMeta.totalError ?? 0;
+        return meta.totalError ?? meta.totalRecords ?? 0;
       case "human":
-        return apiMeta.totalHuman ?? 0;
+        return meta.totalHuman ?? meta.totalRecords ?? 0;
       case "sent_back_to_oasis":
-        return apiMeta.totalSendToOasis ?? 0;
+        return meta.totalSendToOasis ?? meta.totalRecords ?? 0;
       case "all":
       default:
-        return apiMeta.totalRecords ?? 0;
+        return meta.totalRecords ?? 0;
     }
   };
 
-  const tableRowCount = filteredRows.length;
-  const totalRecords = isMyQueuesTab
+  const totalRecords = shouldUseClientFilteredCount
     ? tableRowCount
     : getTotalRecordsByStatus(apiMeta, statusFilter);
 
-  const totalPages = isMyQueuesTab
-    ? Math.max(1, Math.ceil(filteredRows.length / pageSize))
-    : Math.max(1, Math.ceil(totalRecords / pageSize));
-
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const clampedPage = Math.min(page, Math.max(1, totalPages));
-
   const pageRows = filteredRows;
   // If polling adds rows but the backend meta lags, ensure the footer still reflects the latest count.
   const displayedMax = (clampedPage - 1) * pageSize + (pageRows?.length || 0);

@@ -196,6 +196,7 @@ const MODAL_CONFIG = {
       "dealMatchingTime",
       "issuanceTime",
       "invoicingTime",
+      "hilMinutes",
       "completionMinutes",
       "slaMinutes",
     ],
@@ -482,6 +483,12 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     ),
   };
 
+  const hilTimeCol = {
+    key: "hilMinutes",
+    header: "Minutes in HIL",
+    render: (r) => (r.hilMinutes != null ? r.hilMinutes + "m" : "-"),
+  };
+
   const completionCol = {
     key: "completionMinutes",
     header: "Completion Time",
@@ -730,6 +737,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       dealMatchingTimeCol,
       issuanceTimeCol,
       invoicingTimeCol,
+      hilTimeCol,
       completionCol,
       slaCol,
     ],
@@ -800,6 +808,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
       dealMatchingTimeCol,
       issuanceTimeCol,
       invoicingTimeCol,
+      hilTimeCol,
       completionCol,
       slaCol,
     ],
@@ -1171,6 +1180,7 @@ function mapAvgCompletionItemToRow(item) {
   const invoicingMs = item.invoicing_total_completion_time;
   // const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
   // If server provides completion_time as a string, prefer it
+  const hilMins = item.hil_time;
   const totalMins = item.completion_time;
   const slaMins = item.sla;
   return {
@@ -1190,6 +1200,7 @@ function mapAvgCompletionItemToRow(item) {
     dealMatchingTime: dealMs,
     issuanceTime: issuanceMs,
     invoicingTime: invoicingMs,
+    hilMinutes: hilMins,
     completionMinutes: totalMins,
     slaMinutes: slaMins,
   };
@@ -1269,6 +1280,7 @@ function mapEndToEndItemToRow(item) {
     dealMatchingTime: item.deal_matching_total_completion_time,
     issuanceTime: item.issuance_total_completion_time,
     invoicingTime: item.invoicing_total_completion_time,
+    hilMinutes: item.hil_time,
     completionMinutes: item.completion_time,
     slaMinutes: item.sla ?? getSlaMinutesForDocType(base.documentType),
   };

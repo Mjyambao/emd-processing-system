@@ -9,16 +9,31 @@ export async function getPnrQueueList(params = {}) {
   const {
     page = 1,
     pageSize = 10,
+
     status,
     assignedTo,
+
     pnr,
+    brand,
+    gds,
+    pcc,
+    documentType,
+    passengerNames,
+
+    departureDateFrom,
+    departureDateTo,
+
     errorDetails,
+
     lastUpdatedFrom,
     lastUpdatedTo,
+
     queueArrivalFrom,
     queueArrivalTo,
+
     ttlFrom,
     ttlTo,
+
     sort,
   } = params;
 
@@ -28,15 +43,39 @@ export async function getPnrQueueList(params = {}) {
   qs.set("pageSize", String(pageSize));
 
   if (status) qs.set("status", String(status));
-  if (assignedTo) qs.set("assignedTo", String(assignedTo));
-  if (pnr) qs.set("pnr", String(pnr));
-  if (errorDetails) qs.set("errorDetails", String(errorDetails));
+  if (Array.isArray(assignedTo)) {
+    assignedTo.forEach((value) => qs.append("assigned_to", value));
+  } else if (assignedTo) {
+    qs.set("assigned_to", String(assignedTo));
+  }
 
-  if (lastUpdatedFrom) qs.set("lastUpdatedFrom", String(lastUpdatedFrom));
-  if (lastUpdatedTo) qs.set("lastUpdatedTo", String(lastUpdatedTo));
-  if (queueArrivalFrom) qs.set("queueArrivalFrom", String(queueArrivalFrom));
-  if (queueArrivalTo) qs.set("queueArrivalTo", String(queueArrivalTo));
+  if (pnr) qs.set("pnr", String(pnr));
+
+  // TEXT FILTERS
+  if (brand) qs.set("brand", String(brand));
+  if (gds) qs.set("gds", String(gds));
+  if (pcc) qs.set("pcc", String(pcc));
+  if (documentType) qs.set("document_type", String(documentType));
+  if (passengerNames) qs.set("passenger_names", String(passengerNames));
+
+  // DATE FILTERS
+  if (departureDateFrom)
+    qs.set("departure_date_from", String(departureDateFrom));
+
+  if (departureDateTo) qs.set("departure_date_to", String(departureDateTo));
+
+  if (errorDetails) qs.set("error_details", String(errorDetails));
+
+  if (lastUpdatedFrom) qs.set("last_updated_from", String(lastUpdatedFrom));
+
+  if (lastUpdatedTo) qs.set("last_updated_to", String(lastUpdatedTo));
+
+  if (queueArrivalFrom) qs.set("queue_arrival_from", String(queueArrivalFrom));
+
+  if (queueArrivalTo) qs.set("queue_arrival_to", String(queueArrivalTo));
+
   if (ttlFrom) qs.set("ttlFrom", String(ttlFrom));
+
   if (ttlTo) qs.set("ttlTo", String(ttlTo));
 
   if (sort) qs.set("sort", String(sort));
