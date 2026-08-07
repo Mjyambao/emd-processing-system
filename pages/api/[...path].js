@@ -1,5 +1,11 @@
 import { serverLogger } from "../../utils/serverLogger";
 
+const ALLOWED_CONTENT_TYPES = [
+  "application/json",
+  "application/pdf",
+  "application/octet-stream",
+];
+
 export default async function handler(req, res) {
   try {
     const BACKEND_BASE = (process.env.API_BASE_URL || "").replace(/\/+$/, "");
@@ -47,16 +53,38 @@ export default async function handler(req, res) {
       durationMs,
     });
 
-    const contentType = response.headers.get("content-type");
+    const contentType =
+      response.headers.get("content-type")?.toLowerCase() || "";
+
+    // Block HTML and any unsupported content type
+    if (
+      contentType &&
+      !ALLOWED_CONTENT_TYPES.some((type) => contentType.startsWith(type))
+    ) {
+      serverLogger.warn("API_PROXY_BLOCKED_CONTENT_TYPE", {
+        contentType,
+        targetUrl,
+      });
+
+      return res.status(403).json({
+        error: "Unsupported content type",
+      });
+    }
+
     const data = await response.arrayBuffer();
 
-    res.status(response.status);
+    // Safely handle JSON responses
+    if (contentType.startsWith("application/json")) {
+      const json = JSON.parse(Buffer.from(data).toString("utf8"));
+
+      return res.status(response.status).json(json);
+    }
 
     if (contentType) {
       res.setHeader("Content-Type", contentType);
     }
 
-    res.send(Buffer.from(data));
+    res.status(response.status).send(Buffer.from(data));
   } catch (err) {
     serverLogger.error("API_PROXY_ERROR", {
       method: req.method,
@@ -64,6 +92,8 @@ export default async function handler(req, res) {
       stack: err?.stack,
     });
 
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: "Internal proxy error",
+    });
   }
 }

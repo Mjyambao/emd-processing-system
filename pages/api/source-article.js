@@ -8,7 +8,26 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch(url);
+    let parsedUrl;
+
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return res.status(400).json({
+        message: "Invalid URL",
+      });
+    }
+
+    if (
+      parsedUrl.protocol !== "https:" ||
+      !parsedUrl.hostname.endsWith(".blob.core.windows.net")
+    ) {
+      return res.status(403).json({
+        message: "Invalid source",
+      });
+    }
+
+    const response = await fetch(parsedUrl.toString());
 
     if (!response.ok) {
       return res.status(response.status).json({

@@ -72,11 +72,7 @@ export default function PNRTable({
   loggedInUserId,
   isMyQueuesTab = false,
 }) {
-  /**
-   * -----------------------------
-   * Helpers
-   * -----------------------------
-   */
+  /** Helpers **/
   const canEditTTL = (row) => row.status === "error" || row.status === "human";
   const isNonEmdTicket = String(ticketType ?? "EMD") !== "EMD";
   const includesCI = (value, query) => {
