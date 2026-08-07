@@ -66,7 +66,8 @@ export default function TopNav({ onLogout }) {
     })();
 
     // Start clock after mount
-    const tick = () => setNow(new Date().toLocaleString());
+    const tick = () =>
+      setNow(new Date().toLocaleString("en-GB").replace(/\//g, "-"));
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
