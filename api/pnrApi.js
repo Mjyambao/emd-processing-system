@@ -44,9 +44,9 @@ export async function getPnrQueueList(params = {}) {
 
   if (status) qs.set("status", String(status));
   if (Array.isArray(assignedTo)) {
-    assignedTo.forEach((value) => qs.append("assigned_to", value));
+    assignedTo.forEach((value) => qs.append("assignedTo", value));
   } else if (assignedTo) {
-    qs.set("assigned_to", String(assignedTo));
+    qs.set("assignedTo", String(assignedTo));
   }
 
   if (pnr) qs.set("pnr", String(pnr));
@@ -64,7 +64,7 @@ export async function getPnrQueueList(params = {}) {
 
   if (departureDateTo) qs.set("departure_date_to", String(departureDateTo));
 
-  if (errorDetails) qs.set("error_details", String(errorDetails));
+  if (errorDetails) qs.set("errorDetails", String(errorDetails));
 
   if (lastUpdatedFrom) qs.set("last_updated_from", String(lastUpdatedFrom));
 

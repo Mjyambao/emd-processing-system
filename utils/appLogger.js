@@ -127,7 +127,7 @@ function writeToConsole(level, event, metadata) {
     return;
   }
 
-  console.log(event, metadata);
+  // console.log(event, metadata);
 }
 
 function send(level, event, metadata = {}) {

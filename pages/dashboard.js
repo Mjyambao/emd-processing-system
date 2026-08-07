@@ -561,7 +561,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 items-start">
               <div>
                 <PNRTable
-                  ref={tableRef}
+                  // ref={tableRef}
                   rows={rows}
                   search={search}
                   setSearch={setSearch}

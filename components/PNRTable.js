@@ -1128,7 +1128,11 @@ export default function PNRTable({
         });
       }
 
-      mapped = applyLocalSecondarySort(mapped);
+      const isDefaultQueueSort = sort.key === "ttl" && sort.dir === "asc";
+
+      if (isDefaultQueueSort) {
+        mapped = applyLocalSecondarySort(mapped);
+      }
 
       const nextMeta = {
         page: typeof data?.page === "number" ? data.page : query.page,
@@ -1384,14 +1388,46 @@ export default function PNRTable({
     pageRows.length === 0 ? 0 : (clampedPage - 1) * pageSize + pageRows.length;
 
   const pageNumbers = useMemo(() => {
-    const maxButtons = 5;
-    let startPage = Math.max(1, clampedPage - Math.floor(maxButtons / 2));
-    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
-    startPage = Math.max(1, endPage - maxButtons + 1);
-    return Array.from(
-      { length: endPage - startPage + 1 },
-      (_, i) => startPage + i,
-    );
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    const pages = [];
+
+    // Always show first page
+    pages.push(1);
+
+    let start = Math.max(2, clampedPage - 1);
+    let end = Math.min(totalPages - 1, clampedPage + 1);
+
+    // Near beginning
+    if (clampedPage <= 4) {
+      start = 2;
+      end = 5;
+    }
+
+    // Near end
+    if (clampedPage >= totalPages - 3) {
+      start = totalPages - 4;
+      end = totalPages - 1;
+    }
+
+    if (start > 2) {
+      pages.push("...");
+    }
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    if (end < totalPages - 1) {
+      pages.push("...");
+    }
+
+    // Always show last page
+    pages.push(totalPages);
+
+    return pages;
   }, [clampedPage, totalPages]);
 
   const pnrToOriginalIndex = useMemo(() => {
@@ -2502,7 +2538,7 @@ export default function PNRTable({
 
         <div className="flex items-center gap-1">
           <button
-            className="btn h-9 px-3 text-xs"
+            className="btn h-9 px-3 text-xs cursor-pointer hover:bg-black/10"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={clampedPage <= 1 || totalRecords === 0 || apiLoading}
             aria-label="Previous page"
@@ -2510,20 +2546,29 @@ export default function PNRTable({
             Prev
           </button>
 
-          {pageNumbers.map((p) => (
-            <button
-              key={p}
-              className={`btn h-9 px-3 ${p === clampedPage ? "btn-navyGround" : ""}`}
-              aria-current={p === clampedPage ? "page" : undefined}
-              onClick={() => setPage(p)}
-              disabled={totalRecords === 0 || apiLoading}
-            >
-              {p}
-            </button>
-          ))}
+          {pageNumbers.map((p, idx) =>
+            p === "..." ? (
+              <span key={`ellipsis-${idx}`} className="px-2 text-gray-500">
+                ...
+              </span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                disabled={totalRecords === 0 || apiLoading}
+                className={`px-3 py-1 rounded-md ${
+                  p === clampedPage
+                    ? "bg-slate-900 text-white"
+                    : "hover:bg-slate-100"
+                }`}
+              >
+                {p}
+              </button>
+            ),
+          )}
 
           <button
-            className="btn h-9 px-3 text-xs"
+            className="btn h-9 px-3 text-xs cursor-pointer hover:bg-black/10"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={
               clampedPage >= totalPages || totalRecords === 0 || apiLoading

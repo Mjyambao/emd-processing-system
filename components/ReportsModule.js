@@ -500,7 +500,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     key: "slaMinutes",
     header: "SLA",
     render: (r) =>
-      r.slaMinutes + "m" ?? getSlaMinutesForDocType(r.documentType) + "m",
+      r.slaMinutes + "m" ?? getSlaMinutesForDocType(r.emdType) + "m",
   };
 
   const triageTimeCol = {
@@ -1181,7 +1181,13 @@ function mapAvgCompletionItemToRow(item) {
   // const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
   // If server provides completion_time as a string, prefer it
   const hilMins = item.hil_time;
-  const totalMins = item.completion_time;
+  const totalMins =
+    parseFloat(triageMs) +
+    parseFloat(maskMs) +
+    parseFloat(dealMs) +
+    parseFloat(issuanceMs) +
+    parseFloat(invoicingMs) +
+    parseFloat(hilMins);
   const slaMins = item.sla;
   return {
     ...base,
@@ -1201,7 +1207,7 @@ function mapAvgCompletionItemToRow(item) {
     issuanceTime: issuanceMs,
     invoicingTime: invoicingMs,
     hilMinutes: hilMins,
-    completionMinutes: totalMins,
+    completionMinutes: parseFloat(totalMins.toFixed(2)),
     slaMinutes: slaMins,
   };
 }
@@ -1231,7 +1237,7 @@ function mapExceptionItemToRow(item) {
     slaBreached: item.sla_breached || "-",
     slaMinutes:
       coerceNumber(item.sla) ??
-      getSlaMinutesForDocType(item.document_type || base.documentType),
+      getSlaMinutesForDocType(item.emdType || base.emdType),
     adm: isAdm,
     feedbackText: item.feedback || "-",
     feedback: item.feedback || "-",
@@ -1265,6 +1271,25 @@ function mapAiVsHumanItemToRow(item) {
 
 function mapEndToEndItemToRow(item) {
   const base = mapCommonItemToRow(item) || {};
+
+  // stage durations are ms in API; we display as minutes in modal
+  const triageMs = item.triage_total_completion_time;
+  const maskMs = item.mask_total_completion_time;
+  const dealMs = item.deal_matching_total_completion_time;
+  const issuanceMs = item.issuance_total_completion_time;
+  const invoicingMs = item.invoicing_total_completion_time;
+  // const msToMins = (ms) => (ms == null ? null : Math.round(ms / 60000));
+  // If server provides completion_time as a string, prefer it
+  const hilMins = item.hil_time;
+  const totalMins =
+    parseFloat(triageMs) +
+    parseFloat(maskMs) +
+    parseFloat(dealMs) +
+    parseFloat(issuanceMs) +
+    parseFloat(invoicingMs) +
+    parseFloat(hilMins);
+  const slaMins = item.sla;
+
   return {
     ...base,
     status:
@@ -1275,14 +1300,14 @@ function mapEndToEndItemToRow(item) {
         : normalizeStatus(base.status),
     createdAt: item.queue_arrival_utc || base.createdAt,
     emdNumber: item.emd_number || "-",
-    triageTime: item.triage_total_completion_time,
-    maskCheckTime: item.mask_total_completion_time,
-    dealMatchingTime: item.deal_matching_total_completion_time,
-    issuanceTime: item.issuance_total_completion_time,
-    invoicingTime: item.invoicing_total_completion_time,
-    hilMinutes: item.hil_time,
-    completionMinutes: item.completion_time,
-    slaMinutes: item.sla ?? getSlaMinutesForDocType(base.documentType),
+    triageTime: triageMs,
+    maskCheckTime: maskMs,
+    dealMatchingTime: dealMs,
+    issuanceTime: issuanceMs,
+    invoicingTime: invoicingMs,
+    hilMinutes: hilMins,
+    completionMinutes: parseFloat(totalMins.toFixed(2)),
+    slaMinutes: slaMins,
   };
 }
 
@@ -1936,7 +1961,7 @@ export default function ReportsModule({ onOpenPNR }) {
     return e2eListRows
       .map((r) => ({
         ...r,
-        slaMinutes: r.slaMinutes ?? getSlaMinutesForDocType(r.documentType),
+        slaMinutes: r.slaMinutes ?? getSlaMinutesForDocType(r.emdType),
       }))
       .filter((r) => {
         const c = parseFloat(r.completionMinutes);

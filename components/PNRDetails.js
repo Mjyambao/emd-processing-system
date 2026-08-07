@@ -2059,6 +2059,7 @@ export default function PNRDetails({
                       (emd) => emd.aeBuildStatus === "PENDING",
                     );
                   const isOpen = resolvedOpenPassengerIndex === passengerIndex;
+                  const seats = passenger.flightSeat.split(",");
 
                   return (
                     <div
@@ -2173,7 +2174,7 @@ export default function PNRDetails({
                                     Seat
                                   </>
                                 }
-                                v={passenger.flightSeat || "—"}
+                                v={seats[passengerIndex] || "—"}
                               />
                               <Field
                                 k={
