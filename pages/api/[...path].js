@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       queryString ? `?${queryString}` : ""
     }`;
 
-    console.log("Proxying to:", targetUrl);
+    // console.log("Proxying to:", targetUrl);
 
     serverLogger.info("API_PROXY_REQUEST", {
       method: req.method,

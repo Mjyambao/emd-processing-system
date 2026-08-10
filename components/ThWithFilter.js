@@ -32,7 +32,7 @@ function ThWithFilter({
             }
           }}
           className="flex items-center justify-between w-full text-left cursor-pointer select-none"
-          title={`Sort by ${label}`}
+          title={`Sort by ${label.props.children[0]}`}
         >
           <span className="font-medium">{label}</span>
           <span className="ml-2">

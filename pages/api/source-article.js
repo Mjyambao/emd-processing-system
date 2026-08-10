@@ -18,12 +18,15 @@ export default async function handler(req, res) {
       });
     }
 
-    if (
-      parsedUrl.protocol !== "https:" ||
-      !parsedUrl.hostname.endsWith(".blob.core.windows.net")
-    ) {
+    const allowedHosts = [
+      "dlssupaidevcac01.blob.core.windows.net",
+      "dlssupaiuatcac01.blob.core.windows.net",
+      "dlssupaiprdcac01.blob.core.windows.net",
+    ];
+
+    if (!allowedHosts.includes(parsedUrl.hostname)) {
       return res.status(403).json({
-        message: "Invalid source",
+        message: "Host not allowed",
       });
     }
 

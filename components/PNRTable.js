@@ -359,6 +359,7 @@ export default function PNRTable({
     status: normalizeStatus(item?.status),
     passengerNames: item?.passengerNames ?? "",
     departureDate: item?.departureDate ?? null,
+    departureTime: item?.departureTime ?? null,
     ttl: item?.ttlUtc ?? item?.ttl ?? null,
     stage: item?.stage ?? "",
     queueArrival: item?.queueArrival ?? null,
@@ -2410,7 +2411,11 @@ export default function PNRTable({
 
                   {/* Departure Date */}
                   <td className="w-[170px] text-black/80 whitespace-nowrap">
-                    {row.departureDate ? toYYYYMMDD(row.departureDate) : "-"}
+                    {row.departureDate
+                      ? formatDatetime(
+                          `${row.departureDate.split("T")[0]}, ${row.departureTime ? row.departureTime : "00:00:00"}`,
+                        )
+                      : "-"}
                   </td>
 
                   {/* Last Updated */}
