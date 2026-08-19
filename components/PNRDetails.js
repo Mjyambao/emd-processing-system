@@ -2151,7 +2151,7 @@ export default function PNRDetails({
                                   </>
                                 }
                                 v={
-                                  `${formatDate(passenger.dep)}, ${passenger.depTime}` ||
+                                  `${formatDate(passenger.dep)}, ${passenger.depTime.slice(0, -3)}` ||
                                   "—"
                                 }
                               />
@@ -2163,7 +2163,7 @@ export default function PNRDetails({
                                   </>
                                 }
                                 v={
-                                  `${formatDate(passenger.arr)}, ${passenger.arrTime}` ||
+                                  `${formatDate(passenger.arr)}, ${passenger.arrTime.slice(0, -3)}` ||
                                   "—"
                                 }
                               />

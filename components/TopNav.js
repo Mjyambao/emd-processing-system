@@ -66,10 +66,23 @@ export default function TopNav({ onLogout }) {
     })();
 
     // Start clock after mount
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     const tick = () =>
-      setNow(new Date().toLocaleString("en-GB").replace(/\//g, "-"));
+      setNow(
+        new Date()
+          .toLocaleString("en-GB", {
+            timeZone:
+              // timezone === "Asia/Shanghai"
+              //   ? "Asia/Shanghai"
+              //   : "Australia/Brisbane",
+              "Australia/Brisbane",
+          })
+          .replace(/\//g, "-"),
+      );
     tick();
     const t = setInterval(tick, 1000);
+
     return () => clearInterval(t);
   }, []);
 

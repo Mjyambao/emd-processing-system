@@ -11,7 +11,7 @@ import ThWithFilter from "./ThWithFilter";
 import AssigneeMultiSelectFilter from "./AssigneeMultiSelectFilter";
 
 //Utils
-import { formatDatetime } from "../utils/helper";
+import { formatDatetime, formatDate } from "../utils/helper";
 import { appLogger } from "../utils/appLogger";
 
 // API
@@ -2412,9 +2412,7 @@ export default function PNRTable({
                   {/* Departure Date */}
                   <td className="w-[170px] text-black/80 whitespace-nowrap">
                     {row.departureDate
-                      ? formatDatetime(
-                          `${row.departureDate.split("T")[0]}, ${row.departureTime ? row.departureTime : "00:00:00"}`,
-                        )
+                      ? `${formatDate(row.departureDate)}, ${row.departureTime.slice(0, -3)}`
                       : "-"}
                   </td>
 
@@ -2513,7 +2511,7 @@ export default function PNRTable({
           </label>
           <select
             id="pageSize"
-            className="input h-9 w-[60px] text-xs"
+            className={`input h-9 ${pageSize === 100 ? "w-[65px]" : "w-[60px]"} text-xs`}
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
             aria-label="Rows per page"

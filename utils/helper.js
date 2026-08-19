@@ -1,7 +1,12 @@
 export function formatDate(date) {
   if (date != null) {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     return new Date(date)
       .toLocaleString("en-GB", {
+        timeZone:
+          // timezone === "Asia/Shanghai" ? "Asia/Shanghai" : "Australia/Brisbane",
+          "Australia/Brisbane",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -14,8 +19,13 @@ export function formatDate(date) {
 
 export function formatDatetime(date) {
   if (date != null) {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     return new Date(date)
       .toLocaleString("en-GB", {
+        timeZone:
+          // timezone === "Asia/Shanghai" ? "Asia/Shanghai" : "Australia/Brisbane",
+          "Australia/Brisbane",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",

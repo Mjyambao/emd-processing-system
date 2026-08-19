@@ -38,6 +38,8 @@ import {
   getLlmMetricsTrendOverTime,
 } from "../api/reportApi";
 
+import { formatDatetime } from "../utils/helper";
+
 const COLORS = {
   brand: "#b91c1c",
   green: "#16a34a",
@@ -47,9 +49,6 @@ const COLORS = {
   purple: "#7c3aed",
   orange: "#f97316",
 };
-
-const DATE_LOCALE = "en-US";
-const DATE_TZ = "UTC";
 
 // --------------------------------------------------
 // Display helpers (null -> "-")
@@ -465,12 +464,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
   const createdAtCol = {
     key: "createdAt",
     header: "Date Created",
-    render: (r) =>
-      r.createdAt
-        ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, {
-            timeZone: DATE_TZ,
-          })
-        : "-",
+    render: (r) => (r.createdAt ? formatDatetime(r.createdAt) : "-"),
   };
 
   const errorClassCol = {
@@ -592,12 +586,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
   const slaStartTimeCol = {
     key: "slaStartTime",
     header: "SLA Start Time",
-    render: (r) =>
-      r.slaStartTime
-        ? new Date(r.slaStartTime).toLocaleString(DATE_LOCALE, {
-            timeZone: DATE_TZ,
-          })
-        : "-",
+    render: (r) => (r.slaStartTime ? formatDatetime(r.slaStartTime) : "-"),
   };
 
   const processingTimeCol = {
@@ -611,11 +600,7 @@ function getModalColumnDefs(modalTitle, onPnrClick) {
     key: "completionTimeAt",
     header: "Completion Time",
     render: (r) =>
-      r.completionTimeAt
-        ? new Date(r.completionTimeAt).toLocaleString(DATE_LOCALE, {
-            timeZone: DATE_TZ,
-          })
-        : "-",
+      r.completionTimeAt ? formatDatetime(r.completionTimeAt) : "-",
   };
 
   const resolutionStatusCol = {
@@ -3020,11 +3005,7 @@ export default function ReportsModule({ onOpenPNR }) {
                       key: "createdAt",
                       header: "Queue Arrival",
                       render: (r) =>
-                        r.createdAt
-                          ? new Date(r.createdAt).toLocaleString(DATE_LOCALE, {
-                              timeZone: DATE_TZ,
-                            })
-                          : "-",
+                        r.createdAt ? formatDatetime(r.createdAt) : "-",
                     },
                   ]}
                   rows={hilRows}
